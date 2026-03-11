@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Unity Mono Studio",
+  "version": "0.1.0",
+  "identifier": "com.jasonhong.unity-mono-studio",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Unity Mono Studio",
+        "label": "main",
+        "width": 1680,
+        "height": 980,
+        "decorations": false,
+        "transparent": true,
+        "center": true,
+        "minWidth": 1280,
+        "minHeight": 760
+      },
+      {
+        "title": "Attach Process",
+        "label": "process-selector",
+        "width": 620,
+        "height": 460,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "center": true,
+        "resizable": false,
+        "alwaysOnTop": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all"
+  }
+}

@@ -1,0 +1,66 @@
+# ============================
+# OS generated files
+# ============================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================
+# IDE / Editor
+# ============================
+.vscode/
+.idea/
+*.suo
+*.sln.docstates
+*.user
+*.userosscache
+*.sln.user
+
+# ============================
+# Node.js 
+# ============================
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================
+# Rust & Tauri
+# ============================
+src-tauri/target/
+src-tauri/gen/
+Cargo.lock
+
+# ============================
+# C++ / MSBuild (UnityMonoBridge)
+# ============================
+tools/UnityMonoBridge/build/
+tools/UnityMonoBridge/x64/
+tools/UnityMonoBridge/.vs/
+tools/UnityMonoBridge/Debug/
+tools/UnityMonoBridge/Release/
+*.ncb
+*.sdf
+*.opensdf
+*.sqlite3
+*.VC.db
+*.VC.VC.opendb
+*.tlog
+
+# ============================
+# Logs
+# ============================
+*.log
+logs/
+
+# ============================
+# Project specific exceptions
+# ============================
+reference/

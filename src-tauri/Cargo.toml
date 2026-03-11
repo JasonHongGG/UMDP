@@ -1,0 +1,40 @@
+[package]
+name = "unity-mono-studio"
+version = "0.1.0"
+description = "Unity Mono metadata workbench"
+authors = ["JasonHong"]
+edition = "2021"
+
+[lib]
+name = "unity_mono_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = "0.30"
+thiserror = "2"
+parking_lot = "0.12"
+
+[dependencies.windows]
+version = "0.58.0"
+features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging"
+]
+
+[profile.dev]
+opt-level = 0
+codegen-units = 1
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1

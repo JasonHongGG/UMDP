@@ -1,0 +1,87 @@
+import { Target, X, Square, Minus } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+
+interface TopBarProps {
+    attachedProcess: string | null;
+    onOpenSelector: () => void;
+}
+
+export function TopBar({ attachedProcess, onOpenSelector }: TopBarProps) {
+    const window = getCurrentWindow();
+
+    const handleMinimize = () => {
+        window.minimize();
+    };
+
+    const handleToggleMaximize = async () => {
+        if (await window.isMaximized()) {
+            window.unmaximize();
+        } else {
+            window.maximize();
+        }
+    };
+
+    const handleClose = () => {
+        window.close();
+    };
+
+    return (
+        <div data-tauri-drag-region className="flex items-center justify-between px-5 py-3 bg-[#05080c] border-b border-[#1c2838] shadow-[0_4px_15px_rgba(0,0,0,0.4)] z-30 relative shrink-0 text-slate-200">
+            <div data-tauri-drag-region className="flex items-center gap-3 relative z-10">
+                <div data-tauri-drag-region className="relative flex items-center justify-center w-8 h-8">
+                    {/* Glowing pulse behind icon */}
+                    <div className={`absolute inset-0 rounded-full blur-[6px] opacity-40 ${attachedProcess ? 'bg-cyan-500' : 'bg-rose-500'}`} />
+                    <div className={`relative z-10 p-1.5 rounded-full border border-white/5 bg-white/5 backdrop-blur-sm ${attachedProcess ? 'text-cyan-400' : 'text-rose-400'}`}>
+                        <Target size={16} strokeWidth={2.5} className="pointer-events-none" />
+                    </div>
+                </div>
+
+                <div data-tauri-drag-region className="flex flex-col justify-center">
+                    <h2 data-tauri-drag-region className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Target Process</h2>
+                    <div data-tauri-drag-region className="text-sm font-semibold tracking-wide text-white flex items-center gap-2">
+                        {attachedProcess ? (
+                            <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{attachedProcess}</span>
+                        ) : (
+                            <span className="text-rose-400/80 pointer-events-none">No Process Attached</span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2 relative z-10">
+                <button
+                    onClick={onOpenSelector}
+                    title="Select Process"
+                    className="group flex items-center justify-center px-3 h-9 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-all duration-300 border border-cyan-500/30 hover:border-cyan-500/60 hover:shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 text-sm font-medium mr-2"
+                >
+                    Select Process
+                </button>
+
+                <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
+
+                <button
+                    onClick={handleMinimize}
+                    title="Minimize"
+                    className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all duration-300 border border-transparent hover:border-white/10"
+                >
+                    <Minus size={16} className="transition-all" />
+                </button>
+                <button
+                    onClick={handleToggleMaximize}
+                    title="Maximize / Restore"
+                    className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all duration-300 border border-transparent hover:border-white/10"
+                >
+                    <Square size={14} className="transition-all" />
+                </button>
+                <button
+                    onClick={handleClose}
+                    title="Close Window"
+                    className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition-all duration-300 border border-transparent hover:border-rose-500/40"
+                >
+                    <X size={18} className="group-hover:drop-shadow-[0_0_8px_rgba(244,63,94,0.6)] transition-all" />
+                </button>
+            </div>
+        </div>
+    );
+}
