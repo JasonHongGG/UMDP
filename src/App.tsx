@@ -333,7 +333,7 @@ export default function App() {
             <ClassInspectorApp
               classInfo={selectedClass}
               classLookupMap={classLookupMap}
-              navigateToType={(typeName) => {
+              navigateToType={(typeName: string) => {
                 const entry = classLookupMap.get(typeName);
                 if (entry) openTabForClass(entry);
               }}
