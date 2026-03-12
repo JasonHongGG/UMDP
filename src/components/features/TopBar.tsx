@@ -1,4 +1,4 @@
-import { Target, X, Square, Minus } from 'lucide-react';
+import { Target, X, Square, Minus, Cpu } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 
@@ -53,9 +53,9 @@ export function TopBar({ attachedProcess, onOpenSelector }: TopBarProps) {
                 <button
                     onClick={onOpenSelector}
                     title="Select Process"
-                    className="group flex items-center justify-center px-3 h-9 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-all duration-300 border border-cyan-500/30 hover:border-cyan-500/60 hover:shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 text-sm font-medium mr-2"
+                    className="group flex items-center justify-center w-9 h-9 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-all duration-300 border border-cyan-500/30 hover:border-cyan-500/60 hover:shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mr-2"
                 >
-                    Select Process
+                    <Cpu size={18} />
                 </button>
 
                 <div className="w-[1px] h-6 bg-white/10 mx-1"></div>

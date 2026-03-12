@@ -468,9 +468,6 @@ export default function App() {
                   className="w-full text-left px-3 py-2.5 text-[11px] rounded-lg transition-all bg-[#0a0f16]/30 hover:bg-[#0a0f16]/90 border border-transparent hover:border-white/5 group flex flex-col gap-1.5"
                 >
                   <div className="flex items-start gap-2">
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-200 shrink-0 select-none mt-0.5">
-                      {res.matchType}
-                    </span>
                     <span className="font-semibold text-slate-100 break-all leading-tight">
                       {res.matchText}
                     </span>
@@ -504,9 +501,7 @@ export default function App() {
         <div className="w-72 border-r border-[#1c2838] bg-[#0a0f16]/90 flex flex-col shrink-0 relative backdrop-blur-md">
           <div className="p-4 border-b border-[#1c2838]">
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-cyan-500/10 rounded-lg text-cyan-400 border border-cyan-500/20">
-                <Layers3 size={16} />
-              </div>
+              <Layers3 className="w-4 h-4 text-cyan-400" />
               <h2 className="text-sm font-semibold tracking-wide text-slate-200 uppercase">Assemblies</h2>
             </div>
             <input
@@ -546,9 +541,7 @@ export default function App() {
         <div className="w-80 border-r border-[#1c2838] bg-[#070a0f]/90 flex flex-col shrink-0 relative backdrop-blur-md">
           <div className="p-4 border-b border-[#1c2838]">
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-cyan-500/10 rounded-lg text-cyan-400 border border-cyan-500/20">
-                <Boxes size={16} />
-              </div>
+              <Boxes className="w-4 h-4 text-cyan-400" />
               <h2 className="text-sm font-semibold tracking-wide text-slate-200 uppercase">Classes</h2>
             </div>
             <input
@@ -647,9 +640,7 @@ export default function App() {
                             : 'border-white/5 text-slate-500 hover:text-slate-200 hover:bg-white/5 hover:border-white/10'
                           }`}
                       >
-                        <div className={`p-1.5 rounded-lg transition-colors border ${isActive ? 'bg-cyan-950/80 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-900 text-slate-600 border-slate-800'} shrink-0`}>
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
+                        <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'text-slate-500'}`} />
 
                         <div className="flex flex-col items-start flex-1 min-w-0 pr-5">
                           <span className="text-[12px] font-bold tracking-widest truncate w-full text-left font-mono">{tab.name}</span>
