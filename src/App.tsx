@@ -29,14 +29,14 @@ export default function App() {
   const [classesByImage, setClassesByImage] = useState<Record<string, ClassSummary[]>>({});
   const [classDetailsByKey, setClassDetailsByKey] = useState<Record<string, ClassInfo>>({});
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
-  
+
   const [tabs, setTabs] = useState<InspectorTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
 
   const [loadingImages, setLoadingImages] = useState(false);
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [loadingDetailsByKey, setLoadingDetailsByKey] = useState<Record<string, boolean>>({});
-  
+
   const [runtimeStaticFieldsByKey, setRuntimeStaticFieldsByKey] = useState<Record<string, StaticFieldInfo[] | null>>({});
   const [runtimeFieldsByKey, setRuntimeFieldsByKey] = useState<Record<string, FieldInfo[] | null>>({});
   const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
@@ -196,8 +196,8 @@ export default function App() {
     const cacheKey = `${activeTab.imageId}::${activeTab.classId}`;
 
     if (attached.runtime !== 'Mono') {
-        setRuntimeFieldErrorByKey(curr => ({ ...curr, [cacheKey]: 'Runtime static field resolution is currently available for Mono targets only.' }));
-        return;
+      setRuntimeFieldErrorByKey(curr => ({ ...curr, [cacheKey]: 'Runtime static field resolution is currently available for Mono targets only.' }));
+      return;
     }
 
     if (runtimeStaticFieldsByKey[cacheKey] !== undefined || fetchingRuntimeRef.current.has(cacheKey)) return;
@@ -232,26 +232,51 @@ export default function App() {
   const isLoadingRuntimeFields = loadingRuntimeByKey[activeCacheKey] ?? false;
   const isLoadingClassDetails = loadingDetailsByKey[activeCacheKey] ?? false;
 
-  const handleClassClick = (item: ClassSummary) => {
-    if (!selectedImage) return;
-    
-    const existingIndex = tabs.findIndex(t => t.imageId === selectedImage.id && t.classId === item.id);
+  // Build a lookup map: full_name -> { imageId, classId, name, namespace, imageName }
+  const classLookupMap = useMemo(() => {
+    const map = new Map<string, { imageId: string; classId: string; name: string; namespace: string; imageName: string }>();
+    for (const img of images) {
+      const classes = classesByImage[img.id];
+      if (!classes) continue;
+      for (const cls of classes) {
+        map.set(cls.full_name, {
+          imageId: img.id,
+          classId: cls.id,
+          name: cls.name,
+          namespace: cls.namespace,
+          imageName: img.name,
+        });
+      }
+    }
+    return map;
+  }, [images, classesByImage]);
+
+  const openTabForClass = (entry: { imageId: string; classId: string; name: string; namespace: string; imageName: string }) => {
+    const existingIndex = tabs.findIndex(t => t.imageId === entry.imageId && t.classId === entry.classId);
     if (existingIndex >= 0) {
       setActiveTabIndex(existingIndex);
       return;
     }
+    const newTab: InspectorTab = entry;
+    const newTabs = [...tabs, newTab];
+    setTabs(newTabs);
+    setActiveTabIndex(newTabs.length - 1);
+  };
 
-    const newTab: InspectorTab = {
+  const navigateToType = (typeName: string) => {
+    const entry = classLookupMap.get(typeName);
+    if (entry) openTabForClass(entry);
+  };
+
+  const handleClassClick = (item: ClassSummary) => {
+    if (!selectedImage) return;
+    openTabForClass({
       imageId: selectedImage.id,
       classId: item.id,
       name: item.name,
       namespace: item.namespace,
-      imageName: selectedImage.name
-    };
-    
-    const newTabs = [...tabs, newTab];
-    setTabs(newTabs);
-    setActiveTabIndex(newTabs.length - 1);
+      imageName: selectedImage.name,
+    });
   };
 
   const handleCloseTab = (index: number, e: React.MouseEvent) => {
@@ -259,11 +284,11 @@ export default function App() {
     const newTabs = [...tabs];
     newTabs.splice(index, 1);
     setTabs(newTabs);
-    
+
     if (newTabs.length === 0) {
-        setActiveTabIndex(-1);
+      setActiveTabIndex(-1);
     } else if (activeTabIndex >= index) {
-        setActiveTabIndex(Math.max(0, activeTabIndex - 1));
+      setActiveTabIndex(Math.max(0, activeTabIndex - 1));
     }
   };
 
@@ -273,13 +298,13 @@ export default function App() {
     prevTabsLengthRef.current = tabs.length;
 
     if (tabBarRef.current && !isClosing) {
-        const container = tabBarRef.current;
-        const tab = container.querySelector('[data-active="true"]') as HTMLElement;
+      const container = tabBarRef.current;
+      const tab = container.querySelector('[data-active="true"]') as HTMLElement;
 
-        if (tab) {
-            const scrollOffset = tab.offsetLeft - (container.clientWidth / 2) + (tab.clientWidth / 2);
-            container.scrollTo({ left: scrollOffset, behavior: 'smooth' });
-        }
+      if (tab) {
+        const scrollOffset = tab.offsetLeft - (container.clientWidth / 2) + (tab.clientWidth / 2);
+        container.scrollTo({ left: scrollOffset, behavior: 'smooth' });
+      }
     }
   }, [activeTabIndex, tabs.length]);
 
@@ -356,30 +381,31 @@ export default function App() {
             {selectedImage && !loadingClasses && !currentClasses.length ? <EmptyPanel icon={<Boxes size={32} />} title="No classes" msg="No visible classes found." /> : null}
             {filteredClasses.map((item) => {
               const isActiveTab = activeTab?.imageId === selectedImage?.id && activeTab?.classId === item.id;
-              
+
               return (
-              <button
-                key={item.id}
-                onClick={() => handleClassClick(item)}
-                className={classNames(
-                  "w-full text-left px-3 py-2 rounded-lg transition-all duration-200 flex items-center justify-between border group",
-                  isActiveTab
-                    ? "bg-blue-600/20 border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.2)]"
-                    : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/10"
-                )}
-              >
-                <div className="flex flex-col overflow-hidden pr-2">
-                  <span className={classNames("text-sm font-medium truncate", isActiveTab ? "text-blue-100" : "text-slate-300 font-mono")}>{item.name}</span>
-                  <span className="text-[10px] text-slate-500 truncate">{item.namespace || 'Global Namespace'}</span>
-                </div>
-                <ChevronRight size={14} className={isActiveTab ? "text-blue-400" : "text-transparent group-hover:text-slate-500"} />
-              </button>
-            )})}
+                <button
+                  key={item.id}
+                  onClick={() => handleClassClick(item)}
+                  className={classNames(
+                    "w-full text-left px-3 py-2 rounded-lg transition-all duration-200 flex items-center justify-between border group",
+                    isActiveTab
+                      ? "bg-blue-600/20 border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.2)]"
+                      : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/10"
+                  )}
+                >
+                  <div className="flex flex-col overflow-hidden pr-2">
+                    <span className={classNames("text-sm font-medium truncate", isActiveTab ? "text-blue-100" : "text-slate-300 font-mono")}>{item.name}</span>
+                    <span className="text-[10px] text-slate-500 truncate">{item.namespace || 'Global Namespace'}</span>
+                  </div>
+                  <ChevronRight size={14} className={isActiveTab ? "text-blue-400" : "text-transparent group-hover:text-slate-500"} />
+                </button>
+              )
+            })}
           </div>
         </div>
 
         <div className="flex-1 flex flex-col relative overflow-hidden bg-[#0a0f16]/60 backdrop-blur-xl">
-          
+
           {tabs.length > 0 && (
             <div
               ref={tabBarRef}
@@ -398,65 +424,65 @@ export default function App() {
 
                   return (
                     <motion.div
-                        key={`${tab.imageId}-${tab.classId}`}
-                        data-active={isActive}
-                        initial={{ opacity: 0, y: 15, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, width: 0, scale: 0.8, transition: { duration: 0.2 } }}
-                        className="relative group flex items-center shrink-0 mb-[-1px]"
-                        onMouseDown={(e) => {
-                            if (e.button === 1) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleCloseTab(idx, e as any);
-                            }
-                        }}
+                      key={`${tab.imageId}-${tab.classId}`}
+                      data-active={isActive}
+                      initial={{ opacity: 0, y: 15, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, width: 0, scale: 0.8, transition: { duration: 0.2 } }}
+                      className="relative group flex items-center shrink-0 mb-[-1px]"
+                      onMouseDown={(e) => {
+                        if (e.button === 1) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleCloseTab(idx, e as any);
+                        }
+                      }}
                     >
-                        {isActive && (
-                            <>
-                                <motion.div
-                                    layoutId="activeObjectTabBackground"
-                                    className="absolute inset-0 bg-gradient-to-t from-cyan-500/20 via-cyan-900/10 to-transparent rounded-t-xl"
-                                    initial={false}
-                                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                />
-                                <motion.div
-                                    layoutId="activeObjectTabLine"
-                                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,1)] z-20"
-                                    initial={false}
-                                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                />
-                            </>
-                        )}
+                      {isActive && (
+                        <>
+                          <motion.div
+                            layoutId="activeObjectTabBackground"
+                            className="absolute inset-0 bg-gradient-to-t from-cyan-500/20 via-cyan-900/10 to-transparent rounded-t-xl"
+                            initial={false}
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                          />
+                          <motion.div
+                            layoutId="activeObjectTabLine"
+                            className="absolute bottom-0 left-0 right-0 h-[2px] bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,1)] z-20"
+                            initial={false}
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                          />
+                        </>
+                      )}
 
-                        <button
-                            onClick={() => setActiveTabIndex(idx)}
-                            className={`relative flex items-center gap-2.5 px-3 py-2 rounded-t-xl border-x border-t transition-all duration-300 z-10 w-48 overflow-hidden
+                      <button
+                        onClick={() => setActiveTabIndex(idx)}
+                        className={`relative flex items-center gap-2.5 px-3 py-2 rounded-t-xl border-x border-t transition-all duration-300 z-10 w-48 overflow-hidden
                                 ${isActive
-                                    ? 'border-cyan-500/30 text-white bg-[#0a0f16]/90 backdrop-blur-md shadow-[0_-5px_20px_rgba(34,211,238,0.1)]'
-                                    : 'border-white/5 text-slate-500 hover:text-slate-200 hover:bg-white/5 hover:border-white/10'
-                                }`}
-                        >
-                            <div className={`p-1.5 rounded-lg transition-colors border ${isActive ? 'bg-cyan-950/80 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-900 text-slate-600 border-slate-800'} shrink-0`}>
-                                {isLoading ? <Activity className="w-3.5 h-3.5 animate-pulse" /> : <Icon className="w-3.5 h-3.5" />}
-                            </div>
+                            ? 'border-cyan-500/30 text-white bg-[#0a0f16]/90 backdrop-blur-md shadow-[0_-5px_20px_rgba(34,211,238,0.1)]'
+                            : 'border-white/5 text-slate-500 hover:text-slate-200 hover:bg-white/5 hover:border-white/10'
+                          }`}
+                      >
+                        <div className={`p-1.5 rounded-lg transition-colors border ${isActive ? 'bg-cyan-950/80 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-900 text-slate-600 border-slate-800'} shrink-0`}>
+                          {isLoading ? <Activity className="w-3.5 h-3.5 animate-pulse" /> : <Icon className="w-3.5 h-3.5" />}
+                        </div>
 
-                            <div className="flex flex-col items-start flex-1 min-w-0 pr-5">
-                                <span className="text-[12px] font-bold tracking-widest truncate w-full text-left font-mono">{tab.name}</span>
-                            </div>
-                        </button>
+                        <div className="flex flex-col items-start flex-1 min-w-0 pr-5">
+                          <span className="text-[12px] font-bold tracking-widest truncate w-full text-left font-mono">{tab.name}</span>
+                        </div>
+                      </button>
 
-                        <button
-                            onClick={(e) => handleCloseTab(idx, e)}
-                            className={`absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300 z-20 overflow-hidden
+                      <button
+                        onClick={(e) => handleCloseTab(idx, e)}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300 z-20 overflow-hidden
                                 bg-transparent text-transparent
                                 group-hover:bg-rose-500/20 group-hover:text-rose-400 hover:!bg-rose-500 hover:!text-white hover:shadow-[0_0_15px_rgba(244,63,94,0.6)]
                                 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
                                 ${!isActive && 'pointer-events-none group-hover:pointer-events-auto'}
                             `}
-                        >
-                            <X className="w-3 h-3" />
-                        </button>
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </motion.div>
                   );
                 })}
@@ -499,9 +525,7 @@ export default function App() {
                 <div className="flex flex-wrap gap-2 items-center">
                   {selectedClass.inheritance.length ? selectedClass.inheritance.map((node, index) => (
                     <div key={`${node.name}-${index}`} className="flex items-center gap-2">
-                      <span className="px-2 py-1 bg-[#131b26] border border-[#1c2838] rounded-md text-xs font-mono text-slate-300">
-                        {node.name}
-                      </span>
+                      <TypeLink typeName={node.name} lookupMap={classLookupMap} onNavigate={navigateToType} className="px-2 py-1 bg-[#131b26] border border-[#1c2838] rounded-md text-xs font-mono" />
                       {index < selectedClass.inheritance.length - 1 && <ChevronRight size={14} className="text-slate-600" />}
                     </div>
                   )) : <span className="text-xs text-slate-500">No inheritance metadata available.</span>}
@@ -515,7 +539,7 @@ export default function App() {
                     headers={['Offset', 'Type', 'Name']}
                     data={displayFields.map((f, index) => [
                       <span key={`offset-${index}`} className="text-cyan-400">0x{f.offset?.toUpperCase() ?? '?'}</span>,
-                      <span key={`type-${index}`} className="text-yellow-400">{f.field_type}</span>,
+                      <TypeLink key={`type-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
                       <span key={`name-${index}`} className="text-slate-200">{f.name}</span>
                     ])}
                   />
@@ -528,7 +552,7 @@ export default function App() {
                   <Table
                     headers={['Type', 'Name', 'Address', 'Value']}
                     data={displayStaticFields.map((f, index) => [
-                      <span key={`stype-${index}`} className="text-yellow-400">{f.field_type}</span>,
+                      <TypeLink key={`stype-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
                       <span key={`sname-${index}`} className="text-slate-200">{f.name}</span>,
                       <span key={`saddr-${index}`} className="text-cyan-400 font-mono text-[10px] break-all">{f.address ?? '?'}</span>,
                       <span key={`sval-${index}`} className="text-yellow-400 font-mono text-[10px] break-all">{f.value ?? '?'}</span>
@@ -542,7 +566,9 @@ export default function App() {
                       headers={['Method', 'Signature']}
                       data={selectedClass.methods.map((m, index) => [
                         <span key={`mname-${index}`} className="text-blue-300 font-semibold">{m.name}</span>,
-                        <span key={`msig-${index}`} className="text-slate-400 text-[10px] break-all whitespace-pre-wrap leading-tight">{m.signature}</span>
+                        <span key={`msig-${index}`} className="text-slate-400 text-[10px] break-all whitespace-pre-wrap leading-tight">
+                          {renderSignatureWithLinks(m.signature, classLookupMap, navigateToType)}
+                        </span>
                       ])}
                     />
                   </Card>
@@ -632,4 +658,64 @@ function Table({ headers, data }: { headers: string[], data: React.ReactNode[][]
       </table>
     </div>
   )
+}
+
+type LookupMap = Map<string, { imageId: string; classId: string; name: string; namespace: string; imageName: string }>;
+
+function TypeLink({ typeName, lookupMap, onNavigate, className = '' }: {
+  typeName: string;
+  lookupMap: LookupMap;
+  onNavigate: (typeName: string) => void;
+  className?: string;
+}) {
+  const isNavigable = lookupMap.has(typeName);
+
+  if (isNavigable) {
+    return (
+      <span
+        className={`${className} hover:brightness-125 cursor-pointer transition-colors`}
+        onClick={() => onNavigate(typeName)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter') onNavigate(typeName); }}
+      >
+        {typeName}
+      </span>
+    );
+  }
+
+  return <span className={`${className}`}>{typeName}</span>;
+}
+
+function renderSignatureWithLinks(
+  signature: string,
+  lookupMap: LookupMap,
+  onNavigate: (typeName: string) => void
+): React.ReactNode[] {
+  // Tokenize: split on whitespace, parens, commas, angle brackets while keeping delimiters
+  const tokens = signature.split(/(\s+|[(),<>])/);
+
+  return tokens.map((token, i) => {
+    const trimmed = token.trim();
+    if (!trimmed || /^[\s(),<>]+$/.test(token)) {
+      return <span key={i}>{token}</span>;
+    }
+
+    if (lookupMap.has(trimmed)) {
+      return (
+        <span
+          key={i}
+          className="text-cyan-300 hover:brightness-125 cursor-pointer transition-colors"
+          onClick={() => onNavigate(trimmed)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') onNavigate(trimmed); }}
+        >
+          {trimmed}
+        </span>
+      );
+    }
+
+    return <span key={i}>{token}</span>;
+  });
 }
