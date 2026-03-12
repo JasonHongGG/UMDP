@@ -6,7 +6,8 @@ export function useGlobalSearch(
   images: ImageInfo[],
   classLookupMap: Map<string, { imageId: string, classId: string, name: string, namespace: string, imageName: string }>,
   classesByImage: Record<string, ClassSummary[]>,
-  activeTab: { imageId: string, classId: string } | null,
+  activeImageId: string | null,
+  activeClassId: string | null,
   openTabForClass: (entry: { imageId: string, classId: string, name: string, namespace: string, imageName: string }) => void,
   setSelectedImageId: (id: string) => void,
   setPendingScrollImageId: (id: string | null) => void,
@@ -64,8 +65,8 @@ export function useGlobalSearch(
       }
 
       results.sort((a, b) => {
-        const aActive = a.imageId === activeTab?.imageId && a.classId === activeTab?.classId;
-        const bActive = b.imageId === activeTab?.imageId && b.classId === activeTab?.classId;
+        const aActive = a.imageId === activeImageId && a.classId === activeClassId;
+        const bActive = b.imageId === activeImageId && b.classId === activeClassId;
         if (aActive && !bActive) return -1;
         if (!aActive && bActive) return 1;
 
@@ -90,7 +91,7 @@ export function useGlobalSearch(
     }, 300);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [globalSearchQuery, globalSearchMode, classDetailsByKey, images, activeTab, classLookupMap]);
+  }, [globalSearchQuery, globalSearchMode, classDetailsByKey, images, activeImageId, activeClassId, classLookupMap]);
 
   const handleGlobalSearchResultClick = (result: GlobalSearchResult) => {
     setSelectedImageId(result.imageId);

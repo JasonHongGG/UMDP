@@ -78,3 +78,13 @@ export interface GlobalSearchResult {
   matchText: string;
   isInherited?: boolean;
 }
+
+export interface ClassReferenceResult {
+  imageId: string;
+  classId: string;
+  imageName: string;
+  className: string;
+  matchType: 'Inheritance' | 'Member' | 'Function';
+  /** The specific member/param name that references the target */
+  matchDetail: string;
+}

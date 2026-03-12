@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hexagon, Layers3, ChevronRight, LoaderCircle } from 'lucide-react';
+import { Hexagon, Layers3, ChevronRight, LoaderCircle, Waypoints } from 'lucide-react';
 import type { ClassInfo, FieldInfo, StaticFieldInfo } from '../../types';
 
 interface ClassInspectorAppProps {
@@ -11,6 +11,7 @@ interface ClassInspectorAppProps {
   isLoadingRuntimeFields: boolean;
   runtimeFieldError: string | null;
   activeTabId: string;
+  onSetReferenceTarget?: (fullName: string) => void;
 }
 
 export default function ClassInspectorApp({
@@ -21,7 +22,8 @@ export default function ClassInspectorApp({
   runtimeFields,
   isLoadingRuntimeFields,
   runtimeFieldError,
-  activeTabId
+  activeTabId,
+  onSetReferenceTarget,
 }: ClassInspectorAppProps) {
   const [activeTabImageId, activeTabClassId] = activeTabId.split('::');
   const activeTabImageName = classLookupMap.get(classInfo.full_name)?.imageName || 'Unknown Assembly';
@@ -30,9 +32,20 @@ export default function ClassInspectorApp({
     <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-6 z-10 w-full h-full">
 
       <div className="flex flex-col gap-1 pb-4 border-b border-[#1c2838]">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent font-mono">
-          {classInfo.name}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent font-mono">
+            {classInfo.name}
+          </h1>
+          {onSetReferenceTarget && (
+            <button
+              onClick={() => onSetReferenceTarget(classInfo.full_name)}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
+              title="Find references to this class"
+            >
+              <Waypoints size={16} />
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-4 text-xs font-mono text-slate-400">
           <span className="flex items-center gap-1"><Hexagon size={12} className="text-cyan-500" /> {classInfo.namespace || 'Global'}</span>
           <span className="flex items-center gap-1"><Layers3 size={12} className="text-blue-500" /> {activeTabImageName}</span>

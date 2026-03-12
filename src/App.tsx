@@ -12,11 +12,13 @@ import { AssembliesColumn } from './components/features/AssembliesColumn';
 import { ClassesColumn } from './components/features/ClassesColumn';
 import { InspectorTabBar } from './components/features/InspectorTabBar';
 import ClassInspectorApp from './components/features/ClassInspectorApp';
+import { ClassReferenceSidebar } from './components/features/ClassReferenceSidebar';
 
 import { useProcessAttachment } from './hooks/useProcessAttachment';
 import { useMetadata } from './hooks/useMetadata';
 import { useTabs } from './hooks/useTabs';
 import { useGlobalSearch } from './hooks/useGlobalSearch';
+import { useClassReference } from './hooks/useClassReference';
 import './styles.css';
 
 export default function App() {
@@ -71,12 +73,40 @@ export default function App() {
     images,
     classLookupMap,
     classesByImage,
-    activeTab ? { imageId: activeTab.imageId, classId: activeTab.classId } : null,
+    activeTab?.imageId ?? null,
+    activeTab?.classId ?? null,
     openTabForClass,
     setSelectedImageId,
     setPendingScrollImageId,
     setPendingScrollClassId
   );
+
+  const classRef = useClassReference({
+    classDetailsByKey,
+    images,
+    classesByImage,
+    classLookupMap,
+    openTabForClass,
+    setSelectedImageId,
+    setPendingScrollImageId,
+    setPendingScrollClassId,
+  });
+
+  // Mutual exclusion: when one sidebar opens, close the other
+  const handleSetGlobalSearchOpen = (open: boolean) => {
+    setIsGlobalSearchOpen(open);
+    if (open) classRef.setIsOpen(false);
+  };
+  const handleSetReferenceOpen = (open: boolean) => {
+    classRef.setIsOpen(open);
+    if (open) setIsGlobalSearchOpen(false);
+  };
+
+  // Auto-fill from ClassInspectorApp
+  const handleSetReferenceTarget = (fullName: string) => {
+    classRef.setTargetFromClass(fullName);
+    setIsGlobalSearchOpen(false);
+  };
 
   const openSelector = async () => {
     const selector = await WebviewWindow.getByLabel('process-selector');
@@ -208,7 +238,12 @@ export default function App() {
       />
 
       <div className="flex-1 flex overflow-hidden">
-        <SidebarTools isGlobalSearchOpen={isGlobalSearchOpen} setIsGlobalSearchOpen={setIsGlobalSearchOpen} />
+        <SidebarTools
+          isGlobalSearchOpen={isGlobalSearchOpen}
+          setIsGlobalSearchOpen={handleSetGlobalSearchOpen}
+          isReferenceOpen={classRef.isOpen}
+          setIsReferenceOpen={handleSetReferenceOpen}
+        />
 
         <GlobalSearchSidebar
           isGlobalSearchOpen={isGlobalSearchOpen}
@@ -220,6 +255,20 @@ export default function App() {
           isGlobalSearching={isGlobalSearching}
           globalSearchResults={globalSearchResults}
           handleGlobalSearchResultClick={handleGlobalSearchResultClick}
+        />
+
+        <ClassReferenceSidebar
+          isOpen={classRef.isOpen}
+          setIsOpen={handleSetReferenceOpen}
+          searchMode={classRef.searchMode}
+          setSearchMode={classRef.setSearchMode}
+          targetInput={classRef.targetInput}
+          setTargetInput={classRef.setTargetInput}
+          targetError={classRef.targetError}
+          results={classRef.results}
+          isSearching={classRef.isSearching}
+          executeSearch={classRef.executeSearch}
+          handleResultClick={classRef.handleResultClick}
         />
 
         <AssembliesColumn
@@ -293,6 +342,7 @@ export default function App() {
               isLoadingRuntimeFields={isLoadingRuntimeFields}
               runtimeFieldError={activeRuntimeFieldError}
               activeTabId={`${activeTab?.imageId}::${activeTab?.classId}`}
+              onSetReferenceTarget={handleSetReferenceTarget}
             />
           )}
         </div>
