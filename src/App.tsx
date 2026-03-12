@@ -313,7 +313,7 @@ export default function App() {
         <div className="w-80 border-r border-[#1c2838] bg-[#070a0f]/90 flex flex-col shrink-0 relative backdrop-blur-md">
           <div className="p-4 border-b border-[#1c2838]">
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-blue-500/10 rounded-lg text-blue-400 border border-blue-500/20">
+              <div className="p-1.5 bg-cyan-500/10 rounded-lg text-cyan-400 border border-cyan-500/20">
                 <Boxes size={16} />
               </div>
               <h2 className="text-sm font-semibold tracking-wide text-slate-200 uppercase">Classes</h2>
@@ -340,15 +340,15 @@ export default function App() {
                   className={classNames(
                     "w-full text-left px-3 py-2 rounded-lg transition-all duration-200 flex items-center justify-between border group",
                     isActiveTab
-                      ? "bg-blue-600/20 border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.2)]"
+                      ? "bg-cyan-500/20 border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
                       : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/10"
                   )}
                 >
                   <div className="flex flex-col overflow-hidden pr-2">
-                    <span className={classNames("text-sm font-medium truncate", isActiveTab ? "text-blue-100" : "text-slate-300 font-mono")}>{item.name}</span>
+                    <span className={classNames("text-sm font-medium truncate", isActiveTab ? "text-cyan-100" : "text-slate-300 font-mono")}>{item.name}</span>
                     <span className="text-[10px] text-slate-500 truncate">{item.namespace || 'Global Namespace'}</span>
                   </div>
-                  <ChevronRight size={14} className={isActiveTab ? "text-blue-400" : "text-transparent group-hover:text-slate-500"} />
+                  <ChevronRight size={14} className={isActiveTab ? "text-cyan-400" : "text-transparent group-hover:text-slate-500"} />
                 </button>
               )
             })}
@@ -649,7 +649,7 @@ function renderSignatureWithLinks(
       return (
         <span
           key={i}
-          className="text-cyan-300 hover:brightness-125 cursor-pointer transition-colors"
+          className="text-yellow-400 hover:brightness-125 cursor-pointer transition-colors"
           onClick={() => onNavigate(trimmed)}
           role="button"
           tabIndex={0}
