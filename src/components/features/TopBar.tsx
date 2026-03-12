@@ -31,8 +31,8 @@ export function TopBar({ attachedProcess, onOpenSelector }: TopBarProps) {
             <div data-tauri-drag-region className="flex items-center gap-3 relative z-10">
                 <div data-tauri-drag-region className="relative flex items-center justify-center w-8 h-8">
                     {/* Glowing pulse behind icon */}
-                    <div className={`absolute inset-0 rounded-full blur-[6px] opacity-40 ${attachedProcess ? 'bg-cyan-500' : 'bg-rose-500'}`} />
-                    <div className={`relative z-10 p-1.5 rounded-full border border-white/5 bg-white/5 backdrop-blur-sm ${attachedProcess ? 'text-cyan-400' : 'text-rose-400'}`}>
+                    <div className={`absolute inset-0 rounded-full blur-[6px] opacity-40 transition-colors duration-500 ${attachedProcess ? 'bg-cyan-500 animate-[pulse_2s_ease-in-out_infinite]' : 'bg-rose-500 opacity-20'}`} />
+                    <div className={`relative z-10 transition-colors duration-500 ${attachedProcess ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'text-rose-400/50'}`}>
                         <Target size={16} strokeWidth={2.5} className="pointer-events-none" />
                     </div>
                 </div>
