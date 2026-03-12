@@ -6,7 +6,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   Binary, Database, Layers3, Boxes, Target, ChevronRight, ScanSearch, Network, LoaderCircle, Hexagon, X, Activity, Box, List, Type, Variable
 } from 'lucide-react';
-import type { AttachResponse, ClassInfo, ClassSummary, FieldInfo, ImageInfo, ProcessInfo, RuntimeClassOverlayResponse, StaticFieldInfo } from './types';
+import type { AttachResponse, ClassInfo, ClassSummary, FieldInfo, ImageInfo, ProcessInfo, RuntimeClassOverlayResponse, StaticFieldInfo, DumpAllResponse } from './types';
 import { MainLayout } from './components/layout/MainLayout';
 import { TopBar } from './components/features/TopBar';
 import './styles.css';
@@ -34,9 +34,6 @@ export default function App() {
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
 
   const [loadingImages, setLoadingImages] = useState(false);
-  const [loadingClasses, setLoadingClasses] = useState(false);
-  const [loadingDetailsByKey, setLoadingDetailsByKey] = useState<Record<string, boolean>>({});
-
   const [runtimeStaticFieldsByKey, setRuntimeStaticFieldsByKey] = useState<Record<string, StaticFieldInfo[] | null>>({});
   const [runtimeFieldsByKey, setRuntimeFieldsByKey] = useState<Record<string, FieldInfo[] | null>>({});
   const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
@@ -47,7 +44,6 @@ export default function App() {
   const [classSearch, setClassSearch] = useState('');
 
   const tabBarRef = useRef<HTMLDivElement>(null);
-  const fetchingDetailsRef = useRef<Set<string>>(new Set());
   const fetchingRuntimeRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -72,8 +68,10 @@ export default function App() {
         setRuntimeFieldsByKey({});
         setRuntimeFieldErrorByKey({});
 
-        const imageCatalog = await invoke<ImageInfo[]>('get_image_catalog');
-        setImages(imageCatalog);
+        const dumpAll = await invoke<DumpAllResponse>('load_all_metadata');
+        setImages(dumpAll.images);
+        setClassesByImage(dumpAll.classesByImage);
+        setClassDetailsByKey(dumpAll.classDetails);
       } catch (invokeError) {
         setImages([]);
         setClassesByImage({});
@@ -143,51 +141,6 @@ export default function App() {
     if (selectedImageId && !images.some((image) => image.id === selectedImageId)) setSelectedImageId(null);
   }, [images, selectedImageId]);
 
-  useEffect(() => {
-    if (!selectedImageId || classesByImage[selectedImageId]) return;
-
-    let cancelled = false;
-    setLoadingClasses(true);
-    setError(null);
-
-    invoke<ClassSummary[]>('get_image_classes', { imageId: selectedImageId })
-      .then((classes) => {
-        if (!cancelled) {
-          setClassesByImage((current) => ({ ...current, [selectedImageId]: classes }));
-        }
-      })
-      .catch((invokeError) => {
-        if (!cancelled) setError(String(invokeError));
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingClasses(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [classesByImage, selectedImageId]);
-
-  useEffect(() => {
-    if (!activeTab) return;
-    const cacheKey = `${activeTab.imageId}::${activeTab.classId}`;
-
-    if (classDetailsByKey[cacheKey] || fetchingDetailsRef.current.has(cacheKey)) return;
-
-    fetchingDetailsRef.current.add(cacheKey);
-    setLoadingDetailsByKey(curr => ({ ...curr, [cacheKey]: true }));
-    setError(null);
-
-    invoke<ClassInfo>('get_class_details', { imageId: activeTab.imageId, classId: activeTab.classId })
-      .then((classInfo) => {
-        setClassDetailsByKey((current) => ({ ...current, [cacheKey]: classInfo }));
-      })
-      .catch((invokeError) => {
-        setError(String(invokeError));
-      })
-      .finally(() => {
-        fetchingDetailsRef.current.delete(cacheKey);
-        setLoadingDetailsByKey(curr => ({ ...curr, [cacheKey]: false }));
-      });
-  }, [activeTab, classDetailsByKey]);
 
   useEffect(() => {
     if (!attached || !activeTab || !selectedClass) {
@@ -230,7 +183,6 @@ export default function App() {
   const displayFields = activeTab ? (runtimeFieldsByKey[activeCacheKey] ?? selectedClass?.fields ?? []) : [];
   const activeRuntimeFieldError = runtimeFieldErrorByKey[activeCacheKey];
   const isLoadingRuntimeFields = loadingRuntimeByKey[activeCacheKey] ?? false;
-  const isLoadingClassDetails = loadingDetailsByKey[activeCacheKey] ?? false;
 
   // Build a lookup map: full_name -> { imageId, classId, name, namespace, imageName }
   const classLookupMap = useMemo(() => {
@@ -376,9 +328,8 @@ export default function App() {
           </div>
 
           <div className="flex-1 overflow-y-auto hide-scrollbar p-2 space-y-1">
-            {!selectedImage && !loadingClasses ? <EmptyPanel icon={<Boxes size={32} />} title="Select an image" msg="Choose an assembly to view its classes." /> : null}
-            {selectedImage && loadingClasses ? <LoadingInline msg="Loading classes..." /> : null}
-            {selectedImage && !loadingClasses && !currentClasses.length ? <EmptyPanel icon={<Boxes size={32} />} title="No classes" msg="No visible classes found." /> : null}
+            {!images.length && !loadingImages && !selectedImage && <EmptyPanel icon={<Boxes size={32} />} title="Classes" msg="Select an assembly module first." />}
+            {selectedImage && !currentClasses.length ? <EmptyPanel icon={<Boxes size={32} />} title="No classes" msg="No visible classes found." /> : null}
             {filteredClasses.map((item) => {
               const isActiveTab = activeTab?.imageId === selectedImage?.id && activeTab?.classId === item.id;
 
@@ -414,7 +365,6 @@ export default function App() {
               <AnimatePresence>
                 {tabs.map((tab, idx) => {
                   const isActive = activeTabIndex === idx;
-                  const isLoading = loadingDetailsByKey[`${tab.imageId}::${tab.classId}`];
 
                   let Icon = Boxes;
                   const t = tab.namespace?.toLowerCase() || '';
@@ -464,7 +414,7 @@ export default function App() {
                           }`}
                       >
                         <div className={`p-1.5 rounded-lg transition-colors border ${isActive ? 'bg-cyan-950/80 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-900 text-slate-600 border-slate-800'} shrink-0`}>
-                          {isLoading ? <Activity className="w-3.5 h-3.5 animate-pulse" /> : <Icon className="w-3.5 h-3.5" />}
+                          <Icon className="w-3.5 h-3.5" />
                         </div>
 
                         <div className="flex flex-col items-start flex-1 min-w-0 pr-5">
@@ -496,19 +446,13 @@ export default function App() {
             </div>
           ) : null}
 
-          {!activeTab && tabs.length === 0 && !Object.values(loadingDetailsByKey).some(l => l) ? (
+          {!activeTab && tabs.length === 0 ? (
             <div className="flex-1 flex items-center justify-center z-10">
               <EmptyPanel icon={<ScanSearch size={48} />} title="Class Inspector" msg="Select a class to analyze layout, state, and inheritance." large />
             </div>
           ) : null}
 
-          {activeTab && isLoadingClassDetails ? (
-            <div className="flex-1 flex items-center justify-center z-10">
-              <LoadingInline msg="Inspecting class metadata..." />
-            </div>
-          ) : null}
-
-          {selectedClass && activeTab && !isLoadingClassDetails ? (
+          {selectedClass && activeTab ? (
             <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-6 z-10">
 
               <div className="flex flex-col gap-1 pb-4 border-b border-[#1c2838]">

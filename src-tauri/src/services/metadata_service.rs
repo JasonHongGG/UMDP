@@ -1,57 +1,10 @@
-use crate::models::{ClassInfo, ClassSummary, ImageInfo};
+use crate::models::{ClassInfo, ClassSummary, DumpAllResponse, ImageInfo};
 use crate::state::AppState;
-use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::State;
 
-#[derive(Debug, Deserialize)]
-struct HelperImageCatalog {
-    images: Vec<ImageInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperClassCatalog {
-    classes: Vec<ClassSummary>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperClassDetails {
-    class: ClassInfo,
-}
-
-pub fn get_image_catalog(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
-    if let Some(images) = state.image_catalog.lock().clone() {
-        return Ok(images);
-    }
-
-    let helper: HelperImageCatalog = run_helper(&state, &["images"])?;
-    *state.image_catalog.lock() = Some(helper.images.clone());
-    Ok(helper.images)
-}
-
-pub fn get_image_classes(state: State<'_, AppState>, image_id: &str) -> Result<Vec<ClassSummary>, String> {
-    if let Some(classes) = state.class_catalog.lock().get(image_id).cloned() {
-        return Ok(classes);
-    }
-
-    let helper: HelperClassCatalog = run_helper(&state, &["classes", image_id])?;
-    state.class_catalog.lock().insert(image_id.to_string(), helper.classes.clone());
-    Ok(helper.classes)
-}
-
-pub fn get_class_details(state: State<'_, AppState>, image_id: &str, class_id: &str) -> Result<ClassInfo, String> {
-    let cache_key = format!("{image_id}::{class_id}");
-    if let Some(class_info) = state.class_details.lock().get(&cache_key).cloned() {
-        return Ok(class_info);
-    }
-
-    let helper: HelperClassDetails = run_helper(&state, &["class-details", image_id, class_id])?;
-    state.class_details.lock().insert(cache_key, helper.class.clone());
-    Ok(helper.class)
-}
-
-fn run_helper<T: for<'de> Deserialize<'de>>(state: &State<'_, AppState>, args: &[&str]) -> Result<T, String> {
+pub fn load_all_metadata(state: State<'_, AppState>) -> Result<DumpAllResponse, String> {
     let attached = state
         .attached_process
         .lock()
@@ -69,12 +22,9 @@ fn run_helper<T: for<'de> Deserialize<'de>>(state: &State<'_, AppState>, args: &
         .arg("run")
         .arg("--project")
         .arg(&helper_project)
-        .arg("--");
-
-    for arg in args {
-        command.arg(arg);
-    }
-    command.arg(&managed_dir);
+        .arg("--")
+        .arg("dump-all")
+        .arg(&managed_dir);
 
     let output = command
         .output()
@@ -85,8 +35,38 @@ fn run_helper<T: for<'de> Deserialize<'de>>(state: &State<'_, AppState>, args: &
         return Err(format!("Metadata reader failed: {}", stderr.trim()));
     }
 
-    serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Failed to parse metadata response: {error}"))
+    let response: DumpAllResponse = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("Failed to parse metadata response: {error}"))?;
+
+    *state.metadata.lock() = Some(response.clone());
+    
+    Ok(response)
+}
+
+pub fn get_image_catalog(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
+    if let Some(metadata) = state.metadata.lock().as_ref() {
+        return Ok(metadata.images.clone());
+    }
+    Err("Metadata not loaded. Please attach to a process first.".to_string())
+}
+
+pub fn get_image_classes(state: State<'_, AppState>, image_id: &str) -> Result<Vec<ClassSummary>, String> {
+    if let Some(metadata) = state.metadata.lock().as_ref() {
+        if let Some(classes) = metadata.classes_by_image.get(image_id) {
+            return Ok(classes.clone());
+        }
+    }
+    Ok(vec![])
+}
+
+pub fn get_class_details(state: State<'_, AppState>, image_id: &str, class_id: &str) -> Result<ClassInfo, String> {
+    let cache_key = format!("{image_id}::{class_id}");
+    if let Some(metadata) = state.metadata.lock().as_ref() {
+        if let Some(class_info) = metadata.class_details.get(&cache_key) {
+            return Ok(class_info.clone());
+        }
+    }
+    Err(format!("Class details not found for {cache_key}"))
 }
 
 fn helper_project_path() -> Result<PathBuf, String> {

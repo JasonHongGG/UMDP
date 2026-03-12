@@ -1,7 +1,12 @@
-use crate::models::{ClassInfo, ClassSummary, ImageInfo, RuntimeClassOverlayResponse};
+use crate::models::{ClassInfo, ClassSummary, DumpAllResponse, ImageInfo, RuntimeClassOverlayResponse};
 use crate::services::{metadata_service, runtime_bridge_service};
 use crate::state::AppState;
 use tauri::State;
+
+#[tauri::command]
+pub fn load_all_metadata(state: State<'_, AppState>) -> Result<DumpAllResponse, String> {
+    metadata_service::load_all_metadata(state)
+}
 
 #[tauri::command]
 pub fn get_image_catalog(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {

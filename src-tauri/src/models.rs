@@ -83,5 +83,11 @@ pub struct AttachedProcess {
     pub runtime: String,
 }
 
-pub type ClassCatalogCache = HashMap<String, Vec<ClassSummary>>;
-pub type ClassDetailsCache = HashMap<String, ClassInfo>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DumpAllResponse {
+    pub images: Vec<ImageInfo>,
+    #[serde(rename = "classesByImage")]
+    pub classes_by_image: HashMap<String, Vec<ClassSummary>>,
+    #[serde(rename = "classDetails")]
+    pub class_details: HashMap<String, ClassInfo>,
+}

@@ -76,9 +76,7 @@ pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> 
         });
     }
 
-    state.image_catalog.lock().take();
-    state.class_catalog.lock().clear();
-    state.class_details.lock().clear();
+    state.metadata.lock().take();
 
     Ok(AttachResponse {
         attached: true,

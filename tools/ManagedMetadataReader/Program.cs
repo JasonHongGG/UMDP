@@ -125,6 +125,93 @@ switch (mode)
         }
         break;
 
+    case "dump-all":
+        var images = Directory
+            .EnumerateFiles(managedDir, "*.dll", SearchOption.TopDirectoryOnly)
+            .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            .Select(path => new
+            {
+                id = Path.GetFileName(path),
+                name = Path.GetFileNameWithoutExtension(path),
+                path,
+            })
+            .ToList();
+
+        var classesByImage = new Dictionary<string, object>();
+        var classDetails = new Dictionary<string, object>();
+
+        foreach (var image in images)
+        {
+            try
+            {
+                using var assembly = LoadAssembly(image.id, managedDir, readerParameters);
+                
+                var classSummaries = new List<object>();
+                
+                foreach (var type in assembly.MainModule.Types.Where(t => !t.IsSpecialName))
+                {
+                    classSummaries.Add(new
+                    {
+                        id = type.FullName,
+                        name = type.Name,
+                        @namespace = type.Namespace ?? string.Empty,
+                        full_name = type.FullName,
+                    });
+
+                    var cacheKey = $"{image.id}::{type.FullName}";
+                    classDetails[cacheKey] = new
+                    {
+                        id = type.FullName,
+                        name = type.Name,
+                        @namespace = type.Namespace ?? string.Empty,
+                        full_name = type.FullName,
+                        inheritance = GetInheritance(type),
+                        static_fields = type.Fields
+                            .Where(field => field.IsStatic && !field.IsSpecialName)
+                            .Select(field => new
+                            {
+                                name = field.Name,
+                                field_type = FormatType(field.FieldType),
+                                address = (string?)null,
+                                value = (string?)null,
+                            })
+                            .ToList(),
+                        fields = type.Fields
+                            .Where(field => !field.IsStatic && !field.IsSpecialName)
+                            .Select(field => new
+                            {
+                                offset = (string?)null,
+                                name = field.Name,
+                                field_type = FormatType(field.FieldType),
+                            })
+                            .ToList(),
+                        methods = type.Methods
+                            .Where(method => !method.IsGetter && !method.IsSetter && !method.IsAddOn && !method.IsRemoveOn)
+                            .Select(method => new
+                            {
+                                name = method.Name,
+                                signature = BuildSignature(method),
+                            })
+                            .ToList(),
+                    };
+                }
+
+                classesByImage[image.id] = classSummaries.OrderBy(c => (string)((dynamic)c).full_name, StringComparer.OrdinalIgnoreCase).ToList();
+            }
+            catch
+            {
+                // Skip failed assemblies so one error doesn't break the entire dump
+            }
+        }
+
+        payload = new
+        {
+            images,
+            classesByImage,
+            classDetails,
+        };
+        break;
+
     default:
         Console.Error.WriteLine($"Unknown mode: {mode}");
         return 6;

@@ -12,6 +12,12 @@ export interface AttachResponse {
   runtime: string;
 }
 
+export interface DumpAllResponse {
+  images: ImageInfo[];
+  classesByImage: Record<string, ClassSummary[]>;
+  classDetails: Record<string, ClassInfo>;
+}
+
 export interface InheritanceNode {
   name: string;
 }
