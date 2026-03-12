@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ManagedMetadataReader")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+726f3dc8f7a0115910628d6f5f0341e9c606491c")]
 [assembly: System.Reflection.AssemblyProductAttribute("ManagedMetadataReader")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ManagedMetadataReader")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
