@@ -264,17 +264,17 @@ export default function App() {
     const delayDebounceFn = setTimeout(() => {
       setIsGlobalSearching(true);
       const query = globalSearchQuery.toLowerCase();
-      const results: GlobalSearchResult[] = [];
+      let results: GlobalSearchResult[] = [];
 
       for (const [key, classInfo] of Object.entries(classDetailsByKey)) {
-        if (results.length > 300) break; // Limit results to prevent UI freeze
+        if (results.length > 50000) break; // Hard limit for extreme cases
         const [imageId, classId] = key.split('::');
         const img = images.find(i => i.id === imageId);
         if (!img) continue;
 
         if (globalSearchMode === 'Class') {
           if (classInfo.name.toLowerCase().includes(query) || classInfo.namespace.toLowerCase().includes(query)) {
-            results.push({ imageId, classId, imageName: img.name, className: classInfo.name, matchType: 'Class', matchText: classInfo.full_name });
+            results.push({ imageId, classId, imageName: img.name, className: classInfo.name, matchType: 'Class', matchText: classInfo.full_name, isInherited: false });
           }
         } else {
           const seenMembers = new Set<string>();
@@ -293,19 +293,39 @@ export default function App() {
               if (seenMembers.has(item.name)) continue;
               seenMembers.add(item.name);
               if (item.name.toLowerCase().includes(query)) {
-                 results.push({ imageId, classId, imageName: img.name, className: classInfo.name, matchType: globalSearchMode, matchText: item.name });
+                 results.push({ imageId, classId, imageName: img.name, className: classInfo.name, matchType: globalSearchMode, matchText: item.name, isInherited: i > 0 });
               }
             }
           }
         }
       }
+      
       results.sort((a, b) => {
+        // Priority 1: Match is in the currently active tab
+        const aActive = a.imageId === activeTab?.imageId && a.classId === activeTab?.classId;
+        const bActive = b.imageId === activeTab?.imageId && b.classId === activeTab?.classId;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+
+        // Priority 2: Non-inherited native members first
+        if (!a.isInherited && b.isInherited) return -1;
+        if (a.isInherited && !b.isInherited) return 1;
+
+        // Priority 3: MatchText Match
         const textCmp = a.matchText.localeCompare(b.matchText);
         if (textCmp !== 0) return textCmp;
+
+        // Priority 4: Class Name
         const classCmp = a.className.localeCompare(b.className);
         if (classCmp !== 0) return classCmp;
+
         return a.imageName.localeCompare(b.imageName);
       });
+
+      if (results.length > 500) {
+        results = results.slice(0, 500);
+      }
+
       setGlobalSearchResults(results);
       setIsGlobalSearching(false);
     }, 300);

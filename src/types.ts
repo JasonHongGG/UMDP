@@ -76,4 +76,5 @@ export interface GlobalSearchResult {
   className: string;
   matchType: 'Class' | 'Field' | 'StaticField' | 'Method';
   matchText: string;
+  isInherited?: boolean;
 }
