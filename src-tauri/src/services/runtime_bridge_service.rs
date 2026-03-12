@@ -1,10 +1,9 @@
 use crate::models::RuntimeClassOverlayResponse;
 use crate::state::AppState;
 use serde::Deserialize;
-use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug, Deserialize)]
 struct HelperRuntimeStaticFields {
@@ -13,6 +12,7 @@ struct HelperRuntimeStaticFields {
 }
 
 pub fn get_runtime_static_fields(
+    app: &AppHandle,
     state: State<'_, AppState>,
     image_id: &str,
     class_namespace: &str,
@@ -28,7 +28,7 @@ pub fn get_runtime_static_fields(
         return Err("Runtime static field resolution currently supports Mono targets only".to_string());
     }
 
-    let helper_exe = ensure_helper_built()?;
+    let helper_exe = helper_executable_path(app)?;
     let output = Command::new(&helper_exe)
         .arg("--pid")
         .arg(attached.pid.to_string())
@@ -55,82 +55,25 @@ pub fn get_runtime_static_fields(
     })
 }
 
-fn ensure_helper_built() -> Result<PathBuf, String> {
-    let project_path = helper_project_path()?;
-    let exe_path = helper_executable_path()?;
-
-    if exe_path.is_file() {
-        return Ok(exe_path);
-    }
-
-    let msbuild = locate_msbuild()?;
-    let output = Command::new(msbuild)
-        .arg(&project_path)
-        .arg("-target:Build")
-        .arg("-property:Configuration=Debug")
-        .arg("-property:Platform=x64")
-        .output()
-        .map_err(|error| format!("Failed to build runtime bridge: {error}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "Runtime bridge build failed: {} {}",
-            stdout.trim(),
-            stderr.trim()
-        ));
-    }
-
-    if exe_path.is_file() {
-        Ok(exe_path)
-    } else {
-        Err(format!("Runtime bridge executable not found after build: {}", exe_path.display()))
-    }
-}
-
-fn helper_project_path() -> Result<PathBuf, String> {
+fn helper_executable_path(app: &AppHandle) -> Result<PathBuf, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let root = manifest_dir.parent().ok_or_else(|| "Failed to resolve project root".to_string())?;
-    let project = root.join("tools").join("UnityMonoBridge").join("UnityMonoBridge.vcxproj");
-    if Path::new(&project).is_file() {
-        Ok(project)
-    } else {
-        Err(format!("Runtime bridge project not found: {}", project.display()))
+    let mut candidates = vec![manifest_dir.join("bin").join("UnityMonoBridge.exe")];
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("bin").join("UnityMonoBridge.exe"));
     }
-}
 
-fn helper_executable_path() -> Result<PathBuf, String> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let root = manifest_dir.parent().ok_or_else(|| "Failed to resolve project root".to_string())?;
-    Ok(root
-        .join("tools")
-        .join("UnityMonoBridge")
-        .join("build")
-        .join("x64")
-        .join("Debug")
-        .join("UnityMonoBridge.exe"))
-}
-
-fn locate_msbuild() -> Result<PathBuf, String> {
-    if let Ok(program_files) = env::var("ProgramFiles") {
-        let root = PathBuf::from(program_files).join("Microsoft Visual Studio");
-        for version in ["18", "17"] {
-            for edition in ["Community", "Professional", "Enterprise", "BuildTools"] {
-                let candidate = root
-                    .join(version)
-                    .join(edition)
-                    .join("MSBuild")
-                    .join("Current")
-                    .join("Bin")
-                    .join("MSBuild.exe");
-
-                if candidate.is_file() {
-                    return Ok(candidate);
-                }
-            }
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            candidates.push(exe_dir.join("UnityMonoBridge.exe"));
+            candidates.push(exe_dir.join("resources").join("bin").join("UnityMonoBridge.exe"));
         }
     }
 
-    Err("Visual Studio MSBuild.exe not found. Install Visual Studio C++ build tools or build UnityMonoBridge manually first.".to_string())
+    candidates
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| {
+            "UnityMonoBridge executable not found. Rebuild the Tauri app so src-tauri/bin/UnityMonoBridge.exe is built and bundled.".to_string()
+        })
 }

@@ -1,10 +1,10 @@
 use crate::models::{ClassInfo, ClassSummary, DumpAllResponse, ImageInfo};
 use crate::state::AppState;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
-pub fn load_all_metadata(state: State<'_, AppState>) -> Result<DumpAllResponse, String> {
+pub fn load_all_metadata(app: &AppHandle, state: State<'_, AppState>) -> Result<DumpAllResponse, String> {
     let attached = state
         .attached_process
         .lock()
@@ -16,13 +16,9 @@ pub fn load_all_metadata(state: State<'_, AppState>) -> Result<DumpAllResponse, 
         .clone()
         .ok_or_else(|| "Attached process has no Unity Managed directory".to_string())?;
 
-    let helper_project = helper_project_path()?;
-    let mut command = Command::new("dotnet");
+    let helper_executable = helper_executable_path(app)?;
+    let mut command = Command::new(&helper_executable);
     command
-        .arg("run")
-        .arg("--project")
-        .arg(&helper_project)
-        .arg("--")
         .arg("dump-all")
         .arg(&managed_dir);
 
@@ -69,13 +65,24 @@ pub fn get_class_details(state: State<'_, AppState>, image_id: &str, class_id: &
     Err(format!("Class details not found for {cache_key}"))
 }
 
-fn helper_project_path() -> Result<PathBuf, String> {
+fn helper_executable_path(app: &AppHandle) -> Result<PathBuf, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let root = manifest_dir.parent().ok_or_else(|| "Failed to resolve project root".to_string())?;
-    let project = root.join("tools").join("ManagedMetadataReader").join("ManagedMetadataReader.csproj");
-    if Path::new(&project).is_file() {
-        Ok(project)
+    let mut candidates = vec![manifest_dir.join("bin").join("ManagedMetadataReader.exe")];
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("bin").join("ManagedMetadataReader.exe"));
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            candidates.push(exe_dir.join("ManagedMetadataReader.exe"));
+            candidates.push(exe_dir.join("resources").join("bin").join("ManagedMetadataReader.exe"));
+        }
+    }
+
+    if let Some(path) = candidates.into_iter().find(|candidate| candidate.is_file()) {
+        Ok(path)
     } else {
-        Err(format!("Metadata reader project not found: {}", project.display()))
+        Err("ManagedMetadataReader executable not found. Rebuild the Tauri app so src-tauri/bin/ManagedMetadataReader.exe is published and bundled.".to_string())
     }
 }

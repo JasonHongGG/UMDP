@@ -90,9 +90,14 @@
     <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessModule.cpp" />
     <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessWindow.cpp" />
     <ClCompile Include="..\..\reference\UnityMonoAPI\API\Utils\Utils.cpp" />
+    <ClCompile Include="src\BridgeJson.cpp" />
+    <ClCompile Include="src\RuntimeBridge.cpp" />
     <ClCompile Include="UnityMonoBridge.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\BridgeJson.h" />
+    <ClInclude Include="include\BridgeModels.h" />
+    <ClInclude Include="include\RuntimeBridge.h" />
     <ClInclude Include="..\..\reference\UnityMonoAPI\API\MonoAPI.h" />
     <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\Const.h" />
     <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoClass.h" />

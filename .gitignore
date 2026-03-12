@@ -36,6 +36,7 @@ yarn-error.log*
 # ============================
 src-tauri/target/
 src-tauri/gen/
+src-tauri/bin/
 Cargo.lock
 
 # ============================
