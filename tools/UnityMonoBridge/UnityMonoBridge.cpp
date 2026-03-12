@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include "../../../UnityMonoAPI/API/MonoAPI.h"
+#include "../../reference/UnityMonoAPI/API/MonoAPI.h"
 
 struct BridgeRequest {
     size_t pid = 0;
@@ -34,7 +34,7 @@ static std::string JsonEscape(const std::string& value)
         case '\r': stream << "\\r"; break;
         case '\t': stream << "\\t"; break;
         default:
-            if (static_cast<unsigned char>(ch) < 0x20) {
+            if (static_cast<unsigned char>(ch) < 0x20 || static_cast<unsigned char>(ch) >= 0x7F) {
                 stream << "\\u"
                        << std::hex << std::setw(4) << std::setfill('0')
                        << static_cast<int>(static_cast<unsigned char>(ch))

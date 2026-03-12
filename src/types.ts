@@ -68,3 +68,12 @@ export interface RuntimeClassOverlayResponse {
   static_fields: StaticFieldInfo[];
   fields: FieldInfo[];
 }
+
+export interface GlobalSearchResult {
+  imageId: string;
+  classId: string;
+  imageName: string;
+  className: string;
+  matchType: 'Class' | 'Field' | 'StaticField' | 'Method';
+  matchText: string;
+}

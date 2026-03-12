@@ -4,9 +4,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
-  Binary, Database, Layers3, Boxes, Target, ChevronRight, ScanSearch, Network, LoaderCircle, Hexagon, X, Activity, Box, List, Type, Variable
+  Binary, Database, Layers3, Boxes, Target, ChevronRight, ScanSearch, Network, LoaderCircle, Hexagon, X, Activity, Box, List, Type, Variable, Globe, Search
 } from 'lucide-react';
-import type { AttachResponse, ClassInfo, ClassSummary, FieldInfo, ImageInfo, ProcessInfo, RuntimeClassOverlayResponse, StaticFieldInfo, DumpAllResponse } from './types';
+import type { AttachResponse, ClassInfo, ClassSummary, FieldInfo, ImageInfo, ProcessInfo, RuntimeClassOverlayResponse, StaticFieldInfo, DumpAllResponse, GlobalSearchResult } from './types';
 import { MainLayout } from './components/layout/MainLayout';
 import { TopBar } from './components/features/TopBar';
 import './styles.css';
@@ -43,7 +43,18 @@ export default function App() {
   const [imageSearch, setImageSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
 
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchMode, setGlobalSearchMode] = useState<'Class' | 'Field' | 'StaticField' | 'Method'>('Class');
+  const [globalSearchResults, setGlobalSearchResults] = useState<GlobalSearchResult[]>([]);
+  const [isGlobalSearching, setIsGlobalSearching] = useState(false);
+  
+  const [pendingScrollImageId, setPendingScrollImageId] = useState<string | null>(null);
+  const [pendingScrollClassId, setPendingScrollClassId] = useState<string | null>(null);
+
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const imageListRef = useRef<HTMLDivElement>(null);
+  const classListRef = useRef<HTMLDivElement>(null);
   const fetchingRuntimeRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -244,6 +255,100 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!globalSearchQuery || globalSearchQuery.length < 2) {
+      setGlobalSearchResults([]);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(() => {
+      setIsGlobalSearching(true);
+      const query = globalSearchQuery.toLowerCase();
+      const results: GlobalSearchResult[] = [];
+
+      for (const [key, classInfo] of Object.entries(classDetailsByKey)) {
+        if (results.length > 300) break; // Limit results to prevent UI freeze
+        const [imageId, classId] = key.split('::');
+        const img = images.find(i => i.id === imageId);
+        if (!img) continue;
+
+        if (globalSearchMode === 'Class') {
+          if (classInfo.name.toLowerCase().includes(query) || classInfo.namespace.toLowerCase().includes(query)) {
+            results.push({ imageId, classId, imageName: img.name, className: classInfo.name, matchType: 'Class', matchText: classInfo.full_name });
+          }
+        } else {
+          const seenMembers = new Set<string>();
+          for (let i = 0; i < classInfo.inheritance.length; i++) {
+            const baseName = classInfo.inheritance[i].name;
+            const lookup = classLookupMap.get(baseName);
+            const targetClass = lookup ? classDetailsByKey[`${lookup.imageId}::${lookup.classId}`] : null;
+            const actualClassInfo = i === 0 ? classInfo : targetClass;
+            if (!actualClassInfo) continue;
+
+            const arr = globalSearchMode === 'Field' ? actualClassInfo.fields :
+                        globalSearchMode === 'StaticField' ? actualClassInfo.static_fields :
+                        actualClassInfo.methods;
+
+            for (const item of arr) {
+              if (seenMembers.has(item.name)) continue;
+              seenMembers.add(item.name);
+              if (item.name.toLowerCase().includes(query)) {
+                 results.push({ imageId, classId, imageName: img.name, className: classInfo.name, matchType: globalSearchMode, matchText: item.name });
+              }
+            }
+          }
+        }
+      }
+      results.sort((a, b) => {
+        const textCmp = a.matchText.localeCompare(b.matchText);
+        if (textCmp !== 0) return textCmp;
+        const classCmp = a.className.localeCompare(b.className);
+        if (classCmp !== 0) return classCmp;
+        return a.imageName.localeCompare(b.imageName);
+      });
+      setGlobalSearchResults(results);
+      setIsGlobalSearching(false);
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [globalSearchQuery, globalSearchMode, classDetailsByKey, images]);
+
+  const handleGlobalSearchResultClick = (result: GlobalSearchResult) => {
+    setSelectedImageId(result.imageId);
+    const item = classesByImage[result.imageId]?.find(c => c.id === result.classId);
+    if (item) {
+      openTabForClass({
+        imageId: result.imageId,
+        classId: result.classId,
+        name: item.name,
+        namespace: item.namespace,
+        imageName: result.imageName,
+      });
+    }
+    setPendingScrollImageId(result.imageId);
+    setPendingScrollClassId(result.classId);
+  };
+
+  useEffect(() => {
+    if (pendingScrollImageId && pendingScrollClassId && selectedImageId === pendingScrollImageId) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (imageListRef.current) {
+            const activeImage = imageListRef.current.querySelector(`[data-id="${pendingScrollImageId}"]`);
+            if (activeImage) activeImage.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+          }
+          if (classListRef.current) {
+            const activeClass = classListRef.current.querySelector(`[data-id="${pendingScrollClassId}"]`);
+            if (activeClass) activeClass.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+          }
+        }, 50);
+      });
+      setPendingScrollImageId(null);
+      setPendingScrollClassId(null);
+    }
+  }, [selectedImageId, currentClasses, pendingScrollImageId, pendingScrollClassId]);
+
+
   const prevTabsLengthRef = useRef(tabs.length);
   useEffect(() => {
     const isClosing = tabs.length < prevTabsLengthRef.current;
@@ -269,6 +374,116 @@ export default function App() {
 
       <div className="flex-1 flex overflow-hidden">
 
+        {/* ───── Sidebar Tools ───── */}
+        <div className="w-12 bg-[#05080c] border-r border-[#1c2838] flex flex-col items-center py-4 z-40 shrink-0 shadow-[4px_0_15px_rgba(0,0,0,0.3)] gap-3 relative">
+          {/* Global Search Tool */}
+          <button
+            onClick={() => setIsGlobalSearchOpen(!isGlobalSearchOpen)}
+            className={`p-2.5 rounded-lg transition-all relative group ${isGlobalSearchOpen ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.2)]' : 'text-slate-500 hover:text-cyan-400 hover:bg-[#0a0f16]'}`}
+            title="Global Search"
+          >
+            {isGlobalSearchOpen && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-1/2 bg-cyan-400 rounded-r-md shadow-[0_0_8px_rgba(34,211,238,0.8)]" />}
+            <Globe className="w-5 h-5 transition-transform group-hover:scale-110" />
+          </button>
+        </div>
+
+        {/* ───── Column 0.5: Global Search Sidebar ───── */}
+        <div className={`flex flex-col bg-[#070a0f]/95 backdrop-blur-xl relative z-20 shrink-0 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] overflow-hidden border-r border-[#1c2838] shadow-[10px_0_30px_rgba(0,0,0,0.5)] ${isGlobalSearchOpen ? 'w-[320px]' : 'w-0 border-r-0 shadow-none opacity-0'}`}>
+            <div className="p-4 border-b border-[#1c2838] shrink-0 w-[320px]">
+                <div className="flex items-center gap-2 mb-4">
+                    <Globe className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-200 flex-1">Global Search</span>
+                    <button onClick={() => setIsGlobalSearchOpen(false)} className="text-slate-500 hover:text-rose-400 transition-colors p-1 rounded-md hover:bg-rose-500/10">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1 bg-[#05080c]/80 rounded-lg p-1 border border-[#1c2838] mb-4 shadow-inner">
+                    <button
+                        onClick={() => setGlobalSearchMode("Class")}
+                        className={`text-[10px] uppercase tracking-widest py-1.5 rounded-md transition-all font-bold ${globalSearchMode === 'Class' ? 'bg-cyan-500/20 text-cyan-300 shadow-sm border border-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                        Classes
+                    </button>
+                    <button
+                        onClick={() => setGlobalSearchMode("Field")}
+                        className={`text-[10px] uppercase tracking-widest py-1.5 rounded-md transition-all font-bold ${globalSearchMode === 'Field' ? 'bg-cyan-500/20 text-cyan-300 shadow-sm border border-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                        Fields
+                    </button>
+                    <button
+                        onClick={() => setGlobalSearchMode("StaticField")}
+                        className={`text-[10px] uppercase tracking-widest py-1.5 rounded-md transition-all font-bold ${globalSearchMode === 'StaticField' ? 'bg-cyan-500/20 text-cyan-300 shadow-sm border border-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                        Statics
+                    </button>
+                    <button
+                        onClick={() => setGlobalSearchMode("Method")}
+                        className={`text-[10px] uppercase tracking-widest py-1.5 rounded-md transition-all font-bold ${globalSearchMode === 'Method' ? 'bg-cyan-500/20 text-cyan-300 shadow-sm border border-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                        Methods
+                    </button>
+                </div>
+
+                <div className="relative group">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${globalSearchQuery ? 'text-cyan-400' : 'text-slate-500 group-focus-within:text-cyan-400'}`} />
+                    <input
+                        type="text"
+                        placeholder="SEARCH MEMORY..."
+                        value={globalSearchQuery}
+                        onChange={e => setGlobalSearchQuery(e.target.value)}
+                        className="w-full bg-[#05080c]/60 border border-[#1c2838] rounded-lg text-[11px] py-2 pl-9 pr-3 outline-none focus:border-cyan-500/50 focus:bg-[#070a0f]/90 focus:shadow-[0_0_15px_rgba(34,211,238,0.1)] transition-all text-slate-100 placeholder:text-slate-600 font-mono tracking-wide"
+                    />
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 hide-scrollbar w-[320px]">
+                {isGlobalSearching ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-cyan-500/50 gap-4">
+                        <LoaderCircle className="w-8 h-8 animate-spin opacity-80" />
+                        <span className="text-[10px] font-mono tracking-widest font-bold">SCANNING MEMORY...</span>
+                    </div>
+                ) : globalSearchResults.length > 0 ? (
+                    globalSearchResults.map((res, i) => (
+                        <button
+                            key={i}
+                            onClick={() => handleGlobalSearchResultClick(res)}
+                            className="w-full text-left px-3 py-2.5 text-[11px] rounded-lg transition-all bg-[#0a0f16]/30 hover:bg-[#0a0f16]/90 border border-transparent hover:border-white/5 group flex flex-col gap-1.5"
+                        >
+                            <div className="flex items-start gap-2">
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-200 shrink-0 select-none mt-0.5">
+                                    {res.matchType}
+                                </span>
+                                <span className="font-semibold text-slate-100 break-all leading-tight">
+                                    {res.matchText}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between opacity-50 group-hover:opacity-100 transition-opacity gap-2 mt-0.5">
+                                {res.matchType !== 'Class' && (
+                                    <span className="font-mono text-[9px] text-cyan-400/80 truncate flex-1 text-left">{res.className}</span>
+                                )}
+                                <span className={`text-[9px] tracking-wider text-slate-500 truncate text-right ${res.matchType === 'Class' ? 'w-full' : 'shrink-0 max-w-[140px]'}`}>
+                                    {res.imageName}
+                                </span>
+                            </div>
+                        </button>
+                    ))
+                ) : globalSearchQuery.length >= 2 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-slate-600 gap-3">
+                        <Search className="w-8 h-8 opacity-20" />
+                        <div className="text-[10px] uppercase font-mono tracking-widest font-bold">NO MATCHES FOUND</div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-48 text-slate-600 gap-3 px-6 text-center">
+                        <Database className="w-8 h-8 opacity-20 mb-1" />
+                        <div className="text-[10px] uppercase font-mono tracking-wider leading-relaxed">
+                            INITIALIZE QUERY<br /><span className="opacity-50 text-[9px]">MINIMUM 2 CHARACTERS</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+
         <div className="w-72 border-r border-[#1c2838] bg-[#0a0f16]/90 flex flex-col shrink-0 relative backdrop-blur-md">
           <div className="p-4 border-b border-[#1c2838]">
             <div className="flex items-center gap-2 mb-3">
@@ -286,12 +501,13 @@ export default function App() {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto hide-scrollbar p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto hide-scrollbar p-2 space-y-1" ref={imageListRef}>
             {!images.length && !loadingImages ? <EmptyPanel icon={<Layers3 size={32} />} title="No image data" msg="Attach to a target." /> : null}
             {loadingImages ? <LoadingInline msg="Loading assemblies..." /> : null}
             {filteredImages.map((image) => (
               <button
                 key={image.id}
+                data-id={image.id}
                 onClick={() => {
                   setSelectedImageId(image.id);
                 }}
@@ -327,7 +543,7 @@ export default function App() {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto hide-scrollbar p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto hide-scrollbar p-2 space-y-1" ref={classListRef}>
             {!images.length && !loadingImages && !selectedImage && <EmptyPanel icon={<Boxes size={32} />} title="Classes" msg="Select an assembly module first." />}
             {selectedImage && !currentClasses.length ? <EmptyPanel icon={<Boxes size={32} />} title="No classes" msg="No visible classes found." /> : null}
             {filteredClasses.map((item) => {
@@ -336,6 +552,7 @@ export default function App() {
               return (
                 <button
                   key={item.id}
+                  data-id={item.id}
                   onClick={() => handleClassClick(item)}
                   className={classNames(
                     "w-full text-left px-3 py-2 rounded-lg transition-all duration-200 flex items-center justify-between border group",
