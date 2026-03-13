@@ -72,6 +72,7 @@ pub struct AttachResponse {
     pub process_name: String,
     pub process_id: u32,
     pub exe_path: String,
+    pub data_dir: Option<String>,
     pub managed_dir: Option<String>,
     pub runtime: String,
 }
@@ -79,8 +80,8 @@ pub struct AttachResponse {
 #[derive(Debug, Clone)]
 pub struct AttachedProcess {
     pub pid: u32,
+    pub data_dir: Option<String>,
     pub managed_dir: Option<String>,
-    pub runtime: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -159,11 +159,6 @@ export default function App() {
     }
     const cacheKey = `${activeTab.imageId}::${activeTab.classId}`;
 
-    if (attached.runtime !== 'Mono') {
-      setRuntimeFieldErrorByKey(curr => ({ ...curr, [cacheKey]: 'Runtime static field resolution is currently available for Mono targets only.' }));
-      return;
-    }
-
     if (runtimeStaticFieldsByKey[cacheKey] !== undefined || fetchingRuntimeRef.current.has(cacheKey)) return;
 
     fetchingRuntimeRef.current.add(cacheKey);

@@ -24,6 +24,7 @@ fn build_managed_metadata_reader() {
     println!("cargo:rerun-if-changed={}", project_dir.join("CommandLine.cs").display());
     println!("cargo:rerun-if-changed={}", project_dir.join("Contracts.cs").display());
     println!("cargo:rerun-if-changed={}", project_dir.join("ManagedMetadataCatalog.cs").display());
+    println!("cargo:rerun-if-changed={}", project_dir.join("MetadataSource.cs").display());
 
     if !cfg!(target_os = "windows") {
         println!("cargo:warning=Skipping ManagedMetadataReader publish because the current build host is not Windows.");

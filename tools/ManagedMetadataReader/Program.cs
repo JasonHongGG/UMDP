@@ -19,7 +19,7 @@ internal static class ProgramEntry
         try
         {
             var command = CommandLineParser.Parse(args);
-            var catalog = new ManagedMetadataCatalog(command.ManagedDirectory);
+            using var catalog = new ManagedMetadataCatalog(command.InputDirectory);
             object payload = command.Mode switch
             {
                 ReaderMode.Images => new ImagesResponse { Images = catalog.GetImages() },

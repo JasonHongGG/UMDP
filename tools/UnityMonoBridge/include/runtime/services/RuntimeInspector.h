@@ -1,13 +1,13 @@
 #pragma once
 
 #include "bridge/BridgeModels.h"
-#include "mono/AssemblyService.h"
-#include "mono/ClassService.h"
-#include "mono/FieldEnumerationService.h"
-#include "mono/MonoRuntime.h"
-#include "mono/StaticValueReader.h"
+#include "runtime/context/RuntimeContext.h"
+#include "runtime/services/AssemblyService.h"
+#include "runtime/services/ClassService.h"
+#include "runtime/services/FieldEnumerationService.h"
+#include "runtime/services/StaticValueReader.h"
 
-namespace bridge::mono {
+namespace bridge::runtime {
 
 class RuntimeInspector {
 public:
@@ -16,11 +16,11 @@ public:
     RuntimeClassOverlayResponse InspectClass(const BridgeRequest& request) const;
 
 private:
-    MonoRuntime runtime_;
+    RuntimeContext context_;
     AssemblyService assembly_service_;
     ClassService class_service_;
     FieldEnumerationService field_enumeration_service_;
     StaticValueReader static_value_reader_;
 };
 
-} // namespace bridge::mono
+} // namespace bridge::runtime

@@ -1,18 +1,23 @@
+using Cpp2IL.Core;
 using Mono.Cecil;
 
 namespace ManagedMetadataReader;
 
-internal sealed class ManagedMetadataCatalog
+internal sealed class ManagedMetadataCatalog : IDisposable
 {
-    private readonly string _managedDirectory;
+    private readonly MetadataSource _source;
     private readonly ReaderParameters _readerParameters;
+    private readonly List<AssemblyDefinition> _il2cppAssemblies = [];
 
-    public ManagedMetadataCatalog(string managedDirectory)
+    public ManagedMetadataCatalog(string inputDirectory)
     {
-        _managedDirectory = managedDirectory;
+        _source = MetadataSourceResolver.Resolve(inputDirectory);
 
         var resolver = new DefaultAssemblyResolver();
-        resolver.AddSearchDirectory(managedDirectory);
+        if (_source.ManagedDirectory is not null)
+        {
+            resolver.AddSearchDirectory(_source.ManagedDirectory);
+        }
 
         _readerParameters = new ReaderParameters
         {
@@ -20,12 +25,28 @@ internal sealed class ManagedMetadataCatalog
             ReadSymbols = false,
             InMemory = true,
         };
+
+        if (_source.Kind == MetadataSourceKind.Il2Cpp)
+        {
+            var unityVersion = Cpp2IlApi.DetermineUnityVersion(_source.UnityPlayerPath!, _source.DataDirectory)
+                ?? throw new InvalidOperationException("Failed to determine Unity version for IL2CPP metadata");
+            Cpp2IlApi.InitializeLibCpp2Il(_source.GameAssemblyPath!, _source.GlobalMetadataPath!, unityVersion, false);
+            _il2cppAssemblies.AddRange(Cpp2IlApi.MakeDummyDLLs(suppressAttributes: true));
+        }
     }
 
     public List<ImageContract> GetImages()
     {
+        if (_source.Kind == MetadataSourceKind.Il2Cpp)
+        {
+            return _il2cppAssemblies
+                .OrderBy(GetImageId, StringComparer.OrdinalIgnoreCase)
+                .Select(CreateImageContract)
+                .ToList();
+        }
+
         return Directory
-            .EnumerateFiles(_managedDirectory, "*.dll", SearchOption.TopDirectoryOnly)
+            .EnumerateFiles(_source.ManagedDirectory!, "*.dll", SearchOption.TopDirectoryOnly)
             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
             .Select(path => new ImageContract
             {
@@ -38,6 +59,15 @@ internal sealed class ManagedMetadataCatalog
 
     public List<ClassSummaryContract> GetClasses(string imageId)
     {
+        if (_source.Kind == MetadataSourceKind.Il2Cpp)
+        {
+            var generatedAssembly = ResolveGeneratedAssembly(imageId);
+            return EnumerateVisibleTypes(generatedAssembly)
+                .Select(CreateClassSummary)
+                .OrderBy(type => type.FullName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         using var assembly = LoadAssembly(imageId);
         return EnumerateVisibleTypes(assembly)
             .Select(CreateClassSummary)
@@ -47,6 +77,18 @@ internal sealed class ManagedMetadataCatalog
 
     public ClassDetailsContract GetClassDetails(string imageId, string classId)
     {
+        if (_source.Kind == MetadataSourceKind.Il2Cpp)
+        {
+            var generatedAssembly = ResolveGeneratedAssembly(imageId);
+            var generatedType = generatedAssembly.MainModule.Types.FirstOrDefault(item => item.FullName == classId);
+            if (generatedType is null)
+            {
+                throw new FileNotFoundException($"Class not found: {classId}");
+            }
+
+            return CreateClassDetails(generatedType);
+        }
+
         using var assembly = LoadAssembly(imageId);
         var type = assembly.MainModule.Types.FirstOrDefault(item => item.FullName == classId);
         if (type is null)
@@ -62,6 +104,33 @@ internal sealed class ManagedMetadataCatalog
         var images = GetImages();
         var classesByImage = new Dictionary<string, List<ClassSummaryContract>>(StringComparer.Ordinal);
         var classDetails = new Dictionary<string, ClassDetailsContract>(StringComparer.Ordinal);
+
+        if (_source.Kind == MetadataSourceKind.Il2Cpp)
+        {
+            foreach (var assembly in _il2cppAssemblies.OrderBy(GetImageId, StringComparer.OrdinalIgnoreCase))
+            {
+                var imageId = GetImageId(assembly);
+                var classSummaries = new List<ClassSummaryContract>();
+
+                foreach (var type in EnumerateVisibleTypes(assembly))
+                {
+                    var summary = CreateClassSummary(type);
+                    classSummaries.Add(summary);
+                    classDetails[$"{imageId}::{type.FullName}"] = CreateClassDetails(type);
+                }
+
+                classesByImage[imageId] = classSummaries
+                    .OrderBy(type => type.FullName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            return new DumpAllResponseContract
+            {
+                Images = images,
+                ClassesByImage = classesByImage,
+                ClassDetails = classDetails,
+            };
+        }
 
         foreach (var image in images)
         {
@@ -97,13 +166,52 @@ internal sealed class ManagedMetadataCatalog
 
     private AssemblyDefinition LoadAssembly(string imageId)
     {
-        var assemblyPath = Path.Combine(_managedDirectory, imageId);
+        var assemblyPath = Path.Combine(_source.ManagedDirectory!, imageId);
         if (!File.Exists(assemblyPath))
         {
             throw new FileNotFoundException($"Assembly not found: {assemblyPath}");
         }
 
         return AssemblyDefinition.ReadAssembly(assemblyPath, _readerParameters);
+    }
+
+    public void Dispose()
+    {
+        foreach (var assembly in _il2cppAssemblies)
+        {
+            assembly.Dispose();
+        }
+
+        if (_source.Kind == MetadataSourceKind.Il2Cpp)
+        {
+            Cpp2IlApi.DisposeAndCleanupAll();
+        }
+    }
+
+    private AssemblyDefinition ResolveGeneratedAssembly(string imageId)
+    {
+        var assembly = _il2cppAssemblies.FirstOrDefault(item =>
+            string.Equals(GetImageId(item), imageId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(item.Name.Name, imageId, StringComparison.OrdinalIgnoreCase));
+
+        return assembly ?? throw new FileNotFoundException($"Assembly not found: {imageId}");
+    }
+
+    private ImageContract CreateImageContract(AssemblyDefinition assembly)
+    {
+        var imageId = GetImageId(assembly);
+        return new ImageContract
+        {
+            Id = imageId,
+            Name = Path.GetFileNameWithoutExtension(imageId),
+            Path = _source.GameAssemblyPath ?? imageId,
+        };
+    }
+
+    private static string GetImageId(AssemblyDefinition assembly)
+    {
+        var name = assembly.Name.Name;
+        return name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? name : $"{name}.dll";
     }
 
     private static IEnumerable<TypeDefinition> EnumerateVisibleTypes(AssemblyDefinition assembly)

@@ -1,6 +1,6 @@
 #include "bridge/RuntimeBridge.h"
 
-#include "mono/RuntimeInspector.h"
+#include "runtime/services/RuntimeInspector.h"
 
 #include <stdexcept>
 #include <string>
@@ -36,7 +36,7 @@ BridgeRequest ArgumentParser::Parse(int argc, char* argv[])
 
 RuntimeClassOverlayResponse RuntimeBridge::Execute(const BridgeRequest& request) const
 {
-    mono::RuntimeInspector inspector(request.pid);
+    runtime::RuntimeInspector inspector(request.pid);
     return inspector.InspectClass(request);
 }
 

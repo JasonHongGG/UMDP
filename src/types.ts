@@ -8,6 +8,7 @@ export interface AttachResponse {
   process_name: string;
   process_id: number;
   exe_path: string;
+  data_dir: string | null;
   managed_dir: string | null;
   runtime: string;
 }

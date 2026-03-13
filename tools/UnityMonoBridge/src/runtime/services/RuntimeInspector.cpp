@@ -1,11 +1,15 @@
-#include "mono/RuntimeInspector.h"
+#include "runtime/services/RuntimeInspector.h"
 
 #include "shared/Formatting.h"
 
-namespace bridge::mono {
+namespace bridge::runtime {
 
 RuntimeInspector::RuntimeInspector(std::size_t pid)
-    : runtime_(pid), assembly_service_(runtime_), class_service_(runtime_), field_enumeration_service_(runtime_), static_value_reader_(runtime_)
+    : context_(pid),
+      assembly_service_(context_.api()),
+      class_service_(context_.api()),
+      field_enumeration_service_(context_.api()),
+      static_value_reader_(context_.api())
 {
 }
 
@@ -30,8 +34,8 @@ RuntimeClassOverlayResponse RuntimeInspector::InspectClass(const BridgeRequest& 
         row.name = field.name;
         row.field_type = field.type_name;
         row.address = field.static_address.has_value() ? std::optional<std::string>(shared::HexAddress(*field.static_address)) : std::nullopt;
-        row.value = field.static_address.has_value() && static_value_reader_.SupportsDirectStaticRead(field.type_name)
-            ? static_value_reader_.ReadStaticValue(field.type_name, *field.static_address)
+        row.value = static_value_reader_.SupportsDirectStaticRead(field.type_name)
+            ? static_value_reader_.ReadStaticValue(field)
             : std::nullopt;
         response.static_fields.push_back(std::move(row));
     }
@@ -47,4 +51,4 @@ RuntimeClassOverlayResponse RuntimeInspector::InspectClass(const BridgeRequest& 
     return response;
 }
 
-} // namespace bridge::mono
+} // namespace bridge::runtime

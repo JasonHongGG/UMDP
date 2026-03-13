@@ -64,15 +64,16 @@ pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> 
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    let managed_dir = derive_managed_dir(&exe_path);
-    let runtime = detect_runtime(&managed_dir);
+    let data_dir = derive_data_dir(&exe_path);
+    let managed_dir = data_dir.as_deref().and_then(derive_managed_dir);
+    let runtime = detect_runtime(data_dir.as_deref(), managed_dir.as_deref());
 
     {
         let mut attached = state.attached_process.lock();
         *attached = Some(AttachedProcess {
             pid,
+            data_dir: data_dir.clone(),
             managed_dir: managed_dir.clone(),
-            runtime: runtime.clone(),
         });
     }
 
@@ -83,17 +84,26 @@ pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> 
         process_name: name,
         process_id: pid,
         exe_path,
+        data_dir,
         managed_dir,
         runtime,
     })
 }
 
-fn derive_managed_dir(exe_path: &str) -> Option<String> {
+fn derive_data_dir(exe_path: &str) -> Option<String> {
     let exe = PathBuf::from(exe_path);
     let stem = exe.file_stem()?.to_string_lossy();
     let parent = exe.parent()?;
     let data_dir = parent.join(format!("{}_Data", stem));
-    let managed_dir = data_dir.join("Managed");
+    if data_dir.is_dir() {
+        Some(data_dir.to_string_lossy().to_string())
+    } else {
+        None
+    }
+}
+
+fn derive_managed_dir(data_dir: &str) -> Option<String> {
+    let managed_dir = Path::new(data_dir).join("Managed");
     if managed_dir.is_dir() {
         Some(managed_dir.to_string_lossy().to_string())
     } else {
@@ -101,19 +111,20 @@ fn derive_managed_dir(exe_path: &str) -> Option<String> {
     }
 }
 
-fn detect_runtime(managed_dir: &Option<String>) -> String {
-    let Some(dir) = managed_dir else {
+fn detect_runtime(data_dir: Option<&str>, managed_dir: Option<&str>) -> String {
+    let Some(dir) = data_dir else {
         return "Unknown".to_string();
     };
 
-    let managed_path = Path::new(dir);
-    let mono_bleeding = managed_path.join(r"..\..\MonoBleedingEdge");
-    let game_assembly = managed_path.join(r"..\..\GameAssembly.dll");
+    let data_path = Path::new(dir);
+    let mono_bleeding = data_path.join("MonoBleedingEdge");
+    let game_assembly = data_path.join(r"..\GameAssembly.dll");
+    let global_metadata = data_path.join(r"il2cpp_data\Metadata\global-metadata.dat");
 
-    if mono_bleeding.exists() {
-        "Mono".to_string()
-    } else if game_assembly.exists() {
+    if game_assembly.exists() && global_metadata.exists() {
         "IL2CPP".to_string()
+    } else if mono_bleeding.exists() || managed_dir.is_some() {
+        "Mono".to_string()
     } else {
         "Unknown".to_string()
     }

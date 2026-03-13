@@ -11,16 +11,17 @@ pub fn load_all_metadata(app: &AppHandle, state: State<'_, AppState>) -> Result<
         .clone()
         .ok_or_else(|| "No process attached".to_string())?;
 
-    let managed_dir = attached
-        .managed_dir
+    let metadata_input = attached
+        .data_dir
         .clone()
-        .ok_or_else(|| "Attached process has no Unity Managed directory".to_string())?;
+        .or(attached.managed_dir.clone())
+        .ok_or_else(|| "Attached process has no Unity data directory or managed directory".to_string())?;
 
     let helper_executable = helper_executable_path(app)?;
     let mut command = Command::new(&helper_executable);
     command
         .arg("dump-all")
-        .arg(&managed_dir);
+        .arg(&metadata_input);
 
     let output = command
         .output()

@@ -24,10 +24,6 @@ pub fn get_runtime_static_fields(
         .clone()
         .ok_or_else(|| "No process attached".to_string())?;
 
-    if attached.runtime != "Mono" {
-        return Err("Runtime static field resolution currently supports Mono targets only".to_string());
-    }
-
     let helper_exe = helper_executable_path(app)?;
     let output = Command::new(&helper_exe)
         .arg("--pid")
