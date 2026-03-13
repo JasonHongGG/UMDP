@@ -53,6 +53,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -69,6 +70,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -79,52 +81,39 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\Mono\MonoClass.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Memory.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemoryReader.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemoryRegionManager.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemorySearch.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemoryWriter.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Process.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessInfo.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessModule.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessWindow.cpp" />
-    <ClCompile Include="..\..\reference\UnityMonoAPI\API\Utils\Utils.cpp" />
-    <ClCompile Include="src\BridgeJson.cpp" />
-    <ClCompile Include="src\RuntimeBridge.cpp" />
+    <ClCompile Include="src\bridge\BridgeJson.cpp" />
+    <ClCompile Include="src\bridge\RuntimeBridge.cpp" />
+    <ClCompile Include="src\mono\AssemblyService.cpp" />
+    <ClCompile Include="src\mono\ClassService.cpp" />
+    <ClCompile Include="src\mono\FieldEnumerationService.cpp" />
+    <ClCompile Include="src\mono\MonoRuntime.cpp" />
+    <ClCompile Include="src\mono\RuntimeInspector.cpp" />
+    <ClCompile Include="src\mono\StaticValueReader.cpp" />
+    <ClCompile Include="src\shared\Formatting.cpp" />
+    <ClCompile Include="src\shared\StringUtils.cpp" />
+    <ClCompile Include="src\win32\Memory.cpp" />
+    <ClCompile Include="src\win32\Process.cpp" />
+    <ClCompile Include="src\win32\RemoteCall.cpp" />
+    <ClCompile Include="src\win32\RemoteMemory.cpp" />
     <ClCompile Include="UnityMonoBridge.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\BridgeJson.h" />
-    <ClInclude Include="include\BridgeModels.h" />
-    <ClInclude Include="include\RuntimeBridge.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\MonoAPI.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\Const.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoClass.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoConst.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoFunction.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoIL2CPPConst.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoImage.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoManager.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Mono\MonoUtils.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\FuntionTrigger.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemoryReader.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemoryRegionManager.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemorySearch.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\MemoryWriter.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\SearchStrategy\NormalSearchStrategy.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\SearchStrategy\PatternSearchStrategy.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\SearchStrategy\SearchStrategyFactory.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\SearchStrategy\SearchStrategyInterface.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Memory\SearchStrategy\SundaySearchStrategy.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Process.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessInfo.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessModule.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\System\Process\ProcessWindow.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Utils\Include\BS_thread_pool.hpp" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Utils\Utils.h" />
-    <ClInclude Include="..\..\reference\UnityMonoAPI\API\Utils\UtilsConst.h" />
+    <ClInclude Include="include\bridge\BridgeJson.h" />
+    <ClInclude Include="include\bridge\BridgeModels.h" />
+    <ClInclude Include="include\bridge\RuntimeBridge.h" />
+    <ClInclude Include="include\mono\AssemblyService.h" />
+    <ClInclude Include="include\mono\ClassService.h" />
+    <ClInclude Include="include\mono\FieldEnumerationService.h" />
+    <ClInclude Include="include\mono\MonoRuntime.h" />
+    <ClInclude Include="include\mono\RuntimeInspector.h" />
+    <ClInclude Include="include\mono\StaticValueReader.h" />
+    <ClInclude Include="include\shared\Formatting.h" />
+    <ClInclude Include="include\shared\StringUtils.h" />
+    <ClInclude Include="include\shared\Types.h" />
+    <ClInclude Include="include\win32\Memory.h" />
+    <ClInclude Include="include\win32\Process.h" />
+    <ClInclude Include="include\win32\RemoteCall.h" />
+    <ClInclude Include="include\win32\RemoteMemory.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

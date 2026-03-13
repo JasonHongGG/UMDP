@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "BridgeModels.h"
+#include "bridge/BridgeModels.h"
 
 namespace bridge {
 

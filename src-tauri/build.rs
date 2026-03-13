@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
-    publish_managed_metadata_reader();
+    build_managed_metadata_reader();
     build_unity_mono_bridge();
     tauri_build::build()
 }
 
-fn publish_managed_metadata_reader() {
+fn build_managed_metadata_reader() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let project_path = manifest_dir
         .parent()
@@ -81,7 +81,6 @@ fn build_unity_mono_bridge() {
     emit_rerun_for_path(&project_dir.join("UnityMonoBridge.cpp"));
     emit_rerun_for_dir(&project_dir.join("include"));
     emit_rerun_for_dir(&project_dir.join("src"));
-    emit_rerun_for_dir(&root_dir.join("reference").join("UnityMonoAPI").join("API"));
 
     if !cfg!(target_os = "windows") {
         println!("cargo:warning=Skipping UnityMonoBridge build because the current build host is not Windows.");

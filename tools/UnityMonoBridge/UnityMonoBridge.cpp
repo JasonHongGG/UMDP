@@ -1,6 +1,6 @@
 #include <iostream>
-#include "include/BridgeJson.h"
-#include "include/RuntimeBridge.h"
+#include "bridge/BridgeJson.h"
+#include "bridge/RuntimeBridge.h"
 
 int main(int argc, char* argv[])
 {

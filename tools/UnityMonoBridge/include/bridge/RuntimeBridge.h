@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BridgeModels.h"
+#include "bridge/BridgeModels.h"
 
 namespace bridge {
 
