@@ -1,13 +1,15 @@
 import { Target, X, Square, Minus, Cpu } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-
+import { TopNavigation } from './TopNavigation';
 
 interface TopBarProps {
     attachedProcess: string | null;
     onOpenSelector: () => void;
+    activePage: 'inspector' | 'studio';
+    onPageChange: (page: 'inspector' | 'studio') => void;
 }
 
-export function TopBar({ attachedProcess, onOpenSelector }: TopBarProps) {
+export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChange }: TopBarProps) {
     const window = getCurrentWindow();
 
     const handleMinimize = () => {
@@ -48,6 +50,9 @@ export function TopBar({ attachedProcess, onOpenSelector }: TopBarProps) {
                     </div>
                 </div>
             </div>
+
+            {/* Page Navigation Component */}
+            <TopNavigation activePage={activePage} onPageChange={onPageChange} />
 
             <div className="flex items-center gap-2 relative z-10">
                 <button

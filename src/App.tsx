@@ -13,6 +13,7 @@ import { ClassesColumn } from './components/features/ClassesColumn';
 import { InspectorTabBar } from './components/features/InspectorTabBar';
 import ClassInspectorApp from './components/features/ClassInspectorApp';
 import { ClassReferenceSidebar } from './components/features/ClassReferenceSidebar';
+import { StudioPage } from './components/features/StudioPage';
 
 import { useProcessAttachment } from './hooks/useProcessAttachment';
 import { useMetadata } from './hooks/useMetadata';
@@ -48,6 +49,8 @@ export default function App() {
   const [runtimeFieldsByKey, setRuntimeFieldsByKey] = useState<Record<string, FieldInfo[] | null>>({});
   const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
   const [loadingRuntimeByKey, setLoadingRuntimeByKey] = useState<Record<string, boolean>>({});
+
+  const [activePage, setActivePage] = useState<'inspector' | 'studio'>('inspector');
 
   const [imageSearch, setImageSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
@@ -230,8 +233,11 @@ export default function App() {
       <TopBar
         attachedProcess={attached ? `${attached.process_name} (${attached.process_id})` : null}
         onOpenSelector={openSelector}
+        activePage={activePage}
+        onPageChange={setActivePage}
       />
 
+      {activePage === 'inspector' ? (
       <div className="flex-1 flex overflow-hidden">
         <SidebarTools
           isGlobalSearchOpen={isGlobalSearchOpen}
@@ -342,6 +348,9 @@ export default function App() {
           )}
         </div>
       </div>
+      ) : (
+        <StudioPage />
+      )}
 
       <div className="h-7 border-t border-[#1c2838] bg-[#05080c] flex items-center px-4 justify-between text-[10px] text-slate-500 shrink-0 select-none z-20 relative">
         <div className="flex items-center gap-4 uppercase tracking-wider font-semibold">
