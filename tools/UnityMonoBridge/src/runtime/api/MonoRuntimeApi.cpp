@@ -65,14 +65,18 @@ std::vector<Address> MonoRuntimeApi::EnumerateAssemblies() const
         0x48, 0x89, 0x4C, 0xC2, 0x08, 0xFF, 0x02, 0xC3,
     };
 
-    win32::RemoteAllocation block(memory(), 4096, PAGE_EXECUTE_READWRITE);
-    const Address callback_address = block.address() + 0x100;
-    const Address data_address = block.address() + 0x200;
+    constexpr std::size_t callback_offset = 0x100;
+    constexpr std::size_t data_offset = 0x200;
+    constexpr std::size_t block_size = data_offset + sizeof(AssemblyCollector);
+
+    win32::RemoteAllocation block(memory(), block_size, PAGE_EXECUTE_READWRITE);
+    const Address callback_address = block.address() + callback_offset;
+    const Address data_address = block.address() + data_offset;
 
     AssemblyCollector collector{};
     memory().Write(callback_address, callback_code.data(), callback_code.size());
     memory().Write(data_address, collector);
-    memory().Protect(block.address(), 4096, PAGE_EXECUTE_READWRITE);
+    memory().Protect(block.address(), block_size, PAGE_EXECUTE_READWRITE);
     Invoke("mono_assembly_foreach", { callback_address, data_address });
     collector = memory().Read<AssemblyCollector>(data_address);
 
