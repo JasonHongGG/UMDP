@@ -34,9 +34,7 @@ RuntimeClassOverlayResponse RuntimeInspector::InspectClass(const BridgeRequest& 
         row.name = field.name;
         row.field_type = field.type_name;
         row.address = field.static_address.has_value() ? std::optional<std::string>(shared::HexAddress(*field.static_address)) : std::nullopt;
-        row.value = static_value_reader_.SupportsDirectStaticRead(field.type_name)
-            ? static_value_reader_.ReadStaticValue(field)
-            : std::nullopt;
+        row.value = static_value_reader_.ReadStaticValue(field);
         response.static_fields.push_back(std::move(row));
     }
 

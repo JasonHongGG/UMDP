@@ -13,11 +13,12 @@ namespace bridge::runtime {
 namespace {
 
 constexpr int kFieldAttributeStatic = 0x0010;
+constexpr int kFieldAttributeLiteral = 0x0040;
 constexpr int kFieldAttributeHasFieldRva = 0x0100;
 
 bool ShouldSkipField(const std::string& field_name)
 {
-    return field_name.empty() || field_name.front() == '<';
+    return field_name.empty();
 }
 
 } // namespace
@@ -137,7 +138,10 @@ std::vector<FieldRecord> MonoRuntimeApi::EnumerateFields(Address class_handle) c
         }
 
         const int flags = InvokeInt("mono_field_get_flags", { field_handle });
-        const bool is_static = (flags & (kFieldAttributeStatic | kFieldAttributeHasFieldRva)) != 0;
+        const bool is_literal = (flags & kFieldAttributeLiteral) != 0;
+        const bool has_field_rva = (flags & kFieldAttributeHasFieldRva) != 0;
+        const bool has_static_storage = (flags & kFieldAttributeStatic) != 0 && !is_literal && !has_field_rva;
+        const bool is_static = has_static_storage || is_literal || has_field_rva;
         const Address type_handle = Invoke("mono_field_get_type", { field_handle });
         const auto type_name = InvokeString("mono_type_get_name", { type_handle });
         const int offset = InvokeInt("mono_field_get_offset", { field_handle });
@@ -148,7 +152,7 @@ std::vector<FieldRecord> MonoRuntimeApi::EnumerateFields(Address class_handle) c
         record.type_name = type_name;
         record.is_static = is_static;
         record.offset = offset;
-        if (is_static) {
+        if (has_static_storage) {
             if (const auto address = ResolveStaticFieldAddress(class_handle, offset); address != 0) {
                 record.static_address = address;
             }

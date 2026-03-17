@@ -80,7 +80,7 @@ std::optional<std::string> StaticValueReader::ReadStaticValue(const FieldRecord&
         return std::nullopt;
     }
 
-    return shared::HexAddress(pointer_value);
+    return std::string("0x") + shared::HexAddress(pointer_value);
 }
 
 } // namespace bridge::runtime

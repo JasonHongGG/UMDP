@@ -97,10 +97,11 @@ export default function ClassInspectorApp({
         >
           <Table
             headers={['Type', 'Name', 'Address', 'Value']}
+            columnClassNames={['min-w-[10rem]', 'min-w-[12rem]', 'min-w-[10rem] whitespace-nowrap', 'min-w-[8rem]']}
             data={runtimeStaticFields.map((f, index) => [
               <TypeLink key={`stype-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
               <span key={`sname-${index}`} className="text-slate-200">{f.name}</span>,
-              <span key={`saddr-${index}`} className="text-cyan-400 font-mono text-[10px] break-all">{f.address ?? '?'}</span>,
+              <span key={`saddr-${index}`} className="text-cyan-400 font-mono text-[10px] whitespace-nowrap">{f.address ?? '?'}</span>,
               <span key={`sval-${index}`} className="text-yellow-400 font-mono text-[10px] break-all">{f.value ?? '?'}</span>
             ])}
           />
@@ -141,15 +142,15 @@ function Card({ title, children, action }: { title: string, children: React.Reac
   );
 }
 
-function Table({ headers, data }: { headers: string[], data: React.ReactNode[][] }) {
+function Table({ headers, data, columnClassNames = [] }: { headers: string[], data: React.ReactNode[][], columnClassNames?: string[] }) {
   if (data.length === 0) return <div className="text-xs text-slate-500 font-mono italic">No data</div>;
   return (
     <div className="overflow-x-auto w-full">
-      <table className="w-full text-left text-xs font-mono">
+      <table className="min-w-full w-max text-left text-xs font-mono">
         <thead>
           <tr className="border-b border-[#1c2838]">
             {headers.map((h, i) => (
-              <th key={i} className="pb-2 font-medium text-slate-500 uppercase tracking-widest whitespace-nowrap pr-6">{h}</th>
+              <th key={i} className={`pb-2 font-medium text-slate-500 uppercase tracking-widest whitespace-nowrap pr-6 ${columnClassNames[i] ?? ''}`}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -157,7 +158,7 @@ function Table({ headers, data }: { headers: string[], data: React.ReactNode[][]
           {data.map((row, i) => (
             <tr key={i} className="border-b border-white/5 hover:bg-white/5 transition-colors">
               {row.map((cell, j) => (
-                <td key={j} className="py-2 pr-6 align-top max-w-[200px] xl:max-w-none">{cell}</td>
+                <td key={j} className={`py-2 pr-6 align-top max-w-[200px] xl:max-w-none ${columnClassNames[j] ?? ''}`}>{cell}</td>
               ))}
             </tr>
           ))}

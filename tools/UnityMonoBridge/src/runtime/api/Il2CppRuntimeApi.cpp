@@ -12,6 +12,7 @@ namespace bridge::runtime {
 namespace {
 
 constexpr int kFieldAttributeStatic = 0x0010;
+constexpr int kFieldAttributeLiteral = 0x0040;
 constexpr int kFieldAttributeHasFieldRva = 0x0100;
 
 bool ShouldSkipField(const std::string& field_name)
@@ -116,7 +117,10 @@ std::vector<FieldRecord> Il2CppRuntimeApi::EnumerateFields(Address class_handle)
         }
 
         const int flags = InvokeInt("il2cpp_field_get_flags", { field_handle });
-        const bool is_static = (flags & (kFieldAttributeStatic | kFieldAttributeHasFieldRva)) != 0;
+        const bool is_literal = (flags & kFieldAttributeLiteral) != 0;
+        const bool has_field_rva = (flags & kFieldAttributeHasFieldRva) != 0;
+        const bool has_static_storage = (flags & kFieldAttributeStatic) != 0 && !is_literal && !has_field_rva;
+        const bool is_static = has_static_storage || is_literal || has_field_rva;
         const Address type_handle = Invoke("il2cpp_field_get_type", { field_handle });
         const auto type_name = InvokeString("il2cpp_type_get_name", { type_handle });
         const int offset = InvokeInt("il2cpp_field_get_offset", { field_handle });
