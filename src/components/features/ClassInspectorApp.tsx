@@ -78,18 +78,7 @@ export default function ClassInspectorApp({
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        <Card title="Instance Layout" action={isLoadingRuntimeFields && <LoaderCircle className="animate-spin text-cyan-400" size={14} />}>
-          <Table
-            headers={['Offset', 'Type', 'Name']}
-            data={runtimeFields.map((f, index) => [
-              <span key={`offset-${index}`} className="text-cyan-400">0x{f.offset?.toUpperCase() ?? '?'}</span>,
-              <TypeLink key={`type-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
-              <span key={`name-${index}`} className="text-slate-200">{f.name}</span>
-            ])}
-          />
-        </Card>
+      <div className="grid grid-cols-1 gap-6">
 
         <Card
           title="Static State"
@@ -107,7 +96,18 @@ export default function ClassInspectorApp({
           />
         </Card>
 
-        <div className="xl:col-span-2">
+        <Card title="Instance Layout" action={isLoadingRuntimeFields && <LoaderCircle className="animate-spin text-cyan-400" size={14} />}>
+          <Table
+            headers={['Offset', 'Type', 'Name']}
+            data={runtimeFields.map((f, index) => [
+              <span key={`offset-${index}`} className="text-cyan-400">0x{f.offset?.toUpperCase() ?? '?'}</span>,
+              <TypeLink key={`type-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
+              <span key={`name-${index}`} className="text-slate-200">{f.name}</span>
+            ])}
+          />
+        </Card>
+
+        <div>
           <Card title="Callable Methods">
             <Table
               headers={['Method', 'Signature']}
