@@ -72,6 +72,7 @@ std::vector<Address> MonoRuntimeApi::EnumerateAssemblies() const
     AssemblyCollector collector{};
     memory().Write(callback_address, callback_code.data(), callback_code.size());
     memory().Write(data_address, collector);
+    memory().Protect(block.address(), 4096, PAGE_EXECUTE_READWRITE);
     Invoke("mono_assembly_foreach", { callback_address, data_address });
     collector = memory().Read<AssemblyCollector>(data_address);
 

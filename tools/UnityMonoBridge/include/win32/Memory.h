@@ -13,6 +13,7 @@ public:
     explicit Memory(const Process& process);
 
     Address Allocate(std::size_t size, unsigned long protection) const;
+    unsigned long Protect(Address address, std::size_t size, unsigned long protection) const;
     void Free(Address address) const;
     void Write(Address address, const void* buffer, std::size_t size) const;
     void Read(Address address, void* buffer, std::size_t size) const;

@@ -4,11 +4,30 @@
 
 #include <algorithm>
 #include <array>
+#include <sstream>
 #include <stdexcept>
 
 #include "win32/Process.h"
 
 namespace bridge::win32 {
+
+namespace {
+
+std::string FormatWin32Message(const char* message, DWORD error_code, Address address = 0, std::size_t size = 0)
+{
+    std::ostringstream stream;
+    stream << message << " (win32=" << error_code;
+    if (address != 0) {
+        stream << ", address=0x" << std::hex << address << std::dec;
+    }
+    if (size != 0) {
+        stream << ", size=" << size;
+    }
+    stream << ")";
+    return stream.str();
+}
+
+} // namespace
 
 Memory::Memory(const Process& process)
     : process_(process)
@@ -20,10 +39,20 @@ Address Memory::Allocate(std::size_t size, unsigned long protection) const
     const auto address = reinterpret_cast<Address>(
         VirtualAllocEx(process_.handle(), nullptr, size, MEM_COMMIT | MEM_RESERVE, protection));
     if (address == 0) {
-        throw std::runtime_error("failed to allocate remote memory");
+        throw std::runtime_error(FormatWin32Message("failed to allocate remote memory", GetLastError(), 0, size));
     }
 
     return address;
+}
+
+unsigned long Memory::Protect(Address address, std::size_t size, unsigned long protection) const
+{
+    DWORD previous_protection = 0;
+    if (!VirtualProtectEx(process_.handle(), reinterpret_cast<void*>(address), size, protection, &previous_protection)) {
+        throw std::runtime_error(FormatWin32Message("failed to change remote memory protection", GetLastError(), address, size));
+    }
+
+    return previous_protection;
 }
 
 void Memory::Free(Address address) const
@@ -37,7 +66,7 @@ void Memory::Write(Address address, const void* buffer, std::size_t size) const
 {
     SIZE_T written = 0;
     if (!WriteProcessMemory(process_.handle(), reinterpret_cast<void*>(address), buffer, size, &written) || written != size) {
-        throw std::runtime_error("failed to write remote memory");
+        throw std::runtime_error(FormatWin32Message("failed to write remote memory", GetLastError(), address, size));
     }
 }
 
@@ -45,7 +74,7 @@ void Memory::Read(Address address, void* buffer, std::size_t size) const
 {
     SIZE_T read = 0;
     if (!ReadProcessMemory(process_.handle(), reinterpret_cast<const void*>(address), buffer, size, &read) || read != size) {
-        throw std::runtime_error("failed to read remote memory");
+        throw std::runtime_error(FormatWin32Message("failed to read remote memory", GetLastError(), address, size));
     }
 }
 
@@ -88,7 +117,7 @@ void Memory::Execute(Address entry_point) const
         0,
         nullptr);
     if (thread == nullptr) {
-        throw std::runtime_error("failed to create remote thread");
+        throw std::runtime_error(FormatWin32Message("failed to create remote thread", GetLastError(), entry_point));
     }
 
     WaitForSingleObject(thread, INFINITE);

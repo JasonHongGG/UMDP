@@ -61,6 +61,7 @@ Address RemoteCallInvoker::Invoke(Address function_address, const std::vector<Ad
     memory_.Write(return_address, zero);
     memory_.Write(thread_address, zero);
     memory_.Write(code_address, code.data(), code.size());
+    memory_.Protect(code_address, 4096, PAGE_EXECUTE_READWRITE);
     memory_.Execute(code_address);
     return memory_.Read<Address>(return_address);
 }
