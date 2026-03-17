@@ -3,7 +3,7 @@ use crate::state::AppState;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Deserialize)]
 struct HelperRuntimeStaticFields {
@@ -13,7 +13,7 @@ struct HelperRuntimeStaticFields {
 
 pub fn get_runtime_static_fields(
     app: &AppHandle,
-    state: State<'_, AppState>,
+    state: &AppState,
     image_id: &str,
     class_namespace: &str,
     class_name: &str,

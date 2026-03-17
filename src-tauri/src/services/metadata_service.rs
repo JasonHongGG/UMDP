@@ -2,9 +2,9 @@ use crate::models::{ClassInfo, ClassSummary, DumpAllResponse, ImageInfo};
 use crate::state::AppState;
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
-pub fn load_all_metadata(app: &AppHandle, state: State<'_, AppState>) -> Result<DumpAllResponse, String> {
+pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<DumpAllResponse, String> {
     let attached = state
         .attached_process
         .lock()
@@ -40,14 +40,14 @@ pub fn load_all_metadata(app: &AppHandle, state: State<'_, AppState>) -> Result<
     Ok(response)
 }
 
-pub fn get_image_catalog(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
+pub fn get_image_catalog(state: &AppState) -> Result<Vec<ImageInfo>, String> {
     if let Some(metadata) = state.metadata.lock().as_ref() {
         return Ok(metadata.images.clone());
     }
     Err("Metadata not loaded. Please attach to a process first.".to_string())
 }
 
-pub fn get_image_classes(state: State<'_, AppState>, image_id: &str) -> Result<Vec<ClassSummary>, String> {
+pub fn get_image_classes(state: &AppState, image_id: &str) -> Result<Vec<ClassSummary>, String> {
     if let Some(metadata) = state.metadata.lock().as_ref() {
         if let Some(classes) = metadata.classes_by_image.get(image_id) {
             return Ok(classes.clone());
@@ -56,7 +56,7 @@ pub fn get_image_classes(state: State<'_, AppState>, image_id: &str) -> Result<V
     Ok(vec![])
 }
 
-pub fn get_class_details(state: State<'_, AppState>, image_id: &str, class_id: &str) -> Result<ClassInfo, String> {
+pub fn get_class_details(state: &AppState, image_id: &str, class_id: &str) -> Result<ClassInfo, String> {
     let cache_key = format!("{image_id}::{class_id}");
     if let Some(metadata) = state.metadata.lock().as_ref() {
         if let Some(class_info) = metadata.class_details.get(&cache_key) {

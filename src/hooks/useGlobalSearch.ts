@@ -31,7 +31,7 @@ export function useGlobalSearch(
       let results: GlobalSearchResult[] = [];
 
       for (const [key, classInfo] of Object.entries(classDetailsByKey)) {
-        if (results.length > 50000) break;
+        if (results.length > 100000) break;
         const [imageId, classId] = key.split('::');
         const img = images.find(i => i.id === imageId);
         if (!img) continue;
