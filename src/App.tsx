@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { ClassInfo, FieldInfo, RuntimeClassOverlayResponse, StaticFieldInfo } from './types';
 import { ScanSearch, Binary, Database } from 'lucide-react';
+import { createPendingClassNodeRequest } from './core/studio/classCatalog';
+import { ClassBinding, PendingClassNodeRequest } from './core/studio/types';
+import { StudioProvider } from './core/studio/StudioContext';
 
 import { MainLayout } from './components/layout/MainLayout';
 import { TopBar } from './components/features/TopBar';
@@ -51,6 +54,7 @@ export default function App() {
   const [loadingRuntimeByKey, setLoadingRuntimeByKey] = useState<Record<string, boolean>>({});
 
   const [activePage, setActivePage] = useState<'inspector' | 'studio'>('inspector');
+  const [pendingClassNode, setPendingClassNode] = useState<PendingClassNodeRequest | null>(null);
 
   const [imageSearch, setImageSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
@@ -110,6 +114,37 @@ export default function App() {
     classRef.setTargetFromClass(fullName);
     setIsGlobalSearchOpen(false);
   };
+
+  const handleAddClassToStudio = useCallback((classInfo: ClassInfo, source: { imageId: string; classId: string; imageName: string }) => {
+    setPendingClassNode(createPendingClassNodeRequest({
+      imageId: source.imageId,
+      classId: source.classId,
+      fullName: classInfo.full_name,
+      name: classInfo.name,
+      namespace: classInfo.namespace,
+      imageName: source.imageName,
+    }, classInfo));
+
+    classRef.setIsOpen(false);
+    setIsGlobalSearchOpen(false);
+    setActivePage('studio');
+  }, [classRef, setIsGlobalSearchOpen]);
+
+  const handleOpenInspectorForBinding = useCallback((binding: ClassBinding) => {
+    setSelectedImageId(binding.imageId);
+    openTabForClass({
+      imageId: binding.imageId,
+      classId: binding.classId,
+      name: binding.name,
+      namespace: binding.namespace,
+      imageName: binding.imageName,
+    });
+    setPendingScrollImageId(binding.imageId);
+    setPendingScrollClassId(binding.classId);
+    classRef.setIsOpen(false);
+    setIsGlobalSearchOpen(false);
+    setActivePage('inspector');
+  }, [classRef, openTabForClass, setIsGlobalSearchOpen, setSelectedImageId]);
 
   const openSelector = async () => {
     const selector = await WebviewWindow.getByLabel('process-selector');
@@ -229,6 +264,7 @@ export default function App() {
   }, [activeTabIndex, tabs.length]);
 
   return (
+    <StudioProvider>
     <MainLayout>
       <TopBar
         attachedProcess={attached ? `${attached.process_name} (${attached.process_id})` : null}
@@ -344,12 +380,20 @@ export default function App() {
               runtimeFieldError={activeRuntimeFieldError}
               activeTabId={`${activeTab?.imageId}::${activeTab?.classId}`}
               onSetReferenceTarget={handleSetReferenceTarget}
+              onAddToStudio={handleAddClassToStudio}
             />
           )}
         </div>
       </div>
       ) : (
-        <StudioPage />
+        <StudioPage
+          pendingClassNode={pendingClassNode}
+          images={images}
+          classesByImage={classesByImage}
+          classDetailsByKey={classDetailsByKey}
+          onOpenInspectorForBinding={handleOpenInspectorForBinding}
+          onPendingClassNodeHandled={() => setPendingClassNode(null)}
+        />
       )}
 
       <div className="h-7 border-t border-[#1c2838] bg-[#05080c] flex items-center px-4 justify-between text-[10px] text-slate-500 shrink-0 select-none z-20 relative">
@@ -367,5 +411,6 @@ export default function App() {
         </div>
       </div>
     </MainLayout>
+    </StudioProvider>
   );
 }

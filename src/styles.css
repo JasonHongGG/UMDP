@@ -69,3 +69,118 @@ body {
     scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
   }
 }
+
+.studio-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.studio-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.studio-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.9);
+  border-radius: 999px;
+}
+
+.studio-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(34, 211, 238, 0.45);
+}
+
+.studio-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(71, 85, 105, 0.9) transparent;
+}
+
+@keyframes studio-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes studio-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes studio-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes studio-edge-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+.studio-modal-pop {
+  animation: studio-fade-in 180ms ease-out, studio-pop-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.studio-modal-slide {
+  animation: studio-fade-in 240ms ease-out, studio-slide-up 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.studio-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background: rgba(15, 23, 42, 0.82);
+  color: rgb(203 213 225);
+  padding: 0.55rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.studio-toolbar-button:hover:not(:disabled) {
+  border-color: rgba(34, 211, 238, 0.35);
+  background: rgba(15, 23, 42, 0.96);
+  color: rgb(240 249 255);
+}
+
+.studio-toolbar-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.studio-toolbar-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.studio-toolbar-button--accent {
+  border-color: rgba(34, 211, 238, 0.35);
+  background: rgba(8, 145, 178, 0.16);
+  color: rgb(165 243 252);
+}
+
+.studio-toolbar-button--accent:hover:not(:disabled) {
+  background: rgba(8, 145, 178, 0.22);
+  border-color: rgba(34, 211, 238, 0.55);
+}

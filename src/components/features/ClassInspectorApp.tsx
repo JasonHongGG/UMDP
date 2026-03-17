@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hexagon, Layers3, ChevronRight, LoaderCircle, Waypoints } from 'lucide-react';
+import { Hexagon, Layers3, ChevronRight, LoaderCircle, Waypoints, Plus } from 'lucide-react';
 import type { ClassInfo, FieldInfo, StaticFieldInfo } from '../../types';
 
 interface ClassInspectorAppProps {
@@ -12,6 +12,7 @@ interface ClassInspectorAppProps {
   runtimeFieldError: string | null;
   activeTabId: string;
   onSetReferenceTarget?: (fullName: string) => void;
+  onAddToStudio?: (classInfo: ClassInfo, source: { imageId: string; classId: string; imageName: string }) => void;
 }
 
 export default function ClassInspectorApp({
@@ -24,6 +25,7 @@ export default function ClassInspectorApp({
   runtimeFieldError,
   activeTabId,
   onSetReferenceTarget,
+  onAddToStudio,
 }: ClassInspectorAppProps) {
   const [activeTabImageId, activeTabClassId] = activeTabId.split('::');
   const activeTabImageName = classLookupMap.get(classInfo.full_name)?.imageName || 'Unknown Assembly';
@@ -43,6 +45,19 @@ export default function ClassInspectorApp({
               title="Find references to this class"
             >
               <Waypoints size={16} />
+            </button>
+          )}
+          {onAddToStudio && (
+            <button
+              onClick={() => onAddToStudio(classInfo, {
+                imageId: activeTabImageId,
+                classId: activeTabClassId,
+                imageName: activeTabImageName,
+              })}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all shrink-0"
+              title="Add this class as a Studio node"
+            >
+              <Plus size={16} />
             </button>
           )}
         </div>
