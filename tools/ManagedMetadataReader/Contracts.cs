@@ -108,4 +108,7 @@ internal sealed class MethodContract
 
     [JsonPropertyName("signature")]
     public string Signature { get; init; } = string.Empty;
+
+    [JsonPropertyName("tags")]
+    public List<string> Tags { get; init; } = [];
 }

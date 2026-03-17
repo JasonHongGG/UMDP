@@ -249,8 +249,10 @@ internal sealed class ManagedMetadataCatalog : IDisposable
                 .Select(CreateInstanceField)
                 .ToList(),
             Methods = type.Methods
-                .Where(method => !method.IsGetter && !method.IsSetter && !method.IsAddOn && !method.IsRemoveOn)
                 .Select(CreateMethod)
+                .OrderBy(GetPrimaryMethodTagRank)
+                .ThenBy(method => method.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(method => method.Signature, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
         };
     }
@@ -317,8 +319,106 @@ internal sealed class ManagedMetadataCatalog : IDisposable
         {
             Name = method.Name,
             Signature = BuildSignature(method),
+            Tags = BuildMethodTags(method),
         };
     }
+
+    private static List<string> BuildMethodTags(MethodDefinition method)
+    {
+        var tags = new List<string>();
+
+        if (method.IsConstructor)
+        {
+            tags.Add("CTOR");
+        }
+
+        if (method.IsStatic)
+        {
+            tags.Add("STATIC");
+        }
+
+        if (method.IsGetter)
+        {
+            tags.Add("GETTER");
+        }
+
+        if (method.IsSetter)
+        {
+            tags.Add("SETTER");
+        }
+
+        if (method.IsAddOn)
+        {
+            tags.Add("EVENT_ADD");
+        }
+
+        if (method.IsRemoveOn)
+        {
+            tags.Add("EVENT_REMOVE");
+        }
+
+        if (method.IsAbstract)
+        {
+            tags.Add("ABSTRACT");
+        }
+
+        if (method.IsVirtual)
+        {
+            tags.Add(method.IsReuseSlot ? "VIRTUAL" : "OVERRIDE");
+        }
+
+        if (method.HasGenericParameters)
+        {
+            tags.Add("GENERIC");
+        }
+
+        if (method.IsPInvokeImpl || method.IsInternalCall)
+        {
+            tags.Add("EXTERN");
+        }
+
+        if (method.Name.StartsWith("op_", StringComparison.Ordinal))
+        {
+            tags.Add("OPERATOR");
+        }
+
+        if (tags.Count == 0)
+        {
+            tags.Add("INSTANCE");
+        }
+
+        return tags;
+    }
+
+    private static int GetPrimaryMethodTagRank(MethodContract method)
+    {
+        foreach (var tag in method.Tags)
+        {
+            if (METHOD_TAG_SORT_ORDER.TryGetValue(tag, out var rank))
+            {
+                return rank;
+            }
+        }
+
+        return int.MaxValue;
+    }
+
+    private static readonly Dictionary<string, int> METHOD_TAG_SORT_ORDER = new(StringComparer.Ordinal)
+    {
+        ["CTOR"] = 0,
+        ["STATIC"] = 1,
+        ["GETTER"] = 2,
+        ["SETTER"] = 3,
+        ["EVENT_ADD"] = 4,
+        ["EVENT_REMOVE"] = 5,
+        ["OPERATOR"] = 6,
+        ["ABSTRACT"] = 7,
+        ["OVERRIDE"] = 8,
+        ["VIRTUAL"] = 9,
+        ["EXTERN"] = 10,
+        ["GENERIC"] = 11,
+        ["INSTANCE"] = 12,
+    };
 
     private static string BuildSignature(MethodDefinition method)
     {

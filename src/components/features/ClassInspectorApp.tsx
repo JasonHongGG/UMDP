@@ -112,7 +112,12 @@ export default function ClassInspectorApp({
             <Table
               headers={['Method', 'Signature']}
               data={classInfo.methods.map((m, index) => [
-                <span key={`mname-${index}`} className="text-blue-300 font-semibold">{m.name}</span>,
+                <div key={`mname-${index}`} className="flex flex-wrap items-center gap-2">
+                  {(m.tags ?? []).map((tag) => (
+                    <MethodTag key={`${m.name}-${tag}`} tag={tag} />
+                  ))}
+                  <span className="text-blue-300 font-semibold">{m.name}</span>
+                </div>,
                 <span key={`msig-${index}`} className="text-slate-400 text-[10px] break-all whitespace-pre-wrap leading-tight">
                   {renderSignatureWithLinks(m.signature, classLookupMap, navigateToType)}
                 </span>
@@ -184,6 +189,32 @@ function TypeLink({ typeName, onNavigate, lookupMap, className = "" }: { typeNam
     </button>
   );
 }
+
+function MethodTag({ tag }: { tag: string }) {
+  const tone = METHOD_TAG_STYLES[tag] ?? 'border-slate-600/70 bg-slate-900/80 text-slate-300';
+
+  return (
+    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold tracking-widest ${tone}`}>
+      {tag}
+    </span>
+  );
+}
+
+const METHOD_TAG_STYLES: Record<string, string> = {
+  CTOR: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300',
+  STATIC: 'border-sky-500/50 bg-sky-500/10 text-sky-300',
+  GETTER: 'border-lime-500/50 bg-lime-500/10 text-lime-300',
+  SETTER: 'border-teal-500/50 bg-teal-500/10 text-teal-300',
+  EVENT_ADD: 'border-pink-500/50 bg-pink-500/10 text-pink-300',
+  EVENT_REMOVE: 'border-rose-500/50 bg-rose-500/10 text-rose-300',
+  VIRTUAL: 'border-violet-500/50 bg-violet-500/10 text-violet-300',
+  OVERRIDE: 'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-300',
+  ABSTRACT: 'border-amber-500/50 bg-amber-500/10 text-amber-300',
+  EXTERN: 'border-rose-500/50 bg-rose-500/10 text-rose-300',
+  GENERIC: 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300',
+  OPERATOR: 'border-orange-500/50 bg-orange-500/10 text-orange-300',
+  INSTANCE: 'border-slate-500/50 bg-slate-500/10 text-slate-300',
+};
 
 function renderSignatureWithLinks(
   signature: string,

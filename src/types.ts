@@ -39,6 +39,7 @@ export interface FieldInfo {
 export interface MethodInfo {
   name: string;
   signature: string;
+  tags?: string[];
 }
 
 export interface ClassInfo {

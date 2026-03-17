@@ -31,6 +31,8 @@ pub struct FieldInfo {
 pub struct MethodInfo {
     pub name: String,
     pub signature: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
