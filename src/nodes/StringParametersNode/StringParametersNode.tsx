@@ -146,11 +146,6 @@ const ParametersNodeEdit: React.FC<INodeEditProps<ParametersNodeData>> = ({ data
           </div>
         ))}
       </div>
-
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Params Output Preview</div>
-        <pre className="text-[11px] leading-relaxed text-amber-100 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(payloadPreview, null, 2)}</pre>
-      </div>
     </div>
   );
 };
@@ -170,6 +165,9 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
     outputs: {
       'params-out': createParameterDefinitionsEnvelope(buildParameterPayload(node.data.parameters)),
     },
+  }),
+  getExecutionPreview: (data: ParametersNodeData) => ({
+    'params-out': createParameterDefinitionsEnvelope(buildParameterPayload(data.parameters)),
   }),
   CanvasComponent: ParametersNodeCanvas,
   EditComponent: ParametersNodeEdit,

@@ -173,6 +173,7 @@ export interface INodeDefinition<T extends BaseNodeData = BaseNodeData> {
   createInitialData?: () => T;
   validateExecution?: (context: NodeValidationContext<T>) => NodeValidationResult;
   execute?: (context: NodeExecutionContext<T>) => NodeExecutionResult;
+  getExecutionPreview?: (data: T) => NodeExecutionOutputMap | undefined;
 
   CanvasComponent: React.ComponentType<INodeComponentProps<T>>;
   EditComponent?: React.ComponentType<INodeEditProps<T>>;

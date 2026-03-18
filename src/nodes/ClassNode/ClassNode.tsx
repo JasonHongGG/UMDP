@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Code, AlertCircle, Layers3, Search, User, Check } from 'lucide-react';
+import { AlertCircle, Box, Check, Code, Layers3, Search, User, CheckCheck, XSquare } from 'lucide-react';
 import {
   INodeComponentProps,
   INodeEditProps,
@@ -202,26 +202,6 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
     }
   }, [data.binding]);
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    if (!isDragOverInput) setIsDragOverInput(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOverInput(false);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOverInput(false);
-    const address = e.dataTransfer.getData('text/plain');
-    if (address) {
-      updateData({ instanceAddress: address });
-    }
-  };
-
   const handleToggle = (type: 'member' | 'static' | 'function', itemId: string) => {
     const listKey = type === 'member' ? 'members' : type === 'static' ? 'statics' : 'functions';
     updateData({
@@ -261,6 +241,7 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
 
   const infoPreview = useMemo(() => createInfoPreview(data), [data]);
   const hasBinding = Boolean(data.binding);
+
   const hasSelectableInfo =
     data.availableInfo.members.length > 0 ||
     data.availableInfo.statics.length > 0 ||
@@ -290,20 +271,23 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
             <span className="text-slate-500 font-medium ml-1 bg-slate-800/80 px-2 py-0.5 rounded-full">{selectedIds.length}/{descriptors.length}</span>
           </div>
           {descriptors.length > 0 ? (
-            <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-slate-400">
               <button
                 type="button"
-                className={`${tone.accentText} opacity-70 hover:opacity-100 transition-opacity`}
+                className={`p-1.5 rounded-md hover:bg-slate-800 ${tone.accentText} transition-all`}
                 onClick={() => updateSelectionBucket(bucket, descriptors.map((item) => item.id))}
+                title={`Select all ${tone.label}`}
               >
-                Select all
+                <CheckCheck size={14} />
               </button>
+              <div className="w-px h-3 bg-slate-700 mx-0.5"></div>
               <button
                 type="button"
-                className="text-slate-500 hover:text-slate-300 transition-opacity"
+                className="p-1.5 rounded-md hover:bg-red-500/10 hover:text-red-400 transition-all"
                 onClick={() => updateSelectionBucket(bucket, [])}
+                title={`Clear all ${tone.label}`}
               >
-                Clear
+                <XSquare size={14} />
               </button>
             </div>
           ) : null}
@@ -316,17 +300,32 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2">
-            {descriptors.map((descriptor) => {
+            {descriptors.map((descriptor, index) => {
               const isSelected = isDescriptorSelected(selectedIds, descriptor);
+              const staticAddress = bucket === 'statics'
+                ? descriptor.detail?.split(' @ ')[1]?.trim() ?? ''
+                : '';
+              const canDragStaticAddress = bucket === 'statics' && staticAddress.length > 0;
               return (
                 <div
-                  key={descriptor.id}
+                  key={`${descriptor.id}-${index}`}
+                  draggable={canDragStaticAddress}
+                  style={canDragStaticAddress ? { WebkitUserDrag: 'element', WebkitAppRegion: 'no-drag' } as any : { WebkitAppRegion: 'no-drag' } as any}
+                  onDragStart={(e) => {
+                    if (canDragStaticAddress) {
+                      e.stopPropagation();
+                      e.dataTransfer.setData('text/plain', staticAddress);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }
+                  }}
                   onClick={() => handleToggle(bucket === 'members' ? 'member' : bucket === 'statics' ? 'static' : 'function', descriptor.id)}
                   className={`group relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer overflow-hidden
+                    ${canDragStaticAddress ? 'cursor-grab active:cursor-grabbing' : ''}
                     ${isSelected 
                       ? `${tone.accentBg} ${tone.accentBorder} ${tone.shadow} scale-[1.01]` 
                       : 'bg-slate-800/30 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 opacity-80 hover:opacity-100'}
                   `}
+                  title={canDragStaticAddress ? `Drag address ${staticAddress}` : undefined}
                 >
                   <div className={`flex-1 min-w-0 flex flex-col justify-center`}>
                     <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>{descriptor.label}</span>
@@ -438,52 +437,103 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
         <div 
           className={`relative rounded-xl border p-5 transition-all duration-300
                      ${isDragOverInput ? 'bg-cyan-500/10 border-cyan-400 border-dashed shadow-[0_0_25px_rgba(6,182,212,0.25)] scale-[1.01]' : 'bg-slate-900/80 border-slate-700/70 hover:border-slate-600'}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          onDragOver={(e) => { e.preventDefault(); setIsDragOverInput(true); }}
+          onDragLeave={() => setIsDragOverInput(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragOverInput(false);
+            const dataText = e.dataTransfer.getData('text/plain');
+            if (dataText) {
+              updateData({ instanceAddress: dataText });
+            }
+          }}
         >
           <label className="block text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider flex items-center justify-between">
             <span>Instance Address</span>
             {isDragOverInput && <span className="text-cyan-300 text-[10px] bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-1 rounded-full animate-pulse shadow-[0_0_10px_rgba(6,182,212,0.5)]">Drop item here to assign</span>}
           </label>
-          <div className="relative">
+          <div 
+            className={`relative group ${isDragOverInput ? 'scale-[1.02]' : ''} transition-transform duration-200 block`}
+            onDragEnter={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+                e.dataTransfer.dropEffect = 'copy';
+                setIsDragOverInput(true); 
+            }}
+            onDragOver={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+                e.dataTransfer.dropEffect = 'copy';
+                if (!isDragOverInput) setIsDragOverInput(true); 
+            }}
+            onDragLeave={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+                setIsDragOverInput(false); 
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOverInput(false);
+              const dataText = e.dataTransfer.getData('text/plain');
+              if (dataText) {
+                updateData({ instanceAddress: dataText });
+              }
+            }}
+          >
+            <div className={`absolute inset-0 bg-cyan-500/20 blur-xl transition-opacity duration-300 rounded-lg pointer-events-none ${isDragOverInput ? 'opacity-100' : 'opacity-0'}`} />
+            
             <input
               type="text"
               placeholder="e.g. 0x12345678 or drag instance ref here..."
               value={data.instanceAddress || ''}
               onChange={(e) => updateData({ instanceAddress: e.target.value })}
-              className={`w-full bg-slate-950 border rounded-lg px-4 py-2.5 text-sm text-slate-200 outline-none transition-all font-mono
-                         ${isDragOverInput ? 'border-cyan-400 ring-2 ring-cyan-500/20 bg-cyan-950/20' : 'border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20'}`}
+              className={`relative z-10 w-full bg-slate-950 border rounded-lg px-4 py-2.5 text-sm text-slate-200 outline-none transition-all font-mono pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto
+                         ${isDragOverInput ? 'border-cyan-400 ring-2 ring-cyan-500/20 bg-cyan-950/20 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20'}`}
             />
           </div>
         </div>
-      </div>
+        
+        <div className="font-medium text-sm text-slate-200 mt-8 mb-3 px-1 border-b border-slate-700/50 pb-2 flex items-center justify-between gap-3">
+          <span>Info Payload Selection</span>
+          <span className="text-xs text-slate-500">{selectedCount}/{availableCount} selected</span>
+        </div>
+        
+        <div className="space-y-4">
+            {!hasBinding ? (
+                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                      Bind a class first, then select which statics, members, and methods should be wrapped under the fixed <span className="text-cyan-400 font-mono">info</span> output payload.
+                </div>
+            ) : !hasSelectableInfo ? (
+                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                    This class has no exportable metadata categories available yet.
+                </div>
+            ) : null}
 
+            {renderSelectionSection('statics', data.availableInfo.statics)}
+            {renderSelectionSection('members', data.availableInfo.members)}
+            {renderSelectionSection('functions', data.availableInfo.functions)}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Output Edit Component ---
+const ClassNodeOutputEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data }) => {
+  const infoPreview = useMemo(() => createInfoPreview(data), [data]);
+
+  return (
+    <div className="flex flex-col h-full text-slate-300">
       <div className="font-medium text-sm text-slate-200 mb-3 px-1 border-b border-slate-700/50 pb-2 flex items-center justify-between gap-3">
-        <span>Info Payload Selection</span>
-        <span className="text-xs text-slate-500">{selectedCount}/{availableCount} selected</span>
+        <span>Output Payload Preview</span>
       </div>
       
       <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-          {!hasBinding ? (
-              <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                    Bind a class first, then select which statics, members, and methods should be wrapped under the fixed <span className="text-cyan-400 font-mono">info</span> output payload.
-              </div>
-          ) : !hasSelectableInfo ? (
-              <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                  This class has no exportable metadata categories available yet.
-              </div>
-          ) : null}
-
-          {renderSelectionSection('statics', data.availableInfo.statics)}
-                {renderSelectionSection('members', data.availableInfo.members)}
-          {renderSelectionSection('functions', data.availableInfo.functions)}
-
-          <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Info Output Preview</div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 shadow-inner">
               <pre className="text-[11px] leading-relaxed text-cyan-100 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(infoPreview, null, 2)}</pre>
           </div>
-
       </div>
     </div>
   );
@@ -516,6 +566,11 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       outputs: {
         'info-out': createClassInfoEnvelope(data.binding, data.availableInfo, data.infoSelection),
       },
+    };
+  },
+  getExecutionPreview: (data) => {
+    return {
+      'info-out': createClassInfoEnvelope(data.binding, data.availableInfo, data.infoSelection),
     };
   },
   CanvasComponent: ClassNodeCanvas,
