@@ -1,30 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyWorkflowDocument } from './persistence';
+import type { GraphDocument } from '../../domain/studio/contracts';
+import { createEmptyGraphDocument } from './persistence';
 import { deriveStudioGraphCounters, isStudioGraphDocumentDirty, MAX_STUDIO_GRAPH_HISTORY_ENTRIES, pushStudioGraphHistoryEntry } from './graphStore';
 
 describe('graphStore helpers', () => {
   it('derives the next node and edge counters from an existing document', () => {
-    const document = createEmptyWorkflowDocument();
+    const document = createEmptyGraphDocument();
     document.nodes.push(
       {
         id: 'trigger-3',
-        type: 'trigger',
+        nodeType: 'trigger',
+        typeVersion: 1,
         position: { x: 0, y: 0 },
-        data: { inputs: [], outputs: [] },
+        parameters: {},
+        bindings: {},
+        documentState: {},
       },
       {
         id: 'class-ref-11',
-        type: 'class-ref',
+        nodeType: 'class-ref',
+        typeVersion: 1,
         position: { x: 100, y: 120 },
-        data: { inputs: [], outputs: [] },
+        parameters: {},
+        bindings: {},
+        documentState: {},
       },
     );
-    document.edges.push({
+    document.controlConnections.push({
       id: 'edge-9',
-      sourceNodeId: 'trigger-3',
-      sourcePortId: 'flow-out',
-      targetNodeId: 'class-ref-11',
-      targetPortId: 'flow-in',
+      source: { nodeId: 'trigger-3', connectionKey: 'flow-out' },
+      target: { nodeId: 'class-ref-11', connectionKey: 'flow-in' },
     });
 
     expect(deriveStudioGraphCounters(document)).toEqual({
@@ -34,30 +39,37 @@ describe('graphStore helpers', () => {
   });
 
   it('computes dirty state against the empty graph when no save snapshot exists', () => {
-    const document = createEmptyWorkflowDocument();
+    const document = createEmptyGraphDocument();
     expect(isStudioGraphDocumentDirty(document, null)).toBe(false);
 
     document.nodes.push({
       id: 'trigger-1',
-      type: 'trigger',
+      nodeType: 'trigger',
+      typeVersion: 1,
       position: { x: 0, y: 0 },
-      data: { inputs: [], outputs: [] },
+      parameters: {},
+      bindings: {},
+      documentState: {},
     });
 
     expect(isStudioGraphDocumentDirty(document, null)).toBe(true);
   });
 
   it('caps graph history entries and clones stored snapshots', () => {
-    const baseHistory = Array.from({ length: MAX_STUDIO_GRAPH_HISTORY_ENTRIES }, (_, index) => ({
-      version: 1,
-      nodes: [{ id: `node-${index}`, type: 'test', position: { x: index, y: index }, data: { inputs: [], outputs: [] } }],
-      edges: [],
+    const baseHistory: GraphDocument[] = Array.from({ length: MAX_STUDIO_GRAPH_HISTORY_ENTRIES }, (_, index) => ({
+      schemaVersion: 1,
+      id: 'history-base',
+      nodes: [{ id: `node-${index}`, nodeType: 'test', typeVersion: 1, position: { x: index, y: index }, parameters: {}, bindings: {}, documentState: {} }],
+      controlConnections: [],
+      dataConnections: [],
     }));
 
-    const nextDocument = {
-      version: 1,
-      nodes: [{ id: 'node-next', type: 'test', position: { x: 99, y: 101 }, data: { inputs: [], outputs: [] } }],
-      edges: [],
+    const nextDocument: GraphDocument = {
+      schemaVersion: 1,
+      id: 'history-next',
+      nodes: [{ id: 'node-next', nodeType: 'test', typeVersion: 1, position: { x: 99, y: 101 }, parameters: {}, bindings: {}, documentState: {} }],
+      controlConnections: [],
+      dataConnections: [],
     };
 
     const nextHistory = pushStudioGraphHistoryEntry(baseHistory, nextDocument);

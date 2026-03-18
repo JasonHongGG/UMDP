@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
 import { useStudioGraph, useStudioUi, useStudioRuntime } from '../../../../core/studio/StudioContext';
 import { BaseNodeData, IPort, StudioNode } from '../../../../core/studio/types';
-import { globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
+import { getNodePortsByDirection, getStudioNodePort, globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
+import { createDragPayload, createInputExpressionSource, writeExpressionDragData } from '../../../../core/studio/expressionUtils';
+import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -22,13 +24,18 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    // Builds expression: {{$node["NodeName"].json["port-id"].path.to.property}}
-    const nodeRefName = sourceNode.data.nodeName || sourceNode.id;
-    const formattedPath = path ? `.${path}` : '';
-    const dropExpression = `{{$node["${nodeRefName}"].json["${sourcePortId}"]${formattedPath}}}`;
-    
-    e.dataTransfer.setData('text/plain', dropExpression);
-    e.dataTransfer.effectAllowed = 'copy';
+    const pathSegments = path ? path.split('.') : [];
+    const displayText = pathSegments.length > 0
+      ? `${sourceNode.data.nodeName || sourceNode.id}.${sourcePortId}.${pathSegments.join('.')}`
+      : `${sourceNode.data.nodeName || sourceNode.id}.${sourcePortId}`;
+
+    writeExpressionDragData(
+      e.dataTransfer,
+      createDragPayload(
+        createInputExpressionSource(sourceNode.id, sourcePortId, pathSegments, displayText),
+        'input-panel',
+      ),
+    );
   };
 
   const getPrimitiveIcon = (val: any) => {
@@ -101,7 +108,7 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 };
 
 export function EditNodeModal() {
-  const { nodes, edges, updateNodeData, updateNodePorts } = useStudioGraph();
+  const { nodes, edges, updateNodeData } = useStudioGraph();
   const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
   const { nodeSnapshots } = useStudioRuntime();
   const [isEditingName, setIsEditingName] = useState(false);
@@ -115,11 +122,9 @@ export function EditNodeModal() {
       return '';
     }
 
-    const classBindingName = typeof node.data.binding === 'object' && node.data.binding && 'name' in node.data.binding
-      ? String((node.data.binding as { name?: string }).name ?? '')
-      : '';
-
-    return (node.data.nodeName && node.data.nodeName.trim()) || classBindingName || nodeDef.displayName;
+    return (node.data.nodeName && node.data.nodeName.trim())
+      || nodeDef.resolveDisplayName?.(node.data)
+      || nodeDef.manifest.displayName;
   }, [node, nodeDef]);
 
   // Derived state for the left column
@@ -129,7 +134,7 @@ export function EditNodeModal() {
       .filter(e => e.targetNodeId === node.id)
       .map(e => {
         const sourceNode = nodes.find(n => n.id === e.sourceNodeId);
-        const sourcePort = sourceNode?.data.outputs.find(p => p.id === e.sourcePortId);
+        const sourcePort = getStudioNodePort(sourceNode, 'output', e.sourcePortId);
         return { node: sourceNode, port: sourcePort };
       })
       .filter(d => d.node && d.port);
@@ -147,6 +152,8 @@ export function EditNodeModal() {
   }, [node, nodeDef]);
 
   const EditComponent = nodeDef?.EditComponent;
+  const EditFooterComponent = nodeDef?.EditFooterComponent;
+  const hasParameterSchema = (nodeDef?.manifest.parameters.length ?? 0) > 0;
 
   const handleUpdateData = (newData: Partial<BaseNodeData>) => {
     if (!node) {
@@ -156,24 +163,13 @@ export function EditNodeModal() {
     updateNodeData(node.id, newData);
   };
 
-  const handleUpdatePorts = (inputs: IPort[], outputs: IPort[]) => {
-    if (!node) {
-      return;
-    }
-
-    updateNodePorts(node.id, inputs, outputs);
-  };
-
   const commitNodeName = () => {
     if (!node || !nodeDef) {
       return;
     }
 
     const trimmedName = draftNodeName.trim();
-    const classBindingName = typeof node.data.binding === 'object' && node.data.binding && 'name' in node.data.binding
-      ? String((node.data.binding as { name?: string }).name ?? '')
-      : '';
-    const fallbackName = classBindingName || nodeDef.displayName;
+    const fallbackName = nodeDef.resolveDisplayName?.(node.data) || nodeDef.manifest.displayName;
 
     updateNodeData(node.id, {
       nodeName: trimmedName && trimmedName !== fallbackName ? trimmedName : undefined,
@@ -192,6 +188,8 @@ export function EditNodeModal() {
       nameInputRef.current?.select();
     }
   }, [isEditingName]);
+
+  const nodeOutputs = useMemo(() => nodeDef ? getNodePortsByDirection(nodeDef, 'output') : [], [nodeDef]);
 
   if (!isEditModalOpen || !node || !nodeDef) return null;
 
@@ -314,9 +312,21 @@ export function EditNodeModal() {
                             <div 
                               draggable="true"
                               onDragStart={(e) => {
-                                const dropExpression = `{{$node["${d.node?.data.nodeName || d.node?.id}"].json["${d.port?.id}"]}}`;
-                                e.dataTransfer.setData('text/plain', dropExpression);
-                                e.dataTransfer.effectAllowed = 'copy';
+                                if (!d.node || !d.port) {
+                                  return;
+                                }
+                                writeExpressionDragData(
+                                  e.dataTransfer,
+                                  createDragPayload(
+                                    createInputExpressionSource(
+                                      d.node.id,
+                                      d.port.id,
+                                      [],
+                                      `${d.node.data.nodeName || d.node.id}.${d.port.id}`,
+                                    ),
+                                    'input-panel',
+                                  ),
+                                );
                               }}
                               className="p-2.5 border-b border-slate-700/60 bg-slate-800/60 hover:bg-slate-800 flex items-center justify-between cursor-grab active:cursor-grabbing transition-colors"
                               title="Drag to reference entire object"
@@ -327,7 +337,7 @@ export function EditNodeModal() {
                                     {sourceNodeDef?.icon ? React.createElement(sourceNodeDef.icon as any, { size: 10, className: "text-slate-400" }) : <Box size={10} className="text-slate-400" />}
                                   </div>
                                   <span className="text-xs font-bold text-slate-200 truncate">
-                                    {d.node?.data.nodeName || sourceNodeDef?.displayName || d.node?.type}
+                                    {d.node?.data.nodeName || sourceNodeDef?.manifest.displayName || d.node?.type}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -362,13 +372,31 @@ export function EditNodeModal() {
                 <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Parameters</span>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-                {EditComponent ? (
-                   <EditComponent 
+                {EditComponent || hasParameterSchema || EditFooterComponent ? (
+                  <div className="space-y-6">
+                    {EditComponent ? (
+                      <EditComponent 
                         nodeId={node.id} 
                         data={node.data} 
                         updateData={handleUpdateData}
-                        updatePorts={handleUpdatePorts}
-                   />
+                      />
+                    ) : null}
+                    {hasParameterSchema ? (
+                      <NodeParameterEditor
+                        nodeId={node.id}
+                        data={node.data}
+                        updateData={handleUpdateData}
+                        nodeDef={nodeDef}
+                      />
+                    ) : null}
+                    {EditFooterComponent ? (
+                      <EditFooterComponent
+                        nodeId={node.id}
+                        data={node.data}
+                        updateData={handleUpdateData}
+                      />
+                    ) : null}
+                  </div>
                 ) : (
                    <div className="text-slate-500 text-center mt-20">This node has no configurable parameters.</div>
                 )}
@@ -383,13 +411,13 @@ export function EditNodeModal() {
             </div>
             
             <div className="flex-1 overflow-y-auto w-full p-4">
-                 {node.data.outputs.length === 0 ? (
+                 {nodeOutputs.length === 0 ? (
                     <div className="text-center mt-6 mb-6">
                         <div className="text-slate-600 text-sm">No configured outputs.</div>
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        {node.data.outputs.map((out: IPort) => {
+                        {nodeOutputs.map((out: IPort) => {
                            const portPreview = simulatedOutputPreview?.[out.id] || nodeSnapshots[node.id]?.outputs?.[out.id];
                            
                            return (

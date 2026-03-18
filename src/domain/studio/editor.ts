@@ -1,14 +1,43 @@
-import type { ClassInfo, ClassSummary, ImageInfo } from '../../types';
-import type {
-  ClassBinding,
-  ClassInfoCatalog,
-  ClassInfoSelection,
-  PendingClassNodeRequest,
-  StudioClassCatalogEntry,
-} from './types';
+import type { ClassDescriptor } from '../analysis/contracts';
+import type { AnalysisClassSummary, AnalysisImageInfo } from '../analysis/view-models';
+import type { StableId } from '../contracts/shared-identity';
 
-export function createClassInfoItemId(prefix: string, value: string) {
-  return `${prefix}:${value}`;
+export interface ClassBinding {
+  imageStableId: StableId;
+  classStableId: StableId;
+  fullName: string;
+  name: string;
+  namespace: string;
+  imageName: string;
+}
+
+export interface ClassInfoItemDescriptor {
+  id: StableId;
+  label: string;
+  detail?: string;
+}
+
+export interface ClassInfoCatalog {
+  members: ClassInfoItemDescriptor[];
+  statics: ClassInfoItemDescriptor[];
+  functions: ClassInfoItemDescriptor[];
+}
+
+export interface ClassInfoSelection {
+  members: StableId[];
+  statics: StableId[];
+  functions: StableId[];
+}
+
+export interface PendingClassNodeRequest {
+  requestId: string;
+  binding: ClassBinding;
+  availableInfo: ClassInfoCatalog;
+  suggestedPosition?: { x: number; y: number };
+}
+
+export interface StudioClassCatalogEntry extends ClassBinding {
+  searchText: string;
 }
 
 export function createEmptyClassInfoSelection(): ClassInfoSelection {
@@ -19,20 +48,20 @@ export function createEmptyClassInfoSelection(): ClassInfoSelection {
   };
 }
 
-export function createClassInfoCatalogFromClassInfo(classInfo: ClassInfo): ClassInfoCatalog {
+export function createClassInfoCatalogFromClassDescriptor(classInfo: ClassDescriptor): ClassInfoCatalog {
   return {
     members: classInfo.fields.map((field) => ({
-      id: createClassInfoItemId('member', field.name),
+      id: field.stableId,
       label: field.name,
-      detail: field.field_type,
+      detail: field.fieldType,
     })),
-    statics: classInfo.static_fields.map((field) => ({
-      id: createClassInfoItemId('static', field.name),
+    statics: classInfo.staticFields.map((field) => ({
+      id: field.stableId,
       label: field.name,
-      detail: `${field.field_type}${field.address ? ` @ ${field.address}` : ''}`,
+      detail: `${field.fieldType}${field.address ? ` @ ${field.address}` : ''}`,
     })),
     functions: classInfo.methods.map((method) => ({
-      id: createClassInfoItemId('function', method.signature),
+      id: method.stableId,
       label: method.name,
       detail: method.signature,
     })),
@@ -41,7 +70,7 @@ export function createClassInfoCatalogFromClassInfo(classInfo: ClassInfo): Class
 
 export function reconcileClassInfoSelection(
   selection: ClassInfoSelection,
-  catalog: ClassInfoCatalog
+  catalog: ClassInfoCatalog,
 ): ClassInfoSelection {
   const memberIds = new Set(catalog.members.map((item) => item.id));
   const staticIds = new Set(catalog.statics.map((item) => item.id));
@@ -55,29 +84,22 @@ export function reconcileClassInfoSelection(
 }
 
 export function buildStudioClassCatalog(
-  images: ImageInfo[],
-  classesByImage: Record<string, ClassSummary[]>
+  images: AnalysisImageInfo[],
+  classesByImage: Record<string, AnalysisClassSummary[]>,
 ): StudioClassCatalogEntry[] {
   const entries: StudioClassCatalogEntry[] = [];
 
   for (const image of images) {
-    const classes = classesByImage[image.id] ?? [];
+    const classes = classesByImage[image.stableId] ?? [];
     for (const classSummary of classes) {
       entries.push({
-        imageId: image.id,
-        classId: classSummary.id,
-        fullName: classSummary.full_name,
+        imageStableId: image.stableId,
+        classStableId: classSummary.stableId,
+        fullName: classSummary.fullName,
         name: classSummary.name,
         namespace: classSummary.namespace,
         imageName: image.name,
-        searchText: [
-          classSummary.full_name,
-          classSummary.name,
-          classSummary.namespace,
-          image.name,
-        ]
-          .join(' ')
-          .toLowerCase(),
+        searchText: [classSummary.fullName, classSummary.name, classSummary.namespace, image.name].join(' ').toLowerCase(),
       });
     }
   }
@@ -106,13 +128,13 @@ export function filterStudioClassCatalog(entries: StudioClassCatalogEntry[], que
 
 export function createPendingClassNodeRequest(
   binding: ClassBinding,
-  classInfo: ClassInfo,
-  suggestedPosition?: { x: number; y: number }
+  availableInfo: ClassInfoCatalog,
+  suggestedPosition?: { x: number; y: number },
 ): PendingClassNodeRequest {
   return {
-    requestId: `${binding.imageId}::${binding.classId}::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
+    requestId: `${binding.imageStableId}::${binding.classStableId}::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
     binding,
-    availableInfo: createClassInfoCatalogFromClassInfo(classInfo),
+    availableInfo,
     suggestedPosition,
   };
 }

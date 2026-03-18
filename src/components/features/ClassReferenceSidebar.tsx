@@ -1,5 +1,5 @@
 import { Search, LoaderCircle, Database, X, Waypoints } from 'lucide-react';
-import type { ClassReferenceResult } from '../../types';
+import type { ClassReferenceResult } from '../../domain/analysis/view-models';
 
 type ReferenceMode = 'Inheritance' | 'Member' | 'Function';
 

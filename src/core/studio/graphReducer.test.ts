@@ -1,95 +1,113 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyWorkflowDocument } from './persistence';
+import type { GraphDocument, NodeInstance } from '../../domain/studio/contracts';
+import { createEmptyGraphDocument } from './persistence';
 import { reduceStudioGraphDocument } from './graphReducer';
-import type { BaseNodeData, StudioNode } from './types';
 
-function createNode(id: string, outputIds: string[] = ['out'], inputIds: string[] = ['in']): StudioNode<BaseNodeData> {
+function createNode(id: string): NodeInstance {
   return {
     id,
-    type: 'test-node',
+    nodeType: 'test-node',
+    typeVersion: 1,
     position: { x: 0, y: 0 },
-    data: {
-      inputs: inputIds.map((portId) => ({ id: portId, label: portId, type: 'flow' })),
-      outputs: outputIds.map((portId) => ({ id: portId, label: portId, type: 'flow' })),
-    },
+    parameters: {},
+    bindings: {},
+    documentState: {},
   };
 }
 
 describe('reduceStudioGraphDocument', () => {
   it('adds nodes and de-duplicates identical edges', () => {
     const withNodes = reduceStudioGraphDocument(
-      reduceStudioGraphDocument(createEmptyWorkflowDocument(), { type: 'add-node', node: createNode('node-a') }),
+      reduceStudioGraphDocument(createEmptyGraphDocument(), { type: 'add-node', node: createNode('node-a') }),
       { type: 'add-node', node: createNode('node-b') },
     );
 
     const withEdge = reduceStudioGraphDocument(withNodes, {
       type: 'connect-ports',
-      edge: { id: 'edge-1', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-b', targetPortId: 'in' },
+      edge: { id: 'edge-1', channel: 'control', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-b', targetPortId: 'in' },
     });
     const duplicate = reduceStudioGraphDocument(withEdge, {
       type: 'connect-ports',
-      edge: { id: 'edge-2', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-b', targetPortId: 'in' },
+      edge: { id: 'edge-2', channel: 'control', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-b', targetPortId: 'in' },
     });
 
-    expect(withEdge.edges).toHaveLength(1);
-    expect(duplicate.edges).toHaveLength(1);
+    expect(withEdge.controlConnections).toHaveLength(1);
+    expect(duplicate.controlConnections).toHaveLength(1);
   });
 
   it('replaces an existing inbound connection when a target port is reconnected', () => {
-    const document = {
-      ...createEmptyWorkflowDocument(),
+    const document: GraphDocument = {
+      ...createEmptyGraphDocument(),
       nodes: [createNode('node-a'), createNode('node-b'), createNode('node-c')],
-      edges: [{ id: 'edge-1', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-c', targetPortId: 'in' }],
+      controlConnections: [{ id: 'edge-1', source: { nodeId: 'node-a', connectionKey: 'out' }, target: { nodeId: 'node-c', connectionKey: 'in' } }],
     };
 
     const next = reduceStudioGraphDocument(document, {
       type: 'connect-ports',
-      edge: { id: 'edge-2', sourceNodeId: 'node-b', sourcePortId: 'out', targetNodeId: 'node-c', targetPortId: 'in' },
+      replaceEdgeIds: ['edge-1'],
+      edge: { id: 'edge-2', channel: 'control', sourceNodeId: 'node-b', sourcePortId: 'out', targetNodeId: 'node-c', targetPortId: 'in' },
     });
 
-    expect(next.edges).toEqual([
-      { id: 'edge-2', sourceNodeId: 'node-b', sourcePortId: 'out', targetNodeId: 'node-c', targetPortId: 'in' },
+    expect(next.controlConnections).toEqual([
+      { id: 'edge-2', source: { nodeId: 'node-b', connectionKey: 'out' }, target: { nodeId: 'node-c', connectionKey: 'in' } },
     ]);
   });
 
-  it('removes dangling edges when node ports are reconfigured', () => {
-    const document = {
-      ...createEmptyWorkflowDocument(),
-      nodes: [createNode('node-a'), createNode('node-b')],
-      edges: [{ id: 'edge-1', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-b', targetPortId: 'in' }],
+  it('keeps existing edges when no replacement ids are provided', () => {
+    const document: GraphDocument = {
+      ...createEmptyGraphDocument(),
+      nodes: [createNode('node-a'), createNode('node-b'), createNode('node-c')],
+      dataConnections: [{ id: 'edge-1', source: { nodeId: 'node-a', connectionKey: 'json-out' }, target: { nodeId: 'node-c', connectionKey: 'json-in' }, bindingKey: 'json-in' }],
     };
 
     const next = reduceStudioGraphDocument(document, {
-      type: 'update-node-ports',
-      nodeId: 'node-a',
-      inputs: [],
-      outputs: [{ id: 'different', label: 'different', type: 'flow' }],
+      type: 'connect-ports',
+      edge: { id: 'edge-2', channel: 'data', sourceNodeId: 'node-b', sourcePortId: 'json-out', targetNodeId: 'node-c', targetPortId: 'json-in' },
     });
 
-    expect(next.edges).toEqual([]);
+    expect(next.dataConnections).toEqual([
+      { id: 'edge-1', source: { nodeId: 'node-a', connectionKey: 'json-out' }, target: { nodeId: 'node-c', connectionKey: 'json-in' }, bindingKey: 'json-in' },
+      { id: 'edge-2', source: { nodeId: 'node-b', connectionKey: 'json-out' }, target: { nodeId: 'node-c', connectionKey: 'json-in' }, bindingKey: 'json-in' },
+    ]);
+  });
+
+  it('updates a node instance wholesale when requested', () => {
+    const document: GraphDocument = {
+      ...createEmptyGraphDocument(),
+      nodes: [createNode('node-a'), createNode('node-b')],
+      controlConnections: [{ id: 'edge-1', source: { nodeId: 'node-a', connectionKey: 'out' }, target: { nodeId: 'node-b', connectionKey: 'in' } }],
+    };
+
+    const next = reduceStudioGraphDocument(document, {
+      type: 'update-node-instance',
+      nodeId: 'node-a',
+      node: { ...createNode('node-a'), displayName: 'Updated' },
+    });
+
+    expect(next.nodes.find((node) => node.id === 'node-a')?.displayName).toBe('Updated');
+    expect(next.controlConnections).toHaveLength(1);
   });
 
   it('deletes connected edges when a node is removed', () => {
-    const document = {
-      ...createEmptyWorkflowDocument(),
+    const document: GraphDocument = {
+      ...createEmptyGraphDocument(),
       nodes: [createNode('node-a'), createNode('node-b')],
-      edges: [{ id: 'edge-1', sourceNodeId: 'node-a', sourcePortId: 'out', targetNodeId: 'node-b', targetPortId: 'in' }],
+      controlConnections: [{ id: 'edge-1', source: { nodeId: 'node-a', connectionKey: 'out' }, target: { nodeId: 'node-b', connectionKey: 'in' } }],
     };
 
     const next = reduceStudioGraphDocument(document, { type: 'delete-node', nodeId: 'node-a' });
 
     expect(next.nodes.map((node) => node.id)).toEqual(['node-b']);
-    expect(next.edges).toEqual([]);
+    expect(next.controlConnections).toEqual([]);
   });
 
   it('replaces the current document wholesale when requested', () => {
     const replacement = {
-      ...createEmptyWorkflowDocument(),
+      ...createEmptyGraphDocument(),
       nodes: [createNode('replacement-node')],
-      edges: [],
     };
 
-    const next = reduceStudioGraphDocument(createEmptyWorkflowDocument(), {
+    const next = reduceStudioGraphDocument(createEmptyGraphDocument(), {
       type: 'replace-document',
       document: replacement,
     });

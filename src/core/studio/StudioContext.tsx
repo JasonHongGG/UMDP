@@ -1,11 +1,242 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { GraphDocument } from '../../domain/studio/contracts';
+import type { ClassBinding, ClassInfoCatalog, PendingClassNodeRequest, StudioClassCatalogEntry } from '../../domain/studio/editor';
+import { validateConnection } from './connectionPolicy';
+import { executeStudioFlow } from './executionEngine';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
-import { StudioUiState, useStudioUiState } from './useStudioUiState';
-import { StudioRuntimeState, useStudioRuntimeState } from './useStudioRuntimeState';
+import type { ConnectPortsOptions, DraftConnection, NodeExecutionSnapshot, NodeExecutionState, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
+import { getConnectionChannelForPortType } from './types';
 
 const StudioGraphContext = createContext<StudioGraphStore | null>(null);
 const StudioUiContext = createContext<StudioUiState | null>(null);
 const StudioRuntimeContext = createContext<StudioRuntimeState | null>(null);
+const StudioClassCatalogContext = createContext<StudioClassCatalogState | null>(null);
+
+export interface StudioUiState {
+  transform: { x: number; y: number; scale: number };
+  setTransform: React.Dispatch<React.SetStateAction<{ x: number; y: number; scale: number }>>;
+  canvasElement: HTMLDivElement | null;
+  registerCanvasElement: (element: HTMLDivElement | null) => void;
+  registerPortElement: (nodeId: string, portId: string, element: HTMLDivElement | null) => void;
+  getPortElement: (nodeId: string, portId: string) => HTMLDivElement | null;
+  draftConnection: DraftConnection | null;
+  startConnection: (sourceNodeId: string, sourcePortId: string, sourcePortType: PortType, sourceHandleType: PortHandleType, startPos: { x: number; y: number }) => void;
+  updateConnectionTarget: (targetPos: { x: number; y: number }, hoveredTargetNodeId?: string, hoveredTargetPortId?: string, hoveredTargetCompatible?: boolean) => void;
+  finishConnection: (targetNodeId: string, targetPortId: string, targetPortType: PortType, targetHandleType: PortHandleType) => void;
+  cancelConnection: () => void;
+  isAddModalOpen: boolean;
+  addModalPosition: { x: number; y: number } | null;
+  openAddModal: (x: number, y: number) => void;
+  closeAddModal: () => void;
+  isEditModalOpen: boolean;
+  editingNodeId: string | null;
+  openEditModal: (nodeId: string) => void;
+  closeEditModal: () => void;
+}
+
+export interface StudioRuntimeState {
+  nodeStates: Record<string, NodeExecutionState>;
+  nodeSnapshots: Record<string, NodeExecutionSnapshot>;
+  executeFlow: (startNodeId: string) => void;
+}
+
+interface UseStudioUiStateOptions {
+  nodes: StudioNode[];
+  edges: StudioEdge[];
+  connectPorts: (sourceNodeId: string, sourcePortId: string, targetNodeId: string, targetPortId: string, options?: ConnectPortsOptions) => void;
+}
+
+function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOptions): StudioUiState {
+  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [canvasElement, setCanvasElement] = useState<HTMLDivElement | null>(null);
+  const [draftConnection, setDraftConnection] = useState<DraftConnection | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addModalPosition, setAddModalPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const portElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const startConnection = useCallback((sourceNodeId: string, sourcePortId: string, sourcePortType: PortType, sourceHandleType: PortHandleType, startPos: { x: number; y: number }) => {
+    if (sourceHandleType !== 'source') {
+      return;
+    }
+
+    setDraftConnection({
+      sourceNodeId,
+      sourcePortId,
+      sourcePortType,
+      sourceConnectionChannel: getConnectionChannelForPortType(sourcePortType),
+      sourceHandleType,
+      targetPos: startPos,
+    });
+  }, []);
+
+  const updateConnectionTarget = useCallback((targetPos: { x: number; y: number }, hoveredTargetNodeId?: string, hoveredTargetPortId?: string, hoveredTargetCompatible?: boolean) => {
+    setDraftConnection((previous) => previous
+      ? { ...previous, targetPos, hoveredTargetNodeId, hoveredTargetPortId, hoveredTargetCompatible }
+      : null);
+  }, []);
+
+  const finishConnection = useCallback((targetNodeId: string, targetPortId: string, targetPortType: PortType, targetHandleType: PortHandleType) => {
+    setDraftConnection((previous) => {
+      if (!previous) {
+        return null;
+      }
+
+      const validation = validateConnection({
+        nodeId: previous.sourceNodeId,
+        portId: previous.sourcePortId,
+        portType: previous.sourcePortType,
+        handleType: previous.sourceHandleType,
+      }, {
+        nodeId: targetNodeId,
+        portId: targetPortId,
+        portType: targetPortType,
+        handleType: targetHandleType,
+      }, nodes, edges);
+
+      if (validation.valid) {
+        connectPorts(previous.sourceNodeId, previous.sourcePortId, targetNodeId, targetPortId, {
+          replaceEdgeIds: validation.replaceEdgeIds,
+        });
+      }
+
+      return null;
+    });
+  }, [connectPorts, edges, nodes]);
+
+  const cancelConnection = useCallback(() => {
+    setDraftConnection(null);
+  }, []);
+
+  const registerCanvasElement = useCallback((element: HTMLDivElement | null) => {
+    setCanvasElement(element);
+  }, []);
+
+  const registerPortElement = useCallback((nodeId: string, portId: string, element: HTMLDivElement | null) => {
+    const key = `${nodeId}:${portId}`;
+    if (!element) {
+      portElementsRef.current.delete(key);
+      return;
+    }
+
+    portElementsRef.current.set(key, element);
+  }, []);
+
+  const getPortElement = useCallback((nodeId: string, portId: string) => {
+    return portElementsRef.current.get(`${nodeId}:${portId}`) ?? null;
+  }, []);
+
+  const openAddModal = useCallback((x: number, y: number) => {
+    setAddModalPosition({ x, y });
+    setIsAddModalOpen(true);
+  }, []);
+
+  const closeAddModal = useCallback(() => {
+    setIsAddModalOpen(false);
+  }, []);
+
+  const openEditModal = useCallback((nodeId: string) => {
+    setEditingNodeId(nodeId);
+    setIsEditModalOpen(true);
+  }, []);
+
+  const closeEditModal = useCallback(() => {
+    setIsEditModalOpen(false);
+  }, []);
+
+  return useMemo(() => ({
+    transform,
+    setTransform,
+    canvasElement,
+    registerCanvasElement,
+    registerPortElement,
+    getPortElement,
+    draftConnection,
+    startConnection,
+    updateConnectionTarget,
+    finishConnection,
+    cancelConnection,
+    isAddModalOpen,
+    addModalPosition,
+    openAddModal,
+    closeAddModal,
+    isEditModalOpen,
+    editingNodeId,
+    openEditModal,
+    closeEditModal,
+  }), [
+    addModalPosition,
+    cancelConnection,
+    canvasElement,
+    closeAddModal,
+    closeEditModal,
+    draftConnection,
+    editingNodeId,
+    finishConnection,
+    getPortElement,
+    isAddModalOpen,
+    isEditModalOpen,
+    openAddModal,
+    openEditModal,
+    registerCanvasElement,
+    registerPortElement,
+    startConnection,
+    transform,
+    updateConnectionTarget,
+  ]);
+}
+
+function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[]): StudioRuntimeState {
+  const [nodeStates, setNodeStates] = useState<Record<string, NodeExecutionState>>({});
+  const [nodeSnapshots, setNodeSnapshots] = useState<Record<string, NodeExecutionSnapshot>>({});
+  const executionCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      executionCleanupRef.current?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    executionCleanupRef.current?.();
+    setNodeStates({});
+    setNodeSnapshots({});
+  }, [document]);
+
+  const executeFlow = useCallback((startNodeId: string) => {
+    executionCleanupRef.current?.();
+    executionCleanupRef.current = executeStudioFlow({
+      documentId: document.id,
+      startNodeId,
+      nodes,
+      edges,
+      onReset: () => {
+        setNodeStates({});
+        setNodeSnapshots({});
+      },
+      onNodeStateChange: (nodeId, state) => {
+        setNodeStates((previous) => ({ ...previous, [nodeId]: state }));
+      },
+      onNodeSnapshot: (snapshot) => {
+        setNodeSnapshots((previous) => ({ ...previous, [snapshot.nodeId]: snapshot }));
+      },
+    });
+  }, [document.id, edges, nodes]);
+
+  return useMemo(() => ({
+    nodeStates,
+    nodeSnapshots,
+    executeFlow,
+  }), [executeFlow, nodeSnapshots, nodeStates]);
+}
+
+export interface StudioClassCatalogState {
+  classes: StudioClassCatalogEntry[];
+  createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => PendingClassNodeRequest | null;
+  getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
+  openInspectorForBinding?: (binding: ClassBinding) => void;
+}
 
 export function useStudioGraph() {
   const context = useContext(StudioGraphContext);
@@ -34,15 +265,25 @@ export function useStudioRuntime() {
   return context;
 }
 
+export function useStudioClassCatalog() {
+  const context = useContext(StudioClassCatalogContext);
+  if (!context) {
+    throw new Error('useStudioClassCatalog must be used within a StudioProvider');
+  }
+
+  return context;
+}
+
 export function useStudio() {
   return {
     ...useStudioGraph(),
     ...useStudioUi(),
     ...useStudioRuntime(),
+    ...useStudioClassCatalog(),
   };
 }
 
-export function StudioProvider({ children }: { children: React.ReactNode }) {
+export function StudioProvider({ children, classCatalog }: { children: React.ReactNode; classCatalog: StudioClassCatalogState }) {
   const graphStore = useStudioGraphStore();
   const { nodes, edges, document, connectPorts } = graphStore;
   const uiValue = useStudioUiState({ nodes, edges, connectPorts });
@@ -52,7 +293,9 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
     <StudioGraphContext.Provider value={graphStore}>
       <StudioUiContext.Provider value={uiValue}>
         <StudioRuntimeContext.Provider value={runtimeValue}>
-          {children}
+          <StudioClassCatalogContext.Provider value={classCatalog}>
+            {children}
+          </StudioClassCatalogContext.Provider>
         </StudioRuntimeContext.Provider>
       </StudioUiContext.Provider>
     </StudioGraphContext.Provider>

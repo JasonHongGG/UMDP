@@ -1,17 +1,18 @@
 import { Layers3 } from 'lucide-react';
-import type { ImageInfo } from '../../types';
+import type { AnalysisImageInfo } from '../../domain/analysis/view-models';
 import { EmptyPanel } from '../common/EmptyPanel';
 import { LoadingInline } from '../common/LoadingInline';
+import type { StableId } from '../../domain/contracts/shared-identity';
 
 function classNames(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
 }
 
 interface AssembliesColumnProps {
-  images: ImageInfo[];
-  filteredImages: ImageInfo[];
-  selectedImage: ImageInfo | null;
-  setSelectedImageId: (id: string) => void;
+  images: AnalysisImageInfo[];
+  filteredImages: AnalysisImageInfo[];
+  selectedImage: AnalysisImageInfo | null;
+  setSelectedImageStableId: (id: StableId) => void;
   loadingImages: boolean;
   imageSearch: string;
   setImageSearch: (search: string) => void;
@@ -22,7 +23,7 @@ export function AssembliesColumn({
   images,
   filteredImages,
   selectedImage,
-  setSelectedImageId,
+  setSelectedImageStableId,
   loadingImages,
   imageSearch,
   setImageSearch,
@@ -49,17 +50,17 @@ export function AssembliesColumn({
         {loadingImages ? <LoadingInline msg="Loading assemblies..." /> : null}
         {filteredImages.map((image) => (
           <button
-            key={image.id}
-            data-id={image.id}
-            onClick={() => setSelectedImageId(image.id)}
+            key={image.stableId}
+            data-id={image.stableId}
+            onClick={() => setSelectedImageStableId(image.stableId)}
             className={classNames(
               "w-full text-left px-3 py-2 rounded-lg transition-all duration-200 flex flex-col gap-0.5 border",
-              selectedImage?.id === image.id
+              selectedImage?.stableId === image.stableId
                 ? "bg-cyan-500/20 border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
                 : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/10"
             )}
           >
-            <span className={classNames("text-sm font-medium truncate", selectedImage?.id === image.id ? "text-cyan-100" : "text-slate-300")}>
+            <span className={classNames("text-sm font-medium truncate", selectedImage?.stableId === image.stableId ? "text-cyan-100" : "text-slate-300")}>
               {image.name}
             </span>
           </button>

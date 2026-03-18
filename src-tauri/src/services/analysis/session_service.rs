@@ -1,57 +1,9 @@
-use crate::models::{AttachResponse, AttachedProcess, ProcessInfo};
+use crate::models::{AttachResponse, AttachedProcess};
 use crate::state::AppState;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
-use tauri::State;
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible};
 
-pub fn fetch_system_processes() -> Vec<ProcessInfo> {
-    let mut app_pids = HashSet::new();
-
-    struct EnumState<'a> {
-        pids: &'a mut HashSet<u32>,
-    }
-
-    unsafe extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        if IsWindowVisible(hwnd).as_bool() {
-            let length = GetWindowTextLengthW(hwnd);
-            if length > 0 {
-                let mut pid = 0;
-                GetWindowThreadProcessId(hwnd, Some(&mut pid));
-                if pid > 0 {
-                    let state = &mut *(lparam.0 as *mut EnumState);
-                    state.pids.insert(pid);
-                }
-            }
-        }
-        BOOL(1)
-    }
-
-    let mut state = EnumState { pids: &mut app_pids };
-    unsafe {
-        let _ = EnumWindows(Some(enum_window), LPARAM(&mut state as *mut _ as isize));
-    }
-
-    let mut sys = System::new_all();
-    sys.refresh_processes();
-
-    let mut processes: Vec<ProcessInfo> = sys
-        .processes()
-        .iter()
-        .filter(|(pid, _)| app_pids.contains(&pid.as_u32()))
-        .map(|(pid, process)| ProcessInfo {
-            pid: pid.as_u32(),
-            name: process.name().to_string(),
-        })
-        .collect();
-
-    processes.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-    processes
-}
-
-pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> Result<AttachResponse, String> {
+pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<AttachResponse, String> {
     let mut sys = System::new_all();
     sys.refresh_processes();
 
@@ -68,16 +20,12 @@ pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> 
     let managed_dir = data_dir.as_deref().and_then(derive_managed_dir);
     let runtime = detect_runtime(data_dir.as_deref(), managed_dir.as_deref());
 
-    {
-        let mut attached = state.attached_process.lock();
-        *attached = Some(AttachedProcess {
-            pid,
-            data_dir: data_dir.clone(),
-            managed_dir: managed_dir.clone(),
-        });
-    }
-
-    state.metadata.lock().take();
+    state.analysis.set_process_session(AttachedProcess {
+        pid,
+        data_dir: data_dir.clone(),
+        managed_dir: managed_dir.clone(),
+    });
+    state.analysis.clear_metadata();
 
     Ok(AttachResponse {
         attached: true,

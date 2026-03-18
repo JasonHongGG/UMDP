@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStudioGraph } from '../../../core/studio/StudioContext';
-import { globalNodeRegistry } from '../../../core/studio/NodeRegistry';
+import { getNodePortsByDirection, globalNodeRegistry } from '../../../core/studio/NodeRegistry';
 import { NodeWrapper } from './NodeWrapper';
 
 export function NodeLayer() {
@@ -19,7 +19,12 @@ export function NodeLayer() {
         return (
           <NodeWrapper key={node.id} node={node}>
              <div className="pointer-events-auto">
-               <Component id={node.id} data={node.data} />
+               <Component
+                 id={node.id}
+                 data={node.data}
+                 inputs={getNodePortsByDirection(def, 'input')}
+                 outputs={getNodePortsByDirection(def, 'output')}
+               />
              </div>
           </NodeWrapper>
         );

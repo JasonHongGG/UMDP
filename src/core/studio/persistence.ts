@@ -1,114 +1,146 @@
-import type { BaseNodeData, IPort, StudioEdge, StudioNode, WorkflowDocument } from './types';
-import { WORKFLOW_DOCUMENT_VERSION } from './contracts';
+import type { GraphDocument, NodeInstance } from '../../domain/studio/contracts';
 
 export const STUDIO_WORKFLOW_AUTOSAVE_KEY = 'unity-mono-studio.workflow.autosave.v1';
 export const STUDIO_WORKFLOW_MANUAL_SAVE_KEY = 'unity-mono-studio.workflow.manual-save.v1';
 
-interface StoredWorkflowDocumentRecord {
+interface StoredGraphDocumentRecord {
   savedAt: number;
-  document: WorkflowDocument;
+  document: GraphDocument;
 }
 
-function isPort(value: unknown): value is IPort {
-  if (!value || typeof value !== 'object') {
-    return false;
+function normalizeNodeForPersistence(node: NodeInstance): NodeInstance {
+  if (node.nodeType !== 'class-ref') {
+    return node;
   }
 
-  const candidate = value as Partial<IPort>;
-  return typeof candidate.id === 'string' && typeof candidate.label === 'string' && (candidate.type === 'flow' || candidate.type === 'json');
-}
-
-function isBaseNodeData(value: unknown): value is BaseNodeData {
-  if (!value || typeof value !== 'object') {
-    return false;
+  const documentState = node.documentState as Record<string, unknown>;
+  if (!('availableInfo' in documentState)) {
+    return node;
   }
 
-  const candidate = value as Partial<BaseNodeData>;
-  return Array.isArray(candidate.inputs) && candidate.inputs.every(isPort) && Array.isArray(candidate.outputs) && candidate.outputs.every(isPort);
-}
-
-function isStudioNode(value: unknown): value is StudioNode {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<StudioNode>;
-  return typeof candidate.id === 'string'
-    && typeof candidate.type === 'string'
-    && Boolean(candidate.position)
-    && typeof candidate.position?.x === 'number'
-    && typeof candidate.position?.y === 'number'
-    && isBaseNodeData(candidate.data);
-}
-
-function isStudioEdge(value: unknown): value is StudioEdge {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<StudioEdge>;
-  return typeof candidate.id === 'string'
-    && typeof candidate.sourceNodeId === 'string'
-    && typeof candidate.sourcePortId === 'string'
-    && typeof candidate.targetNodeId === 'string'
-    && typeof candidate.targetPortId === 'string';
-}
-
-export function createEmptyWorkflowDocument(): WorkflowDocument {
+  const { availableInfo: _availableInfo, ...persistedDocumentState } = documentState;
   return {
-    version: WORKFLOW_DOCUMENT_VERSION,
-    nodes: [],
-    edges: [],
+    ...node,
+    documentState: persistedDocumentState,
   };
 }
 
-export function cloneWorkflowDocument(document: WorkflowDocument): WorkflowDocument {
-  return JSON.parse(JSON.stringify(document)) as WorkflowDocument;
+function normalizeGraphDocumentForPersistence(document: GraphDocument): GraphDocument {
+  const clonedDocument = cloneGraphDocument(document);
+  return {
+    ...clonedDocument,
+    nodes: clonedDocument.nodes.map((node) => normalizeNodeForPersistence(node)),
+  };
 }
 
-export function serializeWorkflowDocument(document: WorkflowDocument) {
-  return JSON.stringify(cloneWorkflowDocument(document));
-}
-
-export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
+function isStudioNodeInstance(value: unknown): value is NodeInstance {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
-  const candidate = value as Partial<WorkflowDocument>;
-  return typeof candidate.version === 'number'
-    && Array.isArray(candidate.nodes)
-    && candidate.nodes.every(isStudioNode)
-    && Array.isArray(candidate.edges)
-    && candidate.edges.every(isStudioEdge);
+  const candidate = value as Partial<NodeInstance>;
+  return typeof candidate.id === 'string'
+    && typeof candidate.nodeType === 'string'
+    && typeof candidate.typeVersion === 'number'
+    && Boolean(candidate.position)
+    && typeof candidate.position?.x === 'number'
+    && typeof candidate.position?.y === 'number'
+    && (candidate.displayName === undefined || typeof candidate.displayName === 'string')
+    && Boolean(candidate.parameters)
+    && typeof candidate.parameters === 'object'
+    && Boolean(candidate.bindings)
+    && typeof candidate.bindings === 'object'
+    && Boolean(candidate.documentState)
+    && typeof candidate.documentState === 'object';
 }
 
-export function parseWorkflowDocument(raw: string): WorkflowDocument | null {
+function isConnectionEndpoint(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { nodeId?: unknown; connectionKey?: unknown };
+  return typeof candidate.nodeId === 'string' && typeof candidate.connectionKey === 'string';
+}
+
+function isControlConnection(value: unknown): value is GraphDocument['controlConnections'][number] {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { id?: unknown; source?: unknown; target?: unknown };
+  return typeof candidate.id === 'string' && isConnectionEndpoint(candidate.source) && isConnectionEndpoint(candidate.target);
+}
+
+function isDataConnection(value: unknown): value is GraphDocument['dataConnections'][number] {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { id?: unknown; source?: unknown; target?: unknown; bindingKey?: unknown };
+  return typeof candidate.id === 'string'
+    && typeof candidate.bindingKey === 'string'
+    && isConnectionEndpoint(candidate.source)
+    && isConnectionEndpoint(candidate.target);
+}
+
+export function createEmptyGraphDocument(): GraphDocument {
+  return {
+    schemaVersion: 1,
+    id: 'studio-document',
+    nodes: [],
+    controlConnections: [],
+    dataConnections: [],
+  };
+}
+
+export function cloneGraphDocument(document: GraphDocument): GraphDocument {
+  return JSON.parse(JSON.stringify(document)) as GraphDocument;
+}
+
+export function serializeGraphDocument(document: GraphDocument) {
+  return JSON.stringify(normalizeGraphDocumentForPersistence(document));
+}
+
+export function isGraphDocument(value: unknown): value is GraphDocument {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<GraphDocument>;
+  return candidate.schemaVersion === 1
+    && typeof candidate.id === 'string'
+    && Array.isArray(candidate.nodes)
+    && candidate.nodes.every(isStudioNodeInstance)
+    && Array.isArray(candidate.controlConnections)
+    && candidate.controlConnections.every(isControlConnection)
+    && Array.isArray(candidate.dataConnections)
+    && candidate.dataConnections.every(isDataConnection);
+}
+
+export function parseGraphDocument(raw: string): GraphDocument | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!isWorkflowDocument(parsed)) {
+    if (!isGraphDocument(parsed)) {
       return null;
     }
 
-    return {
-      ...parsed,
-      version: WORKFLOW_DOCUMENT_VERSION,
-    };
+    return normalizeGraphDocumentForPersistence(parsed);
   } catch {
     return null;
   }
 }
 
-function isStoredWorkflowDocumentRecord(value: unknown): value is StoredWorkflowDocumentRecord {
+function isStoredGraphDocumentRecord(value: unknown): value is StoredGraphDocumentRecord {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
-  const candidate = value as Partial<StoredWorkflowDocumentRecord>;
-  return typeof candidate.savedAt === 'number' && isWorkflowDocument(candidate.document);
+  const candidate = value as Partial<StoredGraphDocumentRecord>;
+  return typeof candidate.savedAt === 'number' && isGraphDocument(candidate.document);
 }
 
-export function readStoredWorkflowDocument(storageKey: string): StoredWorkflowDocumentRecord | null {
+export function readStoredGraphDocument(storageKey: string): StoredGraphDocumentRecord | null {
   if (typeof window === 'undefined') {
     return null;
   }
@@ -120,27 +152,27 @@ export function readStoredWorkflowDocument(storageKey: string): StoredWorkflowDo
 
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!isStoredWorkflowDocumentRecord(parsed)) {
+    if (!isStoredGraphDocumentRecord(parsed)) {
       return null;
     }
 
     return {
       savedAt: parsed.savedAt,
-      document: cloneWorkflowDocument(parsed.document),
+      document: normalizeGraphDocumentForPersistence(parsed.document),
     };
   } catch {
     return null;
   }
 }
 
-export function writeStoredWorkflowDocument(storageKey: string, document: WorkflowDocument) {
+export function writeStoredGraphDocument(storageKey: string, document: GraphDocument) {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  const record: StoredWorkflowDocumentRecord = {
+  const record: StoredGraphDocumentRecord = {
     savedAt: Date.now(),
-    document: cloneWorkflowDocument(document),
+    document: normalizeGraphDocumentForPersistence(document),
   };
 
   window.localStorage.setItem(storageKey, JSON.stringify(record));

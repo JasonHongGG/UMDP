@@ -1,14 +1,17 @@
-import { globalNodeRegistry } from './NodeRegistry';
+import { getStudioNodePorts, globalNodeRegistry } from './NodeRegistry';
 import {
+  createNodeExecutionContext,
   getIncomingEdges,
-  getNodeOutputPort,
   getOutgoingFlowEdges,
   getStudioNodeById,
+  getIncomingJsonInputs,
   validateNodeExecution,
 } from './runtimeGraph';
-import { NodeExecutionContext, NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
+import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
+import type { NodeExecutionContext, NodeExecutionResult as DomainNodeExecutionResult, ValidationIssue } from '../../domain/studio/contracts';
 
 interface ExecuteStudioFlowOptions {
+  documentId?: string;
   startNodeId: string;
   nodes: StudioNode[];
   edges: StudioEdge[];
@@ -19,6 +22,7 @@ interface ExecuteStudioFlowOptions {
 }
 
 export function executeStudioFlow({
+  documentId = 'studio-document',
   startNodeId,
   nodes,
   edges,
@@ -29,6 +33,11 @@ export function executeStudioFlow({
 }: ExecuteStudioFlowOptions) {
   const timers: Array<ReturnType<typeof setTimeout>> = [];
   const snapshots: Record<string, NodeExecutionSnapshot> = {};
+
+  const getPrimaryIssueMessage = (issues: ValidationIssue[] | undefined, fallback: string) => {
+    const issue = issues?.find((entry) => entry.severity === 'error') ?? issues?.[0];
+    return issue?.message ?? fallback;
+  };
 
   const schedule = (callback: () => void, delay: number) => {
     const timer = setTimeout(callback, delay);
@@ -41,55 +50,42 @@ export function executeStudioFlow({
   };
 
   const canMaterializePassiveJsonNode = (node: StudioNode) => {
-    const hasFlowInputs = node.data.inputs.some((port) => port.type === 'flow');
-    const hasJsonOutputs = node.data.outputs.some((port) => port.type === 'json');
+    const hasFlowInputs = getStudioNodePorts(node, 'input').some((port) => port.type === 'flow');
+    const hasJsonOutputs = getStudioNodePorts(node, 'output').some((port) => port.type === 'json');
 
     return !hasFlowInputs && hasJsonOutputs;
   };
 
-  const createExecutionContext = (nodeId: string, resolving = new Set<string>()): NodeExecutionContext | null => {
+  const createExecutionContext = (nodeId: string, resolving = new Set<string>()): { context: NodeExecutionContext; inputs: NodeExecutionSnapshot['inputs'] } | null => {
     const node = getStudioNodeById(nodeId, nodes);
     if (!node) {
       return null;
     }
 
-    const jsonInputPortIds = new Set(node.data.inputs.filter((port) => port.type === 'json').map((port) => port.id));
-
-    const incoming = getIncomingEdges(nodeId, edges).reduce<NodeExecutionContext['incoming']>((acc, edge) => {
-      if (!jsonInputPortIds.has(edge.targetPortId)) {
-        return acc;
+    getIncomingEdges(nodeId, edges).forEach((edge) => {
+      if (edge.channel !== 'data') {
+        return;
       }
 
       const sourceNode = getStudioNodeById(edge.sourceNodeId, nodes);
-      const sourcePort = getNodeOutputPort(sourceNode, edge.sourcePortId);
-      if (!sourceNode || sourcePort?.type !== 'json') {
-        return acc;
+      if (!sourceNode || snapshots[sourceNode.id]?.outputs[edge.sourcePortId]) {
+        return;
       }
 
-      let envelope = snapshots[sourceNode.id]?.outputs[edge.sourcePortId];
-
-      if (!envelope && canMaterializePassiveJsonNode(sourceNode)) {
+      if (canMaterializePassiveJsonNode(sourceNode)) {
         materializePassiveJsonNode(sourceNode.id, resolving);
-        envelope = snapshots[sourceNode.id]?.outputs[edge.sourcePortId];
       }
+    });
 
-      if (!envelope) {
-        return acc;
-      }
-
-      if (!acc[edge.targetPortId]) {
-        acc[edge.targetPortId] = [];
-      }
-
-      acc[edge.targetPortId].push(envelope);
-      return acc;
-    }, {});
+    const definition = globalNodeRegistry.get(node.type);
+    const context = createNodeExecutionContext(documentId, nodeId, nodes, edges, snapshots, definition);
+    if (!context) {
+      return null;
+    }
 
     return {
-      node,
-      nodes,
-      edges,
-      incoming,
+      context,
+      inputs: getIncomingJsonInputs(nodeId, nodes, edges, snapshots),
     };
   };
 
@@ -109,22 +105,24 @@ export function executeStudioFlow({
     }
 
     resolving.add(nodeId);
-    const context = createExecutionContext(nodeId, resolving);
+    const executionContext = createExecutionContext(nodeId, resolving);
     const startedAt = Date.now();
 
-    if (!context) {
+    if (!executionContext) {
       resolving.delete(nodeId);
       return;
     }
 
-    const validation = validateNodeExecution(context, definition);
-    if (!validation.valid) {
+    const validationIssues = validateNodeExecution(executionContext.context, definition);
+    const blockingIssues = validationIssues.filter((issue) => issue.severity === 'error');
+    if (blockingIssues.length > 0) {
       publishSnapshot({
         nodeId,
         state: 'error',
-        inputs: context.incoming,
+        inputs: executionContext.inputs,
         outputs: {},
-        error: validation.error ?? 'Node validation failed.',
+        issues: validationIssues,
+        error: getPrimaryIssueMessage(validationIssues, 'Node validation failed.'),
         startedAt,
         completedAt: Date.now(),
       });
@@ -132,14 +130,18 @@ export function executeStudioFlow({
       return;
     }
 
-    const result = definition.execute?.(context) ?? { state: 'success', outputs: {} };
+    const result = definition.executionContract?.execute(executionContext.context) ?? { state: 'success', outputs: {} };
+    if (result instanceof Promise) {
+      throw new Error('Passive node execution does not support async contracts yet.');
+    }
 
     publishSnapshot({
       nodeId,
       state: result.state,
-      inputs: context.incoming,
-      outputs: result.outputs ?? {},
-      error: result.state === 'error' ? result.error ?? 'Node execution failed.' : undefined,
+      inputs: executionContext.inputs,
+      outputs: (result.outputs as NodeExecutionSnapshot['outputs']) ?? {},
+      issues: result.issues,
+      error: result.state === 'error' ? getPrimaryIssueMessage(result.issues, 'Node execution failed.') : undefined,
       startedAt,
       completedAt: Date.now(),
     });
@@ -149,9 +151,9 @@ export function executeStudioFlow({
 
   const runNode = (nodeId: string, delay: number) => {
     schedule(() => {
-      const context = createExecutionContext(nodeId);
+      const executionContext = createExecutionContext(nodeId);
       const startedAt = Date.now();
-      const incoming = context?.incoming ?? {};
+      const incoming = executionContext?.inputs ?? {};
 
       onNodeStateChange(nodeId, 'running');
       publishSnapshot({
@@ -163,7 +165,7 @@ export function executeStudioFlow({
       });
 
       schedule(() => {
-        if (!context) {
+        if (!executionContext) {
           onNodeStateChange(nodeId, 'error');
           publishSnapshot({
             nodeId,
@@ -177,7 +179,7 @@ export function executeStudioFlow({
           return;
         }
 
-        const definition = globalNodeRegistry.get(context.node.type);
+        const definition = globalNodeRegistry.get(executionContext.context.nodeType);
         if (!definition) {
           onNodeStateChange(nodeId, 'error');
           publishSnapshot({
@@ -185,57 +187,80 @@ export function executeStudioFlow({
             state: 'error',
             inputs: incoming,
             outputs: {},
-            error: `Node definition not registered for type ${context.node.type}.`,
+            error: `Node definition not registered for type ${executionContext.context.nodeType}.`,
             startedAt,
             completedAt: Date.now(),
           });
           return;
         }
 
-        const validation = validateNodeExecution(context, definition);
-        if (!validation.valid) {
+        const validationIssues = validateNodeExecution(executionContext.context, definition);
+        const blockingIssues = validationIssues.filter((issue) => issue.severity === 'error');
+        if (blockingIssues.length > 0) {
           onNodeStateChange(nodeId, 'error');
           publishSnapshot({
             nodeId,
             state: 'error',
             inputs: incoming,
             outputs: {},
-            error: validation.error ?? 'Node validation failed.',
+            issues: validationIssues,
+            error: getPrimaryIssueMessage(validationIssues, 'Node validation failed.'),
             startedAt,
             completedAt: Date.now(),
           });
           return;
         }
 
-        const result = definition.execute?.(context) ?? { state: 'success', outputs: {} };
+        const finalizeResult = (result: DomainNodeExecutionResult) => {
+          if (result.state === 'error') {
+            onNodeStateChange(nodeId, 'error');
+            publishSnapshot({
+              nodeId,
+              state: 'error',
+              inputs: incoming,
+              outputs: (result.outputs as NodeExecutionSnapshot['outputs']) ?? {},
+              issues: result.issues,
+              error: getPrimaryIssueMessage(result.issues, 'Node execution failed.'),
+              startedAt,
+              completedAt: Date.now(),
+            });
+            return;
+          }
 
-        if (result.state === 'error') {
-          onNodeStateChange(nodeId, 'error');
+          onNodeStateChange(nodeId, 'success');
           publishSnapshot({
             nodeId,
-            state: 'error',
+            state: 'success',
             inputs: incoming,
-            outputs: result.outputs ?? {},
-            error: result.error ?? 'Node execution failed.',
+            outputs: (result.outputs as NodeExecutionSnapshot['outputs']) ?? {},
+            issues: result.issues,
             startedAt,
             completedAt: Date.now(),
+          });
+
+          getOutgoingFlowEdges(nodeId, nodes, edges).forEach((edge) => {
+            runNode(edge.targetNodeId, 0);
+          });
+        };
+
+        const result = definition.executionContract?.execute(executionContext.context) ?? { state: 'success', outputs: {} };
+        if (result instanceof Promise) {
+          void result.then(finalizeResult).catch((error) => {
+            onNodeStateChange(nodeId, 'error');
+            publishSnapshot({
+              nodeId,
+              state: 'error',
+              inputs: incoming,
+              outputs: {},
+              error: error instanceof Error ? error.message : 'Node execution failed.',
+              startedAt,
+              completedAt: Date.now(),
+            });
           });
           return;
         }
 
-        onNodeStateChange(nodeId, 'success');
-        publishSnapshot({
-          nodeId,
-          state: 'success',
-          inputs: incoming,
-          outputs: result.outputs ?? {},
-          startedAt,
-          completedAt: Date.now(),
-        });
-
-        getOutgoingFlowEdges(nodeId, nodes, edges).forEach((edge) => {
-          runNode(edge.targetNodeId, 0);
-        });
+        finalizeResult(result);
       }, stepDelayMs);
     }, delay);
   };

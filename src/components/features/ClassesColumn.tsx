@@ -1,22 +1,23 @@
 import { Boxes, ChevronRight } from 'lucide-react';
-import type { ImageInfo, ClassSummary } from '../../types';
+import type { AnalysisClassSummary, AnalysisImageInfo } from '../../domain/analysis/view-models';
 import { EmptyPanel } from '../common/EmptyPanel';
+import type { StableId } from '../../domain/contracts/shared-identity';
 
 function classNames(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ');
 }
 
 interface ClassesColumnProps {
-  images: ImageInfo[];
-  selectedImage: ImageInfo | null;
+  images: AnalysisImageInfo[];
+  selectedImage: AnalysisImageInfo | null;
   loadingImages: boolean;
-  currentClasses: ClassSummary[];
-  filteredClasses: ClassSummary[];
+  currentClasses: AnalysisClassSummary[];
+  filteredClasses: AnalysisClassSummary[];
   classSearch: string;
   setClassSearch: (search: string) => void;
   classListRef: React.RefObject<HTMLDivElement | null>;
-  activeTab: { imageId: string, classId: string } | null;
-  handleClassClick: (item: ClassSummary) => void;
+  activeTab: { imageStableId: StableId, classStableId: StableId } | null;
+  handleClassClick: (item: AnalysisClassSummary) => void;
 }
 
 export function ClassesColumn({
@@ -51,12 +52,12 @@ export function ClassesColumn({
         {!images.length && !loadingImages && !selectedImage && <EmptyPanel icon={<Boxes size={32} />} title="Classes" msg="Select an assembly module first." />}
         {selectedImage && !currentClasses.length ? <EmptyPanel icon={<Boxes size={32} />} title="No classes" msg="No visible classes found." /> : null}
         {filteredClasses.map((item) => {
-          const isActiveTab = activeTab?.imageId === selectedImage?.id && activeTab?.classId === item.id;
+          const isActiveTab = activeTab?.imageStableId === selectedImage?.stableId && activeTab?.classStableId === item.stableId;
 
           return (
             <button
-              key={item.id}
-              data-id={item.id}
+              key={item.stableId}
+              data-id={item.stableId}
               onClick={() => handleClassClick(item)}
               className={classNames(
                 "w-full text-left px-3 py-2 rounded-lg transition-all duration-200 flex items-center justify-between border group",

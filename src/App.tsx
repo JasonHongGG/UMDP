@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useRef } from 'react';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import type { ClassInfo, FieldInfo, RuntimeClassOverlayResponse, StaticFieldInfo } from './types';
 import { ScanSearch, Binary, Database } from 'lucide-react';
-import { createPendingClassNodeRequest } from './core/studio/classCatalog';
-import { ClassBinding, PendingClassNodeRequest } from './core/studio/types';
 
 import { MainLayout } from './components/layout/MainLayout';
 import { TopBar } from './components/features/TopBar';
@@ -16,134 +12,82 @@ import { InspectorTabBar } from './components/features/InspectorTabBar';
 import ClassInspectorApp from './components/features/ClassInspectorApp';
 import { ClassReferenceSidebar } from './components/features/ClassReferenceSidebar';
 import { StudioPage } from './components/features/StudioPage';
-
-import { useProcessAttachment } from './hooks/useProcessAttachment';
-import { useMetadata } from './hooks/useMetadata';
-import { useTabs } from './hooks/useTabs';
-import { useGlobalSearch } from './hooks/useGlobalSearch';
-import { useClassReference } from './hooks/useClassReference';
+import { AnalysisWorkspaceProvider, useAnalysisWorkspace } from './domain/analysis/AnalysisWorkspaceContext';
 import './styles.css';
 
 export default function App() {
-  const { fetchMetadata, resetMetadata, images, classesByImage, classDetailsByKey, selectedImageId, setSelectedImageId, loadingImages, setLoadingImages, classLookupMap } = useMetadata();
-  const { tabs, activeTabIndex, setActiveTabIndex, openTabForClass, handleCloseTab, resetTabs } = useTabs();
-
-  const { attached, error } = useProcessAttachment(
-    () => { setLoadingImages(true); },
-    () => {
-      resetMetadata();
-      resetTabs();
-      setRuntimeStaticFieldsByKey({});
-      setRuntimeFieldsByKey({});
-      setRuntimeFieldErrorByKey({});
-      fetchMetadata();
-    },
-    (err) => {
-      resetMetadata();
-      resetTabs();
-      setRuntimeStaticFieldsByKey({});
-      setRuntimeFieldsByKey({});
-      setRuntimeFieldErrorByKey({});
-    }
+  return (
+    <AnalysisWorkspaceProvider>
+      <AppContent />
+    </AnalysisWorkspaceProvider>
   );
+}
 
-  const [runtimeStaticFieldsByKey, setRuntimeStaticFieldsByKey] = useState<Record<string, StaticFieldInfo[] | null>>({});
-  const [runtimeFieldsByKey, setRuntimeFieldsByKey] = useState<Record<string, FieldInfo[] | null>>({});
-  const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
-  const [loadingRuntimeByKey, setLoadingRuntimeByKey] = useState<Record<string, boolean>>({});
-
-  const [activePage, setActivePage] = useState<'inspector' | 'studio'>('inspector');
-  const [pendingClassNode, setPendingClassNode] = useState<PendingClassNodeRequest | null>(null);
-
-  const [imageSearch, setImageSearch] = useState('');
-  const [classSearch, setClassSearch] = useState('');
-
-  const [pendingScrollImageId, setPendingScrollImageId] = useState<string | null>(null);
-  const [pendingScrollClassId, setPendingScrollClassId] = useState<string | null>(null);
+function AppContent() {
+  const {
+    attached,
+    attachError,
+    images,
+    classesByImage,
+    classLookupMap,
+    selectedImageStableId,
+    setSelectedImageStableId,
+    loadingImages,
+    activePage,
+    setActivePage,
+    pendingClassNode,
+    clearPendingClassNode,
+    imageSearch,
+    setImageSearch,
+    classSearch,
+    setClassSearch,
+    filteredImages,
+    selectedImage,
+    currentClasses,
+    filteredClasses,
+    tabs,
+    activeTabIndex,
+    setActiveTabIndex,
+    openTabForClass,
+    handleCloseTab,
+    activeTab,
+    selectedClass,
+    displayStaticFields,
+    displayFields,
+    activeRuntimeFieldError,
+    isLoadingRuntimeFields,
+    isGlobalSearchOpen,
+    setGlobalSearchOpen,
+    globalSearchMode,
+    setGlobalSearchMode,
+    globalSearchQuery,
+    setGlobalSearchQuery,
+    globalSearchResults,
+    isGlobalSearching,
+    handleGlobalSearchResultClick,
+    isReferenceOpen,
+    setReferenceOpen,
+    referenceSearchMode,
+    setReferenceSearchMode,
+    referenceTargetInput,
+    setReferenceTargetInput,
+    referenceTargetError,
+    referenceResults,
+    isReferenceSearching,
+    executeReferenceSearch,
+    handleReferenceResultClick,
+    setReferenceTargetFromClass,
+    handleAddClassToStudio,
+    handleOpenInspectorForBinding,
+    classInfoCatalogByStableId,
+    pendingScrollImageStableId,
+    pendingScrollClassStableId,
+    clearPendingScrollTarget,
+  } = useAnalysisWorkspace();
 
   const tabBarRef = useRef<HTMLDivElement>(null);
   const imageListRef = useRef<HTMLDivElement>(null);
   const classListRef = useRef<HTMLDivElement>(null);
-  const fetchingRuntimeRef = useRef<Set<string>>(new Set());
-
-  const activeTab = activeTabIndex >= 0 && activeTabIndex < tabs.length ? tabs[activeTabIndex] : null;
-
-  const {
-    isGlobalSearchOpen, setIsGlobalSearchOpen,
-    globalSearchMode, setGlobalSearchMode,
-    globalSearchQuery, setGlobalSearchQuery,
-    isGlobalSearching, globalSearchResults,
-    handleGlobalSearchResultClick
-  } = useGlobalSearch(
-    classDetailsByKey,
-    images,
-    classLookupMap,
-    classesByImage,
-    activeTab?.imageId ?? null,
-    activeTab?.classId ?? null,
-    openTabForClass,
-    setSelectedImageId,
-    setPendingScrollImageId,
-    setPendingScrollClassId
-  );
-
-  const classRef = useClassReference({
-    classDetailsByKey,
-    images,
-    classesByImage,
-    classLookupMap,
-    openTabForClass,
-    setSelectedImageId,
-    setPendingScrollImageId,
-    setPendingScrollClassId,
-  });
-
-  // Mutual exclusion: when one sidebar opens, close the other
-  const handleSetGlobalSearchOpen = (open: boolean) => {
-    setIsGlobalSearchOpen(open);
-    if (open) classRef.setIsOpen(false);
-  };
-  const handleSetReferenceOpen = (open: boolean) => {
-    classRef.setIsOpen(open);
-    if (open) setIsGlobalSearchOpen(false);
-  };
-
-  // Auto-fill from ClassInspectorApp
-  const handleSetReferenceTarget = (fullName: string) => {
-    classRef.setTargetFromClass(fullName);
-    setIsGlobalSearchOpen(false);
-  };
-
-  const handleAddClassToStudio = useCallback((classInfo: ClassInfo, source: { imageId: string; classId: string; imageName: string }) => {
-    setPendingClassNode(createPendingClassNodeRequest({
-      imageId: source.imageId,
-      classId: source.classId,
-      fullName: classInfo.full_name,
-      name: classInfo.name,
-      namespace: classInfo.namespace,
-      imageName: source.imageName,
-    }, classInfo));
-
-    classRef.setIsOpen(false);
-    setIsGlobalSearchOpen(false);
-    setActivePage('studio');
-  }, [classRef, setIsGlobalSearchOpen]);
-
-  const handleOpenInspectorForBinding = useCallback((binding: ClassBinding) => {
-    setSelectedImageId(binding.imageId);
-    openTabForClass({
-      imageId: binding.imageId,
-      classId: binding.classId,
-      name: binding.name,
-      namespace: binding.namespace,
-      imageName: binding.imageName,
-    });
-    setPendingScrollImageId(binding.imageId);
-    setPendingScrollClassId(binding.classId);
-    classRef.setIsOpen(false);
-    setIsGlobalSearchOpen(false);
-    setActivePage('inspector');
-  }, [classRef, openTabForClass, setIsGlobalSearchOpen, setSelectedImageId]);
 
   const openSelector = async () => {
     const selector = await WebviewWindow.getByLabel('process-selector');
@@ -154,118 +98,23 @@ export default function App() {
     }
   };
 
-  const filteredImages = useMemo(() => {
-    if (!images.length) return [];
-    const keyword = imageSearch.trim().toLowerCase();
-    return images.filter((image) => image.name.toLowerCase().includes(keyword) || image.path.toLowerCase().includes(keyword));
-  }, [imageSearch, images]);
-
-  const selectedImage = useMemo(() => {
-    return filteredImages.find((image) => image.id === selectedImageId)
-      ?? images.find((image) => image.id === selectedImageId)
-      ?? null;
-  }, [filteredImages, images, selectedImageId]);
-
-  const currentClasses = useMemo(() => {
-    if (!selectedImageId) return [];
-    return classesByImage[selectedImageId] ?? [];
-  }, [classesByImage, selectedImageId]);
-
-  const filteredClasses = useMemo(() => {
-    if (!currentClasses.length) return [];
-    const keyword = classSearch.trim().toLowerCase();
-    return currentClasses.filter((item) => item.full_name.toLowerCase().includes(keyword));
-  }, [classSearch, currentClasses]);
-
-  const selectedClass = useMemo<ClassInfo | null>(() => {
-    if (!activeTab) return null;
-    return classDetailsByKey[`${activeTab.imageId}::${activeTab.classId}`] ?? null;
-  }, [classDetailsByKey, activeTab]);
-
   useEffect(() => {
-    if (!selectedImage && selectedImageId !== null) setSelectedImageId(null);
-  }, [selectedImage, selectedImageId, setSelectedImageId]);
-
-  useEffect(() => {
-    if (selectedImageId && !images.some((image) => image.id === selectedImageId)) setSelectedImageId(null);
-  }, [images, selectedImageId, setSelectedImageId]);
-
-  useEffect(() => {
-    if (!attached || !activeTab || !selectedClass) {
-      return;
-    }
-    const cacheKey = `${activeTab.imageId}::${activeTab.classId}`;
-
-    if (runtimeStaticFieldsByKey[cacheKey] !== undefined || fetchingRuntimeRef.current.has(cacheKey)) return;
-
-    fetchingRuntimeRef.current.add(cacheKey);
-    setLoadingRuntimeByKey(curr => ({ ...curr, [cacheKey]: true }));
-
-    invoke<RuntimeClassOverlayResponse>('get_runtime_static_fields', {
-      imageId: activeTab.imageId,
-      classNamespace: selectedClass.namespace,
-      className: selectedClass.name,
-    })
-      .then((response) => {
-        setRuntimeStaticFieldsByKey(curr => ({ ...curr, [cacheKey]: response.static_fields }));
-        setRuntimeFieldsByKey(curr => ({ ...curr, [cacheKey]: response.fields }));
-      })
-      .catch((invokeError) => {
-        setRuntimeStaticFieldsByKey(curr => ({ ...curr, [cacheKey]: null }));
-        setRuntimeFieldsByKey(curr => ({ ...curr, [cacheKey]: null }));
-        setRuntimeFieldErrorByKey(curr => ({ ...curr, [cacheKey]: String(invokeError) }));
-      })
-      .finally(() => {
-        fetchingRuntimeRef.current.delete(cacheKey);
-        setLoadingRuntimeByKey(curr => ({ ...curr, [cacheKey]: false }));
-      });
-  }, [attached, selectedClass, activeTab, runtimeStaticFieldsByKey]);
-
-  const activeCacheKey = activeTab ? `${activeTab.imageId}::${activeTab.classId}` : '';
-  const displayStaticFields = activeTab ? (runtimeStaticFieldsByKey[activeCacheKey] ?? selectedClass?.static_fields ?? []) : [];
-  const displayFields = activeTab ? (runtimeFieldsByKey[activeCacheKey] ?? selectedClass?.fields ?? []) : [];
-  const activeRuntimeFieldError = runtimeFieldErrorByKey[activeCacheKey];
-  const isLoadingRuntimeFields = loadingRuntimeByKey[activeCacheKey] ?? false;
-  const studioClassDetailsByKey = useMemo(() => {
-    const runtimeDetailKeys = new Set([
-      ...Object.keys(runtimeStaticFieldsByKey),
-      ...Object.keys(runtimeFieldsByKey),
-    ]);
-
-    if (runtimeDetailKeys.size === 0) {
-      return classDetailsByKey;
-    }
-
-    return Object.fromEntries(
-      Object.entries(classDetailsByKey).map(([key, info]) => [
-        key,
-        {
-          ...info,
-          static_fields: runtimeStaticFieldsByKey[key] ?? info.static_fields,
-          fields: runtimeFieldsByKey[key] ?? info.fields,
-        },
-      ]),
-    );
-  }, [classDetailsByKey, runtimeFieldsByKey, runtimeStaticFieldsByKey]);
-
-  useEffect(() => {
-    if (pendingScrollImageId && pendingScrollClassId && selectedImageId === pendingScrollImageId) {
+    if (pendingScrollImageStableId && pendingScrollClassStableId && selectedImageStableId === pendingScrollImageStableId) {
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (imageListRef.current) {
-            const activeImage = imageListRef.current.querySelector(`[data-id="${pendingScrollImageId}"]`);
+            const activeImage = imageListRef.current.querySelector(`[data-id="${pendingScrollImageStableId}"]`);
             if (activeImage) activeImage.scrollIntoView({ behavior: 'auto', block: 'nearest' });
           }
           if (classListRef.current) {
-            const activeClass = classListRef.current.querySelector(`[data-id="${pendingScrollClassId}"]`);
+            const activeClass = classListRef.current.querySelector(`[data-id="${pendingScrollClassStableId}"]`);
             if (activeClass) activeClass.scrollIntoView({ behavior: 'auto', block: 'nearest' });
           }
         }, 50);
       });
-      setPendingScrollImageId(null);
-      setPendingScrollClassId(null);
+      clearPendingScrollTarget();
     }
-  }, [selectedImageId, currentClasses, pendingScrollImageId, pendingScrollClassId]);
+  }, [clearPendingScrollTarget, currentClasses, pendingScrollClassStableId, pendingScrollImageStableId, selectedImageStableId]);
 
   const prevTabsLengthRef = useRef(tabs.length);
   useEffect(() => {
@@ -296,14 +145,14 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
         <SidebarTools
           isGlobalSearchOpen={isGlobalSearchOpen}
-          setIsGlobalSearchOpen={handleSetGlobalSearchOpen}
-          isReferenceOpen={classRef.isOpen}
-          setIsReferenceOpen={handleSetReferenceOpen}
+          setIsGlobalSearchOpen={setGlobalSearchOpen}
+          isReferenceOpen={isReferenceOpen}
+          setIsReferenceOpen={setReferenceOpen}
         />
 
         <GlobalSearchSidebar
           isGlobalSearchOpen={isGlobalSearchOpen}
-          setIsGlobalSearchOpen={setIsGlobalSearchOpen}
+          setIsGlobalSearchOpen={setGlobalSearchOpen}
           globalSearchMode={globalSearchMode}
           setGlobalSearchMode={setGlobalSearchMode}
           globalSearchQuery={globalSearchQuery}
@@ -314,24 +163,24 @@ export default function App() {
         />
 
         <ClassReferenceSidebar
-          isOpen={classRef.isOpen}
-          setIsOpen={handleSetReferenceOpen}
-          searchMode={classRef.searchMode}
-          setSearchMode={classRef.setSearchMode}
-          targetInput={classRef.targetInput}
-          setTargetInput={classRef.setTargetInput}
-          targetError={classRef.targetError}
-          results={classRef.results}
-          isSearching={classRef.isSearching}
-          executeSearch={classRef.executeSearch}
-          handleResultClick={classRef.handleResultClick}
+          isOpen={isReferenceOpen}
+          setIsOpen={setReferenceOpen}
+          searchMode={referenceSearchMode}
+          setSearchMode={setReferenceSearchMode}
+          targetInput={referenceTargetInput}
+          setTargetInput={setReferenceTargetInput}
+          targetError={referenceTargetError}
+          results={referenceResults}
+          isSearching={isReferenceSearching}
+          executeSearch={executeReferenceSearch}
+          handleResultClick={handleReferenceResultClick}
         />
 
         <AssembliesColumn
           images={images}
           filteredImages={filteredImages}
           selectedImage={selectedImage}
-          setSelectedImageId={setSelectedImageId}
+          setSelectedImageStableId={setSelectedImageStableId}
           loadingImages={loadingImages}
           imageSearch={imageSearch}
           setImageSearch={setImageSearch}
@@ -349,13 +198,12 @@ export default function App() {
           classListRef={classListRef}
           activeTab={activeTab}
           handleClassClick={(item) => {
-            if (!selectedImage) return;
             openTabForClass({
-              imageId: selectedImage.id,
-              classId: item.id,
+              imageStableId: item.imageStableId,
+              classStableId: item.stableId,
               name: item.name,
               namespace: item.namespace,
-              imageName: selectedImage.name,
+              imageName: item.imageName,
             });
           }}
         />
@@ -369,9 +217,9 @@ export default function App() {
             tabBarRef={tabBarRef}
           />
 
-          {error ? (
+          {attachError ? (
             <div className="m-4 p-3 bg-red-950/50 border border-red-500/50 rounded-lg text-red-200 text-sm font-mono flex items-center gap-2 z-10">
-              <Binary size={16} /> {error}
+              <Binary size={16} /> {attachError}
             </div>
           ) : null}
 
@@ -397,8 +245,8 @@ export default function App() {
               runtimeFields={displayFields}
               isLoadingRuntimeFields={isLoadingRuntimeFields}
               runtimeFieldError={activeRuntimeFieldError}
-              activeTabId={`${activeTab?.imageId}::${activeTab?.classId}`}
-              onSetReferenceTarget={handleSetReferenceTarget}
+              activeTab={activeTab}
+              onSetReferenceTarget={setReferenceTargetFromClass}
               onAddToStudio={handleAddClassToStudio}
             />
           )}
@@ -409,9 +257,9 @@ export default function App() {
           pendingClassNode={pendingClassNode}
           images={images}
           classesByImage={classesByImage}
-          classDetailsByKey={studioClassDetailsByKey}
+          classInfoCatalogByStableId={classInfoCatalogByStableId}
           onOpenInspectorForBinding={handleOpenInspectorForBinding}
-          onPendingClassNodeHandled={() => setPendingClassNode(null)}
+          onPendingClassNodeHandled={clearPendingClassNode}
         />
       )}
 

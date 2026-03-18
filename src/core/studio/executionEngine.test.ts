@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
-import { createEnvelope, createFlowPort, createJsonPort, GENERIC_JSON_SCHEMA } from './contracts';
+import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
 import { executeStudioFlow } from './executionEngine';
 import { StudioNodeDefinition } from './types';
 
@@ -15,14 +15,22 @@ describe('executeStudioFlow', () => {
 
     const executeSpy = vi.fn(() => ({ state: 'success' as const, outputs: {} }));
     const guardedNode: StudioNodeDefinition = {
-      typeId: 'guarded',
-      displayName: 'Guarded',
-      description: 'Guarded test node',
+      manifest: {
+        type: 'guarded',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Guarded',
+        description: 'Guarded test node',
+        category: 'Test',
+        inputs: [{ key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' }],
+        outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+        parameters: [],
+      },
       icon: () => null,
-      defaultInputs: [createFlowPort('flow-in', 'Flow In')],
-      defaultOutputs: [createFlowPort('flow-out', 'Flow Out')],
-      validateExecution: () => ({ valid: false, error: 'Guard rejected execution.' }),
-      execute: executeSpy,
+      executionContract: {
+        validate: () => [{ severity: 'error', code: 'guard.blocked', message: 'Guard rejected execution.' }],
+        execute: executeSpy,
+      },
       CanvasComponent: () => null,
     };
 
@@ -36,10 +44,7 @@ describe('executeStudioFlow', () => {
           id: 'guarded-1',
           type: 'guarded',
           position: { x: 0, y: 0 },
-          data: {
-            inputs: [createFlowPort('flow-in', 'Flow In')],
-            outputs: [createFlowPort('flow-out', 'Flow Out')],
-          },
+          data: {},
         },
       ],
       edges: [],
@@ -61,47 +66,77 @@ describe('executeStudioFlow', () => {
     vi.useFakeTimers();
 
     const parameterNode: StudioNodeDefinition = {
-      typeId: 'params',
-      displayName: 'Parameters',
-      description: 'Passive parameter provider',
+      manifest: {
+        type: 'params',
+        typeVersion: 1,
+        family: 'data',
+        displayName: 'Parameters',
+        description: 'Passive parameter provider',
+        category: 'Test',
+        inputs: [],
+        outputs: [{ key: 'params-out', displayName: 'Params', direction: 'output', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+        parameters: [],
+      },
       icon: () => null,
-      defaultInputs: [],
-      defaultOutputs: [createJsonPort('params-out', 'Params', GENERIC_JSON_SCHEMA)],
-      execute: () => ({
-        state: 'success',
-        outputs: {
-          'params-out': createEnvelope(GENERIC_JSON_SCHEMA, { instanceAddress: '0x1234' }),
-        },
-      }),
+      executionContract: {
+        validate: () => [],
+        execute: () => ({
+          state: 'success',
+          outputs: {
+            'params-out': createEnvelope(GENERIC_JSON_SCHEMA, { instanceAddress: '0x1234' }),
+          },
+        }),
+      },
       CanvasComponent: () => null,
     };
 
-    const consumerExecute = vi.fn(({ incoming }) => ({
+    const consumerExecute = vi.fn(({ resolvedInputs }) => ({
       state: 'success' as const,
       outputs: {
-        'json-out': createEnvelope(GENERIC_JSON_SCHEMA, { received: incoming['json-in']?.[0]?.payload ?? null }),
+        'json-out': createEnvelope(GENERIC_JSON_SCHEMA, { received: resolvedInputs['json-in']?.[0] ?? null }),
       },
     }));
 
     const consumerNode: StudioNodeDefinition = {
-      typeId: 'consumer',
-      displayName: 'Consumer',
-      description: 'Consumes JSON input',
+      manifest: {
+        type: 'consumer',
+        typeVersion: 1,
+        family: 'runtime',
+        displayName: 'Consumer',
+        description: 'Consumes JSON input',
+        category: 'Test',
+        inputs: [
+          { key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' },
+          { key: 'json-in', displayName: 'Json In', direction: 'input', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id },
+        ],
+        outputs: [{ key: 'json-out', displayName: 'Json Out', direction: 'output', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+        parameters: [],
+      },
       icon: () => null,
-      defaultInputs: [createFlowPort('flow-in', 'Flow In'), createJsonPort('json-in', 'Json In', GENERIC_JSON_SCHEMA)],
-      defaultOutputs: [createJsonPort('json-out', 'Json Out', GENERIC_JSON_SCHEMA)],
-      execute: consumerExecute,
+      executionContract: {
+        validate: () => [],
+        execute: consumerExecute,
+      },
       CanvasComponent: () => null,
     };
 
     const triggerNode: StudioNodeDefinition = {
-      typeId: 'trigger',
-      displayName: 'Trigger',
-      description: 'Flow start',
+      manifest: {
+        type: 'trigger',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Trigger',
+        description: 'Flow start',
+        category: 'Test',
+        inputs: [],
+        outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+        parameters: [],
+      },
       icon: () => null,
-      defaultInputs: [],
-      defaultOutputs: [createFlowPort('flow-out', 'Flow Out')],
-      execute: () => ({ state: 'success', outputs: {} }),
+      executionContract: {
+        validate: () => [],
+        execute: () => ({ state: 'success', outputs: {} }),
+      },
       CanvasComponent: () => null,
     };
 
@@ -116,33 +151,25 @@ describe('executeStudioFlow', () => {
           id: 'trigger-1',
           type: 'trigger',
           position: { x: 0, y: 0 },
-          data: {
-            inputs: [],
-            outputs: [createFlowPort('flow-out', 'Flow Out')],
-          },
+          data: {},
         },
         {
           id: 'params-1',
           type: 'params',
           position: { x: 120, y: 0 },
-          data: {
-            inputs: [],
-            outputs: [createJsonPort('params-out', 'Params', GENERIC_JSON_SCHEMA)],
-          },
+          data: {},
         },
         {
           id: 'consumer-1',
           type: 'consumer',
           position: { x: 240, y: 0 },
-          data: {
-            inputs: [createFlowPort('flow-in', 'Flow In'), createJsonPort('json-in', 'Json In', GENERIC_JSON_SCHEMA)],
-            outputs: [createJsonPort('json-out', 'Json Out', GENERIC_JSON_SCHEMA)],
-          },
+          data: {},
         },
       ],
       edges: [
         {
           id: 'edge-flow',
+          channel: 'control',
           sourceNodeId: 'trigger-1',
           sourcePortId: 'flow-out',
           targetNodeId: 'consumer-1',
@@ -150,6 +177,7 @@ describe('executeStudioFlow', () => {
         },
         {
           id: 'edge-json',
+          channel: 'data',
           sourceNodeId: 'params-1',
           sourcePortId: 'params-out',
           targetNodeId: 'consumer-1',

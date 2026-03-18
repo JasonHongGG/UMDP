@@ -1,14 +1,19 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { initializeStudioNodeRegistry } from '../../core/studio/NodeRegistry';
-import { StudioClassCatalogProvider } from '../../core/studio/StudioClassCatalogContext';
-import { createEmptyClassInfoSelection } from '../../core/studio/classCatalog';
-import { PendingClassNodeRequest, ClassBinding } from '../../core/studio/types';
+import {
+  buildStudioClassCatalog,
+  createEmptyClassInfoSelection,
+  createPendingClassNodeRequest,
+  type ClassBinding,
+  type ClassInfoCatalog,
+  type PendingClassNodeRequest,
+} from '../../domain/studio/editor';
 import { StudioProvider, useStudioGraph, useStudioUi } from '../../core/studio/StudioContext';
 import { CanvasCore } from '../studio/canvas/CanvasCore';
 import { StudioModalLayer } from '../studio/StudioModalLayer';
 import { StudioToolbar } from '../studio/StudioToolbar';
 import { studioNodeCatalog } from '../../nodes';
-import type { ClassInfo, ClassSummary, ImageInfo } from '../../types';
+import type { AnalysisClassSummary, AnalysisImageInfo } from '../../domain/analysis/view-models';
 
 initializeStudioNodeRegistry(studioNodeCatalog);
 
@@ -28,9 +33,9 @@ function getViewportCenterPosition(
 
 interface StudioPageProps {
   pendingClassNode?: PendingClassNodeRequest | null;
-  images: ImageInfo[];
-  classesByImage: Record<string, ClassSummary[]>;
-  classDetailsByKey: Record<string, ClassInfo>;
+  images: AnalysisImageInfo[];
+  classesByImage: Record<string, AnalysisClassSummary[]>;
+  classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
   onOpenInspectorForBinding?: (binding: ClassBinding) => void;
   onPendingClassNodeHandled?: () => void;
 }
@@ -39,17 +44,40 @@ export function StudioPage({
   pendingClassNode,
   images,
   classesByImage,
-  classDetailsByKey,
+  classInfoCatalogByStableId,
   onOpenInspectorForBinding,
   onPendingClassNodeHandled,
 }: StudioPageProps) {
+  const classCatalog = useMemo(() => {
+    const classes = buildStudioClassCatalog(images, classesByImage);
+    return {
+      classes,
+      createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => {
+        const catalog = classInfoCatalogByStableId[binding.classStableId];
+        if (!catalog) {
+          return null;
+        }
+
+        return createPendingClassNodeRequest(binding, catalog, suggestedPosition);
+      },
+      getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => {
+        if (!binding) {
+          return null;
+        }
+
+        return classInfoCatalogByStableId[binding.classStableId] ?? null;
+      },
+      openInspectorForBinding: onOpenInspectorForBinding,
+    };
+  }, [classInfoCatalogByStableId, classesByImage, images, onOpenInspectorForBinding]);
+
   return (
-    <StudioProvider>
+    <StudioProvider classCatalog={classCatalog}>
       <StudioPageContent
         pendingClassNode={pendingClassNode}
         images={images}
         classesByImage={classesByImage}
-        classDetailsByKey={classDetailsByKey}
+        classInfoCatalogByStableId={classInfoCatalogByStableId}
         onOpenInspectorForBinding={onOpenInspectorForBinding}
         onPendingClassNodeHandled={onPendingClassNodeHandled}
       />
@@ -61,7 +89,7 @@ function StudioPageContent({
   pendingClassNode,
   images,
   classesByImage,
-  classDetailsByKey,
+  classInfoCatalogByStableId,
   onOpenInspectorForBinding,
   onPendingClassNodeHandled,
 }: StudioPageProps) {
@@ -138,17 +166,10 @@ function StudioPageContent({
   }, [redo, saveWorkflow, undo]);
 
   return (
-    <StudioClassCatalogProvider
-      images={images}
-      classesByImage={classesByImage}
-      classDetailsByKey={classDetailsByKey}
-      onOpenInspectorForBinding={onOpenInspectorForBinding}
-    >
-      <div className="flex-1 flex flex-col bg-[#0a0f16] overflow-hidden relative">
-        <StudioToolbar />
-        <CanvasCore />
-        <StudioModalLayer />
-      </div>
-    </StudioClassCatalogProvider>
+    <div className="flex-1 flex flex-col bg-[#0a0f16] overflow-hidden relative">
+      <StudioToolbar />
+      <CanvasCore />
+      <StudioModalLayer />
+    </div>
   );
 }

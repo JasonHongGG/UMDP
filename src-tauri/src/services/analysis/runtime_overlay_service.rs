@@ -1,9 +1,9 @@
 use crate::models::RuntimeClassOverlayResponse;
+use crate::services::analysis::executable_resolver::find_bundled_executable;
 use crate::state::AppState;
 use serde::Deserialize;
-use std::path::PathBuf;
 use std::process::Command;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 #[derive(Debug, Deserialize)]
 struct HelperRuntimeStaticFields {
@@ -19,12 +19,11 @@ pub fn get_runtime_static_fields(
     class_name: &str,
 ) -> Result<RuntimeClassOverlayResponse, String> {
     let attached = state
-        .attached_process
-        .lock()
-        .clone()
+        .analysis
+        .process_session()
         .ok_or_else(|| "No process attached".to_string())?;
 
-    let helper_exe = helper_executable_path(app)?;
+    let helper_exe = find_bundled_executable(app, "UnityMonoBridge.exe")?;
     let output = Command::new(&helper_exe)
         .arg("--pid")
         .arg(attached.pid.to_string())
@@ -49,27 +48,4 @@ pub fn get_runtime_static_fields(
         static_fields: response.static_fields,
         fields: response.fields,
     })
-}
-
-fn helper_executable_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut candidates = vec![manifest_dir.join("bin").join("UnityMonoBridge.exe")];
-
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("bin").join("UnityMonoBridge.exe"));
-    }
-
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            candidates.push(exe_dir.join("UnityMonoBridge.exe"));
-            candidates.push(exe_dir.join("resources").join("bin").join("UnityMonoBridge.exe"));
-        }
-    }
-
-    candidates
-        .into_iter()
-        .find(|candidate| candidate.is_file())
-        .ok_or_else(|| {
-            "UnityMonoBridge executable not found. Rebuild the Tauri app so src-tauri/bin/UnityMonoBridge.exe is built and bundled.".to_string()
-        })
 }

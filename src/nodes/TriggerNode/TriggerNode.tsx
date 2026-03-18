@@ -5,10 +5,11 @@ import { createFlowPort } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { Port } from '../../components/studio/canvas/Port';
 import { useStudioRuntime } from '../../core/studio/StudioContext';
+import { parseTriggerNodeDocumentState, type TriggerNodeDocumentState } from '../../domain/studio/contracts';
 
 interface TriggerNodeData extends BaseNodeData {}
 
-const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id, data }) => {
+const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id, data, inputs, outputs }) => {
   const { nodeStates, executeFlow } = useStudioRuntime();
   const executionState = nodeStates?.[id] || 'idle';
 
@@ -23,12 +24,12 @@ const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id,
         
         {/* Input Ports Container */}
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-center gap-2 -translate-x-[calc(50%+1px)] z-20">
-           {data.inputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="target" />)}
+           {inputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="target" />)}
         </div>
 
         {/* Output Ports Container */}
         <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-center gap-2 translate-x-[calc(50%+1px)] z-20">
-            {data.outputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="source" />)}
+          {outputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="source" />)}
         </div>
 
         {/* Icon (Play Button) */}
@@ -51,7 +52,7 @@ const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id,
   );
 };
 
-const TriggerNodeEdit: React.FC<INodeEditProps<TriggerNodeData>> = () => {
+const TriggerNodeEditorHelp: React.FC<INodeEditProps<TriggerNodeData>> = () => {
   return (
     <div className="text-center py-10">
       <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
@@ -66,24 +67,40 @@ const TriggerNodeEdit: React.FC<INodeEditProps<TriggerNodeData>> = () => {
 };
 
 const TriggerNodeDefinition: INodeDefinition<TriggerNodeData> = {
-  typeId: 'trigger',
-  displayName: 'Trigger',
-  description: 'Starts the execution of a workflow.',
-  icon: Play,
-  category: 'Control',
-  tags: ['flow', 'start', 'manual'],
-  defaultInputs: [],
-  defaultOutputs: [createFlowPort('flow-out', 'Flow Out')],
-  createInitialData: () => ({
+  manifest: {
+    type: 'trigger',
+    typeVersion: 1,
+    family: 'control',
+    displayName: 'Trigger',
+    description: 'Starts the execution of a workflow.',
+    category: 'Control',
+    tags: ['flow', 'start', 'manual'],
     inputs: [],
-    outputs: [createFlowPort('flow-out', 'Flow Out')],
+    outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+    parameters: [],
+    isTrigger: true,
+  },
+  icon: Play,
+  createInitialData: () => ({
   }),
-  execute: () => ({
-    state: 'success',
-    outputs: {},
+  hydrateData: (instance, baseData) => ({
+    ...baseData,
+    nodeName: instance.displayName,
+    ...parseTriggerNodeDocumentState(instance.documentState),
   }),
+  dehydrateData: (data) => ({
+    displayName: data.nodeName?.trim() || undefined,
+    parameters: {},
+    bindings: {},
+    documentState: { mode: 'manual' } satisfies TriggerNodeDocumentState,
+  }),
+  createRuntimeState: () => ({ parameters: {}, bindings: {}, documentState: { mode: 'manual' } satisfies TriggerNodeDocumentState }),
+  executionContract: {
+    validate: () => [],
+    execute: () => ({ state: 'success', outputs: {} }),
+  },
   CanvasComponent: TriggerNodeCanvas,
-  EditComponent: TriggerNodeEdit,
+  EditFooterComponent: TriggerNodeEditorHelp,
 };
 
 export const TriggerNodeDef = defineStudioNode(TriggerNodeDefinition);

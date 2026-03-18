@@ -1,27 +1,70 @@
-import { BaseNodeData, IPort, StudioEdge, StudioNode, WorkflowDocument } from './types';
-import { createEmptyWorkflowDocument } from './persistence';
+import type { ConnectionChannel, GraphDocument, NodeInstance } from '../../domain/studio/contracts';
+import { StudioEdge } from './types';
+import { createEmptyGraphDocument } from './persistence';
 
 export interface StudioGraphState {
-  document: WorkflowDocument;
+  document: GraphDocument;
 }
 
 export type StudioGraphAction =
-  | { type: 'add-node'; node: StudioNode }
-  | { type: 'update-node-position'; nodeId: string; position: StudioNode['position'] }
-  | { type: 'update-node-data'; nodeId: string; data: Partial<BaseNodeData> }
-  | { type: 'update-node-ports'; nodeId: string; inputs: IPort[]; outputs: IPort[] }
+  | { type: 'add-node'; node: NodeInstance }
+  | { type: 'update-node-position'; nodeId: string; position: NodeInstance['position'] }
+  | { type: 'update-node-instance'; nodeId: string; node: NodeInstance }
   | { type: 'delete-node'; nodeId: string }
-  | { type: 'connect-ports'; edge: StudioEdge }
+  | { type: 'connect-ports'; edge: StudioEdge; replaceEdgeIds?: string[] }
   | { type: 'disconnect-edge'; edgeId: string }
-  | { type: 'add-edge'; edge: StudioEdge }
+  | { type: 'add-edge'; edge: StudioEdge; replaceEdgeIds?: string[] }
   | { type: 'delete-edge'; edgeId: string }
-  | { type: 'replace-document'; document: WorkflowDocument };
+  | { type: 'replace-document'; document: GraphDocument };
 
 export const initialStudioGraphState: StudioGraphState = {
-  document: createEmptyWorkflowDocument(),
+  document: createEmptyGraphDocument(),
 };
 
-export function reduceStudioGraphDocument(document: WorkflowDocument, action: StudioGraphAction): WorkflowDocument {
+function selectConnections(document: GraphDocument, channel: ConnectionChannel) {
+  return channel === 'control' ? document.controlConnections : document.dataConnections;
+}
+
+function replaceConnections(
+  document: GraphDocument,
+  channel: 'control',
+  connections: GraphDocument['controlConnections'],
+): GraphDocument;
+function replaceConnections(
+  document: GraphDocument,
+  channel: 'data',
+  connections: GraphDocument['dataConnections'],
+): GraphDocument;
+function replaceConnections(
+  document: GraphDocument,
+  channel: ConnectionChannel,
+  connections: GraphDocument['controlConnections'] | GraphDocument['dataConnections'],
+): GraphDocument {
+  if (channel === 'control') {
+    return { ...document, controlConnections: connections as GraphDocument['controlConnections'] };
+  }
+
+  return { ...document, dataConnections: connections as GraphDocument['dataConnections'] };
+}
+
+function edgeToConnection(edge: StudioEdge) {
+  if (edge.channel === 'control') {
+    return {
+      id: edge.id,
+      source: { nodeId: edge.sourceNodeId, connectionKey: edge.sourcePortId },
+      target: { nodeId: edge.targetNodeId, connectionKey: edge.targetPortId },
+    };
+  }
+
+  return {
+    id: edge.id,
+    source: { nodeId: edge.sourceNodeId, connectionKey: edge.sourcePortId },
+    target: { nodeId: edge.targetNodeId, connectionKey: edge.targetPortId },
+    bindingKey: edge.targetPortId,
+  };
+}
+
+export function reduceStudioGraphDocument(document: GraphDocument, action: StudioGraphAction): GraphDocument {
   switch (action.type) {
     case 'add-node':
       return {
@@ -35,69 +78,54 @@ export function reduceStudioGraphDocument(document: WorkflowDocument, action: St
           node.id === action.nodeId ? { ...node, position: action.position } : node,
         ),
       };
-    case 'update-node-data':
+    case 'update-node-instance':
       return {
         ...document,
         nodes: document.nodes.map((node) =>
-          node.id === action.nodeId ? { ...node, data: { ...node.data, ...action.data } } : node,
+          node.id === action.nodeId ? action.node : node,
         ),
-      };
-    case 'update-node-ports':
-      return {
-        ...document,
-        nodes: document.nodes.map((node) =>
-          node.id === action.nodeId
-            ? { ...node, data: { ...node.data, inputs: action.inputs, outputs: action.outputs } }
-            : node,
-        ),
-        edges: document.edges.filter((edge) => {
-          if (edge.sourceNodeId === action.nodeId && !action.outputs.find((port) => port.id === edge.sourcePortId)) {
-            return false;
-          }
-
-          if (edge.targetNodeId === action.nodeId && !action.inputs.find((port) => port.id === edge.targetPortId)) {
-            return false;
-          }
-
-          return true;
-        }),
       };
     case 'delete-node':
       return {
         ...document,
         nodes: document.nodes.filter((node) => node.id !== action.nodeId),
-        edges: document.edges.filter(
-          (edge) => edge.sourceNodeId !== action.nodeId && edge.targetNodeId !== action.nodeId,
+        controlConnections: document.controlConnections.filter(
+          (edge) => edge.source.nodeId !== action.nodeId && edge.target.nodeId !== action.nodeId,
+        ),
+        dataConnections: document.dataConnections.filter(
+          (edge) => edge.source.nodeId !== action.nodeId && edge.target.nodeId !== action.nodeId,
         ),
       };
     case 'connect-ports':
     case 'add-edge': {
-      const exists = document.edges.some(
+      const currentConnections = selectConnections(document, action.edge.channel);
+      const exists = currentConnections.some(
         (edge) =>
-          edge.sourceNodeId === action.edge.sourceNodeId &&
-          edge.sourcePortId === action.edge.sourcePortId &&
-          edge.targetNodeId === action.edge.targetNodeId &&
-          edge.targetPortId === action.edge.targetPortId,
+          edge.source.nodeId === action.edge.sourceNodeId &&
+          edge.source.connectionKey === action.edge.sourcePortId &&
+          edge.target.nodeId === action.edge.targetNodeId &&
+          edge.target.connectionKey === action.edge.targetPortId,
       );
 
       if (exists) {
         return document;
       }
 
-      const remainingEdges = document.edges.filter(
-        (edge) => !(edge.targetNodeId === action.edge.targetNodeId && edge.targetPortId === action.edge.targetPortId),
-      );
+      const replaceEdgeIds = new Set(action.replaceEdgeIds ?? []);
+      const remainingEdges = currentConnections.filter((edge) => !replaceEdgeIds.has(edge.id));
 
-      return {
-        ...document,
-        edges: [...remainingEdges, action.edge],
-      };
+      if (action.edge.channel === 'control') {
+        return replaceConnections(document, 'control', [...remainingEdges, edgeToConnection(action.edge)] as GraphDocument['controlConnections']);
+      }
+
+      return replaceConnections(document, 'data', [...remainingEdges, edgeToConnection(action.edge)] as GraphDocument['dataConnections']);
     }
     case 'disconnect-edge':
     case 'delete-edge':
       return {
         ...document,
-        edges: document.edges.filter((edge) => edge.id !== action.edgeId),
+        controlConnections: document.controlConnections.filter((edge) => edge.id !== action.edgeId),
+        dataConnections: document.dataConnections.filter((edge) => edge.id !== action.edgeId),
       };
     case 'replace-document':
       return action.document;

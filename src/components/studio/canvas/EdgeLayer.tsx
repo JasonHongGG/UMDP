@@ -1,4 +1,5 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
+import { getStudioNodePort, getStudioNodePorts } from '../../../core/studio/NodeRegistry';
 import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
 import { PORT_COLORS, PortType, StudioEdge } from '../../../core/studio/types';
 
@@ -43,7 +44,7 @@ export function EdgeLayer() {
 
     const canvasRect = canvasElement.getBoundingClientRect();
     nodes.forEach((node) => {
-      const ports = [...node.data.inputs, ...node.data.outputs];
+      const ports = [...getStudioNodePorts(node, 'input'), ...getStudioNodePorts(node, 'output')];
       ports.forEach((port) => {
         const el = getPortElement(node.id, port.id);
         if (!el) {
@@ -90,7 +91,7 @@ export function EdgeLayer() {
 
   const getEdgeColor = (edge: StudioEdge) => {
     const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
-    const port = sourceNode?.data.outputs.find(p => p.id === edge.sourcePortId) || sourceNode?.data.inputs.find(p => p.id === edge.sourcePortId);
+    const port = getStudioNodePort(sourceNode, 'output', edge.sourcePortId) || getStudioNodePort(sourceNode, 'input', edge.sourcePortId);
     const type = port?.type || 'json';
     return PORT_COLORS[type as PortType];
   };

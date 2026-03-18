@@ -1,5 +1,5 @@
 import { Search, LoaderCircle, Database, Globe, X } from 'lucide-react';
-import type { GlobalSearchResult } from '../../types';
+import type { GlobalSearchResult } from '../../domain/analysis/view-models';
 
 interface GlobalSearchSidebarProps {
   isGlobalSearchOpen: boolean;

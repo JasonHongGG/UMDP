@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Boxes, List, Type, Variable } from 'lucide-react';
-import type { InspectorTab } from '../../hooks/useTabs';
+import type { InspectorTab } from '../../domain/analysis/AnalysisWorkspaceContext';
 
 interface InspectorTabBarProps {
   tabs: InspectorTab[];
@@ -36,7 +36,7 @@ export function InspectorTabBar({
 
           return (
             <motion.div
-              key={`${tab.imageId}-${tab.classId}`}
+              key={`${tab.imageStableId}-${tab.classStableId}`}
               data-active={isActive}
               initial={{ opacity: 0, y: 15, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}

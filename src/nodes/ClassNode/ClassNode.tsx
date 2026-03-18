@@ -6,10 +6,6 @@ import {
   INodeDefinition,
   BaseNodeData,
   IPort,
-  ClassBinding,
-  ClassInfoItemDescriptor,
-  ClassInfoCatalog,
-  ClassInfoSelection,
 } from '../../core/studio/types';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import {
@@ -23,29 +19,50 @@ import {
   createEmptyClassInfoSelection,
   filterStudioClassCatalog,
   reconcileClassInfoSelection,
-} from '../../core/studio/classCatalog';
+  type ClassBinding,
+  type ClassInfoItemDescriptor,
+  type ClassInfoCatalog,
+  type ClassInfoSelection,
+} from '../../domain/studio/editor';
 import { Port } from '../../components/studio/canvas/Port';
-import { useStudioClassCatalog } from '../../core/studio/StudioClassCatalogContext';
-import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import { useStudioClassCatalog, useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import {
+  createStaticExpressionSource,
+  hasExpressionSourceValue,
+  writeExpressionDragData,
+  createDragPayload,
+} from '../../core/studio/expressionUtils';
+import {
+  parseClassNodeDocumentState,
+  type ClassBindingReference,
+  type ClassExportSelection,
+  type ClassNodeDocumentState,
+  type ExpressionSource,
+} from '../../domain/studio/contracts';
+import type { StudioNodeRuntimeState } from '../../core/studio/types';
+import type { StableId } from '../../domain/contracts/shared-identity';
 
 export interface ClassNodeData extends BaseNodeData {
   binding: ClassBinding | null;
-  instanceAddress?: string;
+  instanceSource: ExpressionSource | null;
   availableInfo: ClassInfoCatalog;
   infoSelection: ClassInfoSelection;
 }
 
-function validateClassNodeExecution(data: ClassNodeData, hasIncomingInstance: boolean) {
-  const hasInstanceAddress = Boolean(data.instanceAddress && data.instanceAddress.trim().length > 0);
-
-  if (!hasIncomingInstance && !hasInstanceAddress) {
-    return {
-      valid: false,
-      error: 'Class node requires an incoming instance reference or a static instance address.',
-    };
+function hasResolvedExecutionValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return false;
   }
 
-  return { valid: true };
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  return true;
 }
 
 const CLASS_INFO_OUTPUT: IPort = {
@@ -73,11 +90,62 @@ function createEmptyCatalog(): ClassInfoCatalog {
 function createClassNodeData(): ClassNodeData {
   return {
     binding: null,
-    instanceAddress: '',
+    instanceSource: null,
     availableInfo: createEmptyCatalog(),
     infoSelection: createEmptyClassInfoSelection(),
-    inputs: CLASS_NODE_INPUTS.map((port) => ({ ...port })),
-    outputs: CLASS_NODE_OUTPUTS.map((port) => ({ ...port })),
+  };
+}
+
+function toClassBindingReference(binding: ClassBinding | null): ClassBindingReference | null {
+  if (!binding) {
+    return null;
+  }
+
+  return {
+    imageStableId: binding.imageStableId,
+    classStableId: binding.classStableId,
+    fullName: binding.fullName,
+    name: binding.name,
+    namespace: binding.namespace,
+    imageName: binding.imageName,
+  };
+}
+
+function fromClassBindingReference(binding: ClassBindingReference | null): ClassBinding | null {
+  if (!binding) {
+    return null;
+  }
+
+  return {
+    imageStableId: binding.imageStableId,
+    classStableId: binding.classStableId,
+    fullName: binding.fullName,
+    name: binding.name,
+    namespace: binding.namespace,
+    imageName: binding.imageName,
+  };
+}
+
+function toClassExportSelection(selection: ClassInfoSelection): ClassExportSelection {
+  return {
+    memberStableIds: selection.members,
+    staticStableIds: selection.statics,
+    methodStableIds: selection.functions,
+  };
+}
+
+function fromClassExportSelection(selection: ClassExportSelection): ClassInfoSelection {
+  return {
+    members: selection.memberStableIds,
+    statics: selection.staticStableIds,
+    functions: selection.methodStableIds,
+  };
+}
+
+function createClassNodeDocumentState(data: ClassNodeData): ClassNodeDocumentState {
+  return {
+    classBinding: toClassBindingReference(data.binding),
+    exportSelection: toClassExportSelection(data.infoSelection),
   };
 }
 
@@ -93,6 +161,20 @@ function createInfoPreview(data: ClassNodeData) {
 
 function isDescriptorSelected(ids: string[], descriptor: ClassInfoItemDescriptor) {
   return ids.includes(descriptor.id);
+}
+
+function createCatalogSignature(catalog: ClassInfoCatalog) {
+  return [
+    catalog.members.map((item) => item.id).join(','),
+    catalog.statics.map((item) => item.id).join(','),
+    catalog.functions.map((item) => item.id).join(','),
+  ].join('|');
+}
+
+function hasSameStableIdSelection(left: ClassInfoSelection, right: ClassInfoSelection) {
+  return left.members.join(',') === right.members.join(',')
+    && left.statics.join(',') === right.statics.join(',')
+    && left.functions.join(',') === right.functions.join(',');
 }
 
 type SelectionBucketKey = keyof ClassInfoSelection;
@@ -133,15 +215,35 @@ function createSectionTone(bucket: SelectionBucketKey) {
   };
 }
 
-const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, data }) => {
-  const { edges } = useStudioGraph();
+const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, data, inputs, outputs }) => {
+  const { edges, updateNodeData } = useStudioGraph();
   const { nodeStates } = useStudioRuntime();
+  const { getClassInfoCatalogByBinding } = useStudioClassCatalog();
+
+  const resolvedCatalog = useMemo(() => getClassInfoCatalogByBinding(data.binding), [data.binding, getClassInfoCatalogByBinding]);
+
+  useEffect(() => {
+    if (!data.binding || !resolvedCatalog) {
+      return;
+    }
+
+    const reconciledSelection = reconcileClassInfoSelection(data.infoSelection, resolvedCatalog);
+    const catalogChanged = createCatalogSignature(data.availableInfo) !== createCatalogSignature(resolvedCatalog);
+    const selectionChanged = !hasSameStableIdSelection(data.infoSelection, reconciledSelection);
+    if (!catalogChanged && !selectionChanged) {
+      return;
+    }
+
+    updateNodeData(id, {
+      availableInfo: resolvedCatalog,
+      infoSelection: reconciledSelection,
+    });
+  }, [data.availableInfo, data.binding, data.infoSelection, id, resolvedCatalog, updateNodeData]);
   
-  // Logic to determine if we are missing the required instance address and static fallback
-  const hasInputConnection = edges.some(e => e.targetNodeId === id && e.targetPortId === 'instance-in');
-  const hasInstanceAddress = !!data.instanceAddress && data.instanceAddress.trim().length > 0;
+  const hasInputConnection = edges.some(e => e.channel === 'data' && e.targetNodeId === id && e.targetPortId === 'instance-in');
+  const hasInstanceSource = hasExpressionSourceValue(data.instanceSource);
   
-  const isErrorState = !hasInputConnection && !hasInstanceAddress;
+  const isErrorState = !hasInputConnection && !hasInstanceSource;
   const executionState = nodeStates?.[id] || 'idle';
 
   return (
@@ -164,12 +266,12 @@ const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, dat
 
         {/* Input Ports Container */}
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-center gap-2 -translate-x-[calc(50%+1px)] z-20">
-           {data.inputs.map(port => <Port key={port.id} nodeId={id} port={port} type="target" />)}
+           {inputs.map(port => <Port key={port.id} nodeId={id} port={port} type="target" />)}
         </div>
 
         {/* Output Ports Container */}
         <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-evenly py-1 gap-1 translate-x-[calc(50%+1px)] z-20">
-            {data.outputs.map(port => <Port key={port.id} nodeId={id} port={port} type="source" />)}
+          {outputs.map(port => <Port key={port.id} nodeId={id} port={port} type="source" />)}
         </div>
 
         {/* Icon */}
@@ -190,36 +292,16 @@ const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, dat
 };
 
 // --- Edit Component ---
-const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
+const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
   const { classes, createNodeRequestFromBinding } = useStudioClassCatalog();
   const [bindingSearchQuery, setBindingSearchQuery] = useState('');
   const [isBindingPickerOpen, setIsBindingPickerOpen] = useState(!data.binding);
-  const [isDragOverInput, setIsDragOverInput] = useState(false);
 
   useEffect(() => {
     if (!data.binding) {
       setIsBindingPickerOpen(true);
     }
   }, [data.binding]);
-
-  const handleToggle = (type: 'member' | 'static' | 'function', itemId: string) => {
-    const listKey = type === 'member' ? 'members' : type === 'static' ? 'statics' : 'functions';
-    updateData({
-      infoSelection: {
-        ...data.infoSelection,
-        [listKey]: toggleSelectionEntry(data.infoSelection[listKey], itemId),
-      },
-    });
-  };
-
-  const updateSelectionBucket = (bucket: SelectionBucketKey, ids: string[]) => {
-    updateData({
-      infoSelection: {
-        ...data.infoSelection,
-        [bucket]: ids,
-      },
-    });
-  };
 
   const filteredBindings = useMemo(() => {
     return filterStudioClassCatalog(classes, bindingSearchQuery).slice(0, 60);
@@ -239,9 +321,118 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
     setIsBindingPickerOpen(false);
   };
 
-  const infoPreview = useMemo(() => createInfoPreview(data), [data]);
-  const hasBinding = Boolean(data.binding);
+  return (
+    <div className="space-y-5 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Class Binding</div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide px-1">Bound Class</label>
+          
+          <div className="relative group">
+            {data.binding ? (
+              <div className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-slate-900/50 p-4 shadow-[0_4px_20px_rgba(6,182,212,0.1)] transition-all duration-300 hover:shadow-[0_4px_25px_rgba(6,182,212,0.15)] hover:border-cyan-400/50">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-base text-cyan-100 font-bold truncate tracking-tight">{data.binding.fullName}</div>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-slate-400 flex-wrap font-medium">
+                      <span className="bg-slate-900/80 px-2 py-0.5 rounded text-slate-300 border border-slate-700/50">{data.binding.namespace || 'Global'}</span>
+                      <span className="inline-flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700/50 text-cyan-400/80"><Layers3 size={12} /> {data.binding.imageName}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsBindingPickerOpen((prev) => !prev)}
+                    className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-300 transition-all text-xs font-semibold text-slate-300 ml-4 backdrop-blur-sm"
+                  >
+                    {isBindingPickerOpen ? 'Hide Picker' : 'Rebind'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-slate-900/50 p-5 shadow-[0_4px_20px_rgba(245,158,11,0.1)]">
+                 <div className="flex items-center justify-between">
+                   <div className="text-sm font-medium text-amber-200/90 leading-relaxed">
+                     This node is not bound yet. <br/> <span className="text-amber-400/70 text-xs">Pick a concrete class below to configure the info payload.</span>
+                   </div>
+                   <button
+                    type="button"
+                    onClick={() => setIsBindingPickerOpen((prev) => !prev)}
+                    className="shrink-0 px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-200 transition-all text-xs font-semibold shadow-sm"
+                   >
+                    {isBindingPickerOpen ? 'Close' : 'Select Class'}
+                   </button>
+                 </div>
+              </div>
+            )}
+          </div>
+        </div>
 
+        {isBindingPickerOpen ? (
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/90 backdrop-blur-md overflow-hidden shadow-2xl relative">
+            <div className="px-4 py-3 border-b border-slate-700/70 bg-slate-800/80 flex items-center gap-3 relative">
+              <Search size={16} className="text-cyan-400 absolute left-4" />
+              <input
+                type="text"
+                value={bindingSearchQuery}
+                onChange={(event) => setBindingSearchQuery(event.target.value)}
+                placeholder="Search classes by name, namespace, or assembly..."
+                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:border-cyan-500/50 focus:bg-slate-950 transition-all"
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto p-2 space-y-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/50 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full pr-1">
+              {filteredBindings.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-700/50 px-3 py-8 text-sm text-slate-500 text-center">
+                  No classes found matching "<span className="text-slate-300">{bindingSearchQuery}</span>".
+                </div>
+              ) : (
+                filteredBindings.map((entry) => (
+                  <button
+                    key={`${entry.imageStableId}::${entry.classStableId}`}
+                    type="button"
+                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-200 hover:-translate-y-0.5
+                      ${data.binding?.imageStableId === entry.imageStableId && data.binding?.classStableId === entry.classStableId 
+                        ? 'border-cyan-500/50 bg-cyan-500/15 shadow-[0_2px_10px_rgba(6,182,212,0.15)]' 
+                        : 'border-transparent hover:border-slate-600/50 hover:bg-slate-800/80 hover:shadow-md'}`}
+                    onClick={() => handleBindClass(entry)}
+                  >
+                    <div className={`text-sm font-semibold truncate transition-colors ${data.binding?.classStableId === entry.classStableId ? 'text-cyan-100' : 'text-slate-200 group-hover:text-white'}`}>{entry.fullName}</div>
+                    <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-500 flex-wrap">
+                      <span className="bg-slate-950/50 px-1.5 py-0.5 rounded border border-slate-800">{entry.namespace || 'Global'}</span>
+                      <span className="text-slate-700">•</span>
+                      <span className="inline-flex items-center gap-1 text-slate-400 group-hover:text-cyan-400/70 transition-colors"><Layers3 size={10} /> {entry.imageName}</span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
+  const handleToggle = (type: 'member' | 'static' | 'function', itemId: string) => {
+    const listKey = type === 'member' ? 'members' : type === 'static' ? 'statics' : 'functions';
+    updateData({
+      infoSelection: {
+        ...data.infoSelection,
+        [listKey]: toggleSelectionEntry(data.infoSelection[listKey], itemId),
+      },
+    });
+  };
+
+  const updateSelectionBucket = (bucket: SelectionBucketKey, ids: string[]) => {
+    updateData({
+      infoSelection: {
+        ...data.infoSelection,
+        [bucket]: ids,
+      },
+    });
+  };
+
+  const hasBinding = Boolean(data.binding);
   const hasSelectableInfo =
     data.availableInfo.members.length > 0 ||
     data.availableInfo.statics.length > 0 ||
@@ -312,10 +503,19 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
                   draggable={canDragStaticAddress}
                   style={canDragStaticAddress ? { WebkitUserDrag: 'element', WebkitAppRegion: 'no-drag' } as any : { WebkitAppRegion: 'no-drag' } as any}
                   onDragStart={(e) => {
-                    if (canDragStaticAddress) {
+                    if (canDragStaticAddress && data.binding) {
                       e.stopPropagation();
-                      e.dataTransfer.setData('text/plain', staticAddress);
-                      e.dataTransfer.effectAllowed = 'copy';
+                      writeExpressionDragData(
+                        e.dataTransfer,
+                        createDragPayload(
+                          createStaticExpressionSource(
+                            data.binding.classStableId,
+                            descriptor.id as StableId,
+                            `${data.binding.name}.${descriptor.label}`,
+                          ),
+                          'class-static-panel',
+                        ),
+                      );
                     }
                   }}
                   onClick={() => handleToggle(bucket === 'members' ? 'member' : bucket === 'statics' ? 'static' : 'function', descriptor.id)}
@@ -327,7 +527,7 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
                   `}
                   title={canDragStaticAddress ? `Drag address ${staticAddress}` : undefined}
                 >
-                  <div className={`flex-1 min-w-0 flex flex-col justify-center`}>
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>{descriptor.label}</span>
                     {descriptor.detail ? <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">{descriptor.detail}</span> : null}
                   </div>
@@ -349,224 +549,135 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
   };
 
   return (
-    <div className="flex flex-col h-full text-slate-300">
-      <div className="mb-8 p-1 space-y-5">
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide px-1">Bound Class</label>
-          
-          <div className="relative group">
-            {data.binding ? (
-              <div className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-slate-900/50 p-4 shadow-[0_4px_20px_rgba(6,182,212,0.1)] transition-all duration-300 hover:shadow-[0_4px_25px_rgba(6,182,212,0.15)] hover:border-cyan-400/50">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-base text-cyan-100 font-bold truncate tracking-tight">{data.binding.fullName}</div>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-slate-400 flex-wrap font-medium">
-                      <span className="bg-slate-900/80 px-2 py-0.5 rounded text-slate-300 border border-slate-700/50">{data.binding.namespace || 'Global'}</span>
-                      <span className="inline-flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700/50 text-cyan-400/80"><Layers3 size={12} /> {data.binding.imageName}</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsBindingPickerOpen((prev) => !prev)}
-                    className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-300 transition-all text-xs font-semibold text-slate-300 ml-4 backdrop-blur-sm"
-                  >
-                    {isBindingPickerOpen ? 'Hide Picker' : 'Rebind'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-slate-900/50 p-5 shadow-[0_4px_20px_rgba(245,158,11,0.1)]">
-                 <div className="flex items-center justify-between">
-                   <div className="text-sm font-medium text-amber-200/90 leading-relaxed">
-                     This node is not bound yet. <br/> <span className="text-amber-400/70 text-xs">Pick a concrete class below to configure the info payload.</span>
-                   </div>
-                   <button
-                    type="button"
-                    onClick={() => setIsBindingPickerOpen((prev) => !prev)}
-                    className="shrink-0 px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-200 transition-all text-xs font-semibold shadow-sm"
-                   >
-                    {isBindingPickerOpen ? 'Close' : 'Select Class'}
-                   </button>
-                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+    <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/30 p-4 text-slate-300">
+      <div className="font-medium text-sm text-slate-200 px-1 border-b border-slate-700/50 pb-2 flex items-center justify-between gap-3">
+        <span>Info Payload Selection</span>
+        <span className="text-xs text-slate-500">{selectedCount}/{availableCount} selected</span>
+      </div>
 
-        {isBindingPickerOpen ? (
-          <div className="rounded-xl border border-slate-700/80 bg-slate-900/90 backdrop-blur-md overflow-hidden shadow-2xl relative">
-            <div className="px-4 py-3 border-b border-slate-700/70 bg-slate-800/80 flex items-center gap-3 relative">
-              <Search size={16} className="text-cyan-400 absolute left-4" />
-              <input
-                type="text"
-                value={bindingSearchQuery}
-                onChange={(event) => setBindingSearchQuery(event.target.value)}
-                placeholder="Search classes by name, namespace, or assembly..."
-                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:border-cyan-500/50 focus:bg-slate-950 transition-all"
-              />
-            </div>
-            <div className="max-h-72 overflow-y-auto p-2 space-y-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/50 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full pr-1">
-              {filteredBindings.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-700/50 px-3 py-8 text-sm text-slate-500 text-center">
-                  No classes found matching "<span className="text-slate-300">{bindingSearchQuery}</span>".
-                </div>
-              ) : (
-                filteredBindings.map((entry) => (
-                  <button
-                    key={`${entry.imageId}::${entry.classId}`}
-                    type="button"
-                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-200 hover:-translate-y-0.5
-                      ${data.binding?.imageId === entry.imageId && data.binding?.classId === entry.classId 
-                        ? 'border-cyan-500/50 bg-cyan-500/15 shadow-[0_2px_10px_rgba(6,182,212,0.15)]' 
-                        : 'border-transparent hover:border-slate-600/50 hover:bg-slate-800/80 hover:shadow-md'}`}
-                    onClick={() => handleBindClass(entry)}
-                  >
-                    <div className={`text-sm font-semibold truncate transition-colors ${data.binding?.classId === entry.classId ? 'text-cyan-100' : 'text-slate-200 group-hover:text-white'}`}>{entry.fullName}</div>
-                    <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-500 flex-wrap">
-                      <span className="bg-slate-950/50 px-1.5 py-0.5 rounded border border-slate-800">{entry.namespace || 'Global'}</span>
-                      <span className="text-slate-700">•</span>
-                      <span className="inline-flex items-center gap-1 text-slate-400 group-hover:text-cyan-400/70 transition-colors"><Layers3 size={10} /> {entry.imageName}</span>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
+      <div className="space-y-4">
+        {!hasBinding ? (
+          <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+            Bind a class first, then select which statics, members, and methods should be wrapped under the fixed <span className="text-cyan-400 font-mono">info</span> output payload.
+          </div>
+        ) : !hasSelectableInfo ? (
+          <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+            This class has no exportable metadata categories available yet.
           </div>
         ) : null}
 
-        <div 
-          className={`relative rounded-xl border p-5 transition-all duration-300
-                     ${isDragOverInput ? 'bg-cyan-500/10 border-cyan-400 border-dashed shadow-[0_0_25px_rgba(6,182,212,0.25)] scale-[1.01]' : 'bg-slate-900/80 border-slate-700/70 hover:border-slate-600'}`}
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-          onDragOver={(e) => { e.preventDefault(); setIsDragOverInput(true); }}
-          onDragLeave={() => setIsDragOverInput(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setIsDragOverInput(false);
-            const dataText = e.dataTransfer.getData('text/plain');
-            if (dataText) {
-              updateData({ instanceAddress: dataText });
-            }
-          }}
-        >
-          <label className="block text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider flex items-center justify-between">
-            <span>Instance Address</span>
-            {isDragOverInput && <span className="text-cyan-300 text-[10px] bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-1 rounded-full animate-pulse shadow-[0_0_10px_rgba(6,182,212,0.5)]">Drop item here to assign</span>}
-          </label>
-          <div 
-            className={`relative group ${isDragOverInput ? 'scale-[1.02]' : ''} transition-transform duration-200 block`}
-            onDragEnter={(e) => { 
-                e.preventDefault(); 
-                e.stopPropagation(); 
-                e.dataTransfer.dropEffect = 'copy';
-                setIsDragOverInput(true); 
-            }}
-            onDragOver={(e) => { 
-                e.preventDefault(); 
-                e.stopPropagation(); 
-                e.dataTransfer.dropEffect = 'copy';
-                if (!isDragOverInput) setIsDragOverInput(true); 
-            }}
-            onDragLeave={(e) => { 
-                e.preventDefault(); 
-                e.stopPropagation(); 
-                setIsDragOverInput(false); 
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsDragOverInput(false);
-              const dataText = e.dataTransfer.getData('text/plain');
-              if (dataText) {
-                updateData({ instanceAddress: dataText });
-              }
-            }}
-          >
-            <div className={`absolute inset-0 bg-cyan-500/20 blur-xl transition-opacity duration-300 rounded-lg pointer-events-none ${isDragOverInput ? 'opacity-100' : 'opacity-0'}`} />
-            
-            <input
-              type="text"
-              placeholder="e.g. 0x12345678 or drag instance ref here..."
-              value={data.instanceAddress || ''}
-              onChange={(e) => updateData({ instanceAddress: e.target.value })}
-              className={`relative z-10 w-full bg-slate-950 border rounded-lg px-4 py-2.5 text-sm text-slate-200 outline-none transition-all font-mono pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto
-                         ${isDragOverInput ? 'border-cyan-400 ring-2 ring-cyan-500/20 bg-cyan-950/20 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20'}`}
-            />
-          </div>
-        </div>
-        
-        <div className="font-medium text-sm text-slate-200 mt-8 mb-3 px-1 border-b border-slate-700/50 pb-2 flex items-center justify-between gap-3">
-          <span>Info Payload Selection</span>
-          <span className="text-xs text-slate-500">{selectedCount}/{availableCount} selected</span>
-        </div>
-        
-        <div className="space-y-4">
-            {!hasBinding ? (
-                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                      Bind a class first, then select which statics, members, and methods should be wrapped under the fixed <span className="text-cyan-400 font-mono">info</span> output payload.
-                </div>
-            ) : !hasSelectableInfo ? (
-                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                    This class has no exportable metadata categories available yet.
-                </div>
-            ) : null}
-
-            {renderSelectionSection('statics', data.availableInfo.statics)}
-            {renderSelectionSection('members', data.availableInfo.members)}
-            {renderSelectionSection('functions', data.availableInfo.functions)}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- Output Edit Component ---
-const ClassNodeOutputEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data }) => {
-  const infoPreview = useMemo(() => createInfoPreview(data), [data]);
-
-  return (
-    <div className="flex flex-col h-full text-slate-300">
-      <div className="font-medium text-sm text-slate-200 mb-3 px-1 border-b border-slate-700/50 pb-2 flex items-center justify-between gap-3">
-        <span>Output Payload Preview</span>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-          <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 shadow-inner">
-              <pre className="text-[11px] leading-relaxed text-cyan-100 overflow-x-auto whitespace-pre-wrap break-all">{JSON.stringify(infoPreview, null, 2)}</pre>
-          </div>
+        {renderSelectionSection('statics', data.availableInfo.statics)}
+        {renderSelectionSection('members', data.availableInfo.members)}
+        {renderSelectionSection('functions', data.availableInfo.functions)}
       </div>
     </div>
   );
 };
 
 const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
-  typeId: 'class-ref',
-  displayName: 'Class Reference',
-  description: 'Resolves a concrete class binding and wraps selected metadata into a fixed info JSON output.',
+  manifest: {
+    type: 'class-ref',
+    typeVersion: 1,
+    family: 'runtime',
+    displayName: 'Class Reference',
+    description: 'Resolves a concrete class binding and wraps selected metadata into a fixed info JSON output.',
+    category: 'Runtime',
+    tags: ['class', 'metadata', 'json', 'unity'],
+    inputs: [
+      { key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' },
+      { key: 'instance-in', displayName: 'Instance Ref', direction: 'input', channel: 'data', cardinality: 'single', dataType: PARAMETER_DEFINITIONS_SCHEMA.id },
+    ],
+    outputs: [
+      { key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' },
+      { key: 'info-out', displayName: 'Info', direction: 'output', channel: 'data', cardinality: 'single', dataType: CLASS_INFO_SCHEMA.id },
+    ],
+    parameters: [{
+      name: 'instanceSource',
+      displayName: 'Instance Address',
+      valueType: 'string',
+      expressionSupport: 'optional',
+      ui: {
+        section: 'Binding',
+        placeholder: 'literal address or drag expression source here...',
+        helperText: 'Accepts literal, input-expression, or static-expression bindings.',
+      },
+    }],
+  },
   icon: Box,
-  category: 'Runtime',
-  tags: ['class', 'metadata', 'json', 'unity'],
-  defaultInputs: CLASS_NODE_INPUTS,
-  defaultOutputs: CLASS_NODE_OUTPUTS,
   createInitialData: createClassNodeData,
-  validateExecution: ({ node, incoming }) => validateClassNodeExecution(node.data, (incoming['instance-in']?.length ?? 0) > 0),
-  execute: ({ node, incoming }) => {
-    const data = node.data;
-    const hasInput = (incoming['instance-in']?.length ?? 0) > 0;
-    const validation = validateClassNodeExecution(data, hasInput);
-    if (!validation.valid) {
-      return {
-        state: 'error',
-        error: validation.error,
-      };
+  resolveDisplayName: (data) => data.nodeName?.trim() || data.binding?.name || undefined,
+  hydrateData: (instance, baseData) => {
+    const documentState = parseClassNodeDocumentState(instance.documentState);
+    return {
+      ...baseData,
+      nodeName: instance.displayName,
+      binding: fromClassBindingReference(documentState.classBinding),
+      instanceSource: (instance.bindings.instanceSource as ExpressionSource | undefined) ?? null,
+      availableInfo: (instance.documentState.availableInfo as ClassInfoCatalog | undefined) ?? createEmptyCatalog(),
+      infoSelection: fromClassExportSelection(documentState.exportSelection),
+    };
+  },
+  dehydrateData: (data) => {
+    const bindings: StudioNodeRuntimeState['bindings'] = {};
+    if (data.instanceSource) {
+      bindings.instanceSource = data.instanceSource;
     }
 
     return {
-      state: 'success',
-      outputs: {
-        'info-out': createClassInfoEnvelope(data.binding, data.availableInfo, data.infoSelection),
+      displayName: data.nodeName?.trim() || undefined,
+      parameters: {},
+      bindings,
+      documentState: {
+        ...createClassNodeDocumentState(data),
+        availableInfo: data.availableInfo,
       },
     };
+  },
+  createRuntimeState: (node) => {
+    const bindings: StudioNodeRuntimeState['bindings'] = {};
+    if (node.data.instanceSource) {
+      bindings.instanceSource = node.data.instanceSource;
+    }
+
+    return {
+      displayName: node.data.nodeName?.trim() || undefined,
+      parameters: {},
+      bindings,
+      documentState: {
+        ...createClassNodeDocumentState(node.data),
+        availableInfo: node.data.availableInfo,
+      },
+    };
+  },
+  executionContract: {
+    validate: (context) => {
+      const hasIncomingInstance = (context.inputBindings['instance-in']?.length ?? 0) > 0 || (context.resolvedInputs['instance-in']?.length ?? 0) > 0;
+      const hasOwnInstanceBinding = hasResolvedExecutionValue(context.resolvedBindings.instanceSource);
+
+      if (!hasIncomingInstance && !hasOwnInstanceBinding) {
+        return [{
+          severity: 'error',
+          code: 'class.instance.required',
+          message: 'Class node requires an incoming instance reference or an instance source expression.',
+          target: 'instance-in',
+        }];
+      }
+
+      return [];
+    },
+    execute: ({ documentState }) => {
+      const classDocumentState = parseClassNodeDocumentState(documentState);
+      return {
+        state: 'success',
+        outputs: {
+          'info-out': createClassInfoEnvelope(
+            fromClassBindingReference(classDocumentState.classBinding),
+            (documentState.availableInfo as ClassInfoCatalog | undefined) ?? createEmptyCatalog(),
+            fromClassExportSelection(classDocumentState.exportSelection),
+          ),
+        },
+      };
+    },
   },
   getExecutionPreview: (data) => {
     return {
@@ -574,7 +685,8 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
     };
   },
   CanvasComponent: ClassNodeCanvas,
-  EditComponent: ClassNodeEdit,
+  EditComponent: ClassNodeBindingEditor,
+  EditFooterComponent: ClassNodeSelectionEditor,
 };
 
 export const ClassNodeDef = defineStudioNode(ClassNodeDefinition);

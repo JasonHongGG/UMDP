@@ -1,4 +1,5 @@
-import { PortHandleType, PortType, StudioEdge, StudioNode } from './types';
+import { getStudioNodePort } from './NodeRegistry';
+import { getConnectionChannelForPortType, IPort, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
 
 export interface ConnectionEndpoint {
   nodeId: string;
@@ -23,13 +24,51 @@ function getNodeById(nodeId: string, nodes: StudioNode[]) {
 }
 
 function hasMatchingPort(node: StudioNode | undefined, portId: string, handleType: PortHandleType, portType: PortType) {
-  const ports = handleType === 'source' ? node?.data.outputs : node?.data.inputs;
-  const port = ports?.find((item) => item.id === portId);
+  const port = getStudioNodePort(node, handleType === 'source' ? 'output' : 'input', portId);
   return port?.type === portType;
 }
 
 export function arePortTypesCompatible(source: PortType, target: PortType) {
   return source === target;
+}
+
+export function arePortDataTypesCompatible(source: IPort, target: IPort) {
+  if (source.type !== 'json' || target.type !== 'json') {
+    return true;
+  }
+
+  const sourceDataType = source.dataType ?? source.schema?.id;
+  const targetDataType = target.dataType ?? target.schema?.id;
+
+  if (!sourceDataType || !targetDataType) {
+    return true;
+  }
+
+  return sourceDataType === targetDataType;
+}
+
+export function arePortsCompatible(source: IPort, target: IPort) {
+  return arePortTypesCompatible(source.type, target.type)
+    && source.channel === target.channel
+    && arePortDataTypesCompatible(source, target);
+}
+
+function collectReplacementEdgeIds(edges: StudioEdge[], sourcePort: IPort, targetPort: IPort, source: ConnectionEndpoint, target: ConnectionEndpoint) {
+  const replacements = new Set<string>();
+
+  if (targetPort.cardinality === 'single') {
+    edges
+      .filter((edge) => edge.channel === targetPort.channel && edge.targetNodeId === target.nodeId && edge.targetPortId === target.portId)
+      .forEach((edge) => replacements.add(edge.id));
+  }
+
+  if (sourcePort.cardinality === 'single') {
+    edges
+      .filter((edge) => edge.channel === sourcePort.channel && edge.sourceNodeId === source.nodeId && edge.sourcePortId === source.portId)
+      .forEach((edge) => replacements.add(edge.id));
+  }
+
+  return [...replacements];
 }
 
 export function validateConnection(
@@ -54,11 +93,19 @@ export function validateConnection(
     return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Port types are incompatible.' };
   }
 
+  const channel = getConnectionChannelForPortType(source.portType);
+  if (channel !== getConnectionChannelForPortType(target.portType)) {
+    return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Connection channels are incompatible.' };
+  }
+
   const sourceNode = getNodeById(source.nodeId, nodes);
   const targetNode = getNodeById(target.nodeId, nodes);
   if (!sourceNode || !targetNode) {
     return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Connection endpoint not found.' };
   }
+
+  const sourcePort = getStudioNodePort(sourceNode, 'output', source.portId);
+  const targetPort = getStudioNodePort(targetNode, 'input', target.portId);
 
   if (!hasMatchingPort(sourceNode, source.portId, source.handleType, source.portType)) {
     return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Source output port is missing or mismatched.' };
@@ -68,8 +115,17 @@ export function validateConnection(
     return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Target input port is missing or mismatched.' };
   }
 
+  if (!sourcePort || !targetPort) {
+    return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Connection endpoint not found.' };
+  }
+
+  if (!arePortsCompatible(sourcePort, targetPort)) {
+    return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Port schemas or connection semantics are incompatible.' };
+  }
+
   const duplicateEdge = edges.find(
     (edge) =>
+      edge.channel === channel &&
       edge.sourceNodeId === source.nodeId &&
       edge.sourcePortId === source.portId &&
       edge.targetNodeId === target.nodeId &&
@@ -79,9 +135,7 @@ export function validateConnection(
     return { ...EMPTY_CONNECTION_VALIDATION, reason: 'Connection already exists.' };
   }
 
-  const replaceEdgeIds = edges
-    .filter((edge) => edge.targetNodeId === target.nodeId && edge.targetPortId === target.portId)
-    .map((edge) => edge.id);
+  const replaceEdgeIds = collectReplacementEdgeIds(edges, sourcePort, targetPort, source, target);
 
   return {
     valid: true,

@@ -1,14 +1,16 @@
 import {
-  NodeExecutionContext,
   NodeExecutionInputMap,
   NodeExecutionSnapshot,
-  NodeValidationResult,
+  StudioNodeRuntimeState,
   StudioEdge,
   StudioNode,
   StudioNodeDefinition,
 } from './types';
+import { createInputExpressionSource } from './expressionUtils';
+import { getStudioNodePort, getStudioNodePorts } from './NodeRegistry';
+import type { ExpressionSource, NodeExecutionContext, ValidationIssue } from '../../domain/studio/contracts';
 
-const VALID_NODE_EXECUTION: NodeValidationResult = { valid: true };
+const EMPTY_ISSUES: ValidationIssue[] = [];
 
 export function getStudioNodeById(nodeId: string, nodes: StudioNode[]) {
   return nodes.find((node) => node.id === nodeId);
@@ -23,11 +25,11 @@ export function getOutgoingEdges(nodeId: string, edges: StudioEdge[]) {
 }
 
 export function getNodeInputPort(node: StudioNode | undefined, portId: string) {
-  return node?.data.inputs.find((port) => port.id === portId);
+  return getStudioNodePort(node, 'input', portId);
 }
 
 export function getNodeOutputPort(node: StudioNode | undefined, portId: string) {
-  return node?.data.outputs.find((port) => port.id === portId);
+  return getStudioNodePort(node, 'output', portId);
 }
 
 export function getOutgoingFlowEdges(nodeId: string, nodes: StudioNode[], edges: StudioEdge[]) {
@@ -37,10 +39,10 @@ export function getOutgoingFlowEdges(nodeId: string, nodes: StudioNode[], edges:
   }
 
   const flowPortIds = new Set(
-    node.data.outputs.filter((port) => port.type === 'flow').map((port) => port.id),
+    getStudioNodePorts(node, 'output').filter((port) => port.type === 'flow').map((port) => port.id),
   );
 
-  return getOutgoingEdges(nodeId, edges).filter((edge) => flowPortIds.has(edge.sourcePortId));
+  return getOutgoingEdges(nodeId, edges).filter((edge) => edge.channel === 'control' && flowPortIds.has(edge.sourcePortId));
 }
 
 export function getIncomingJsonInputs(
@@ -55,10 +57,14 @@ export function getIncomingJsonInputs(
   }
 
   const jsonInputPortIds = new Set(
-    targetNode.data.inputs.filter((port) => port.type === 'json').map((port) => port.id),
+    getStudioNodePorts(targetNode, 'input').filter((port) => port.type === 'json').map((port) => port.id),
   );
 
   return getIncomingEdges(nodeId, edges).reduce<NodeExecutionInputMap>((acc, edge) => {
+    if (edge.channel !== 'data') {
+      return acc;
+    }
+
     if (!jsonInputPortIds.has(edge.targetPortId)) {
       return acc;
     }
@@ -83,32 +89,184 @@ export function getIncomingJsonInputs(
   }, {});
 }
 
+export function getIncomingControlNodeIds(nodeId: string, edges: StudioEdge[]) {
+  return getIncomingEdges(nodeId, edges)
+    .filter((edge) => edge.channel === 'control')
+    .map((edge) => edge.sourceNodeId);
+}
+
+export function getIncomingInputBindings(
+  nodeId: string,
+  nodes: StudioNode[],
+  edges: StudioEdge[],
+): NodeExecutionContext['inputBindings'] {
+  const targetNode = getStudioNodeById(nodeId, nodes);
+  if (!targetNode) {
+    return {};
+  }
+
+  const jsonInputPortIds = new Set(
+    getStudioNodePorts(targetNode, 'input').filter((port) => port.type === 'json').map((port) => port.id),
+  );
+
+  return getIncomingEdges(nodeId, edges).reduce<NodeExecutionContext['inputBindings']>((acc, edge) => {
+    if (edge.channel !== 'data' || !jsonInputPortIds.has(edge.targetPortId)) {
+      return acc;
+    }
+
+    if (!acc[edge.targetPortId]) {
+      acc[edge.targetPortId] = [];
+    }
+
+    acc[edge.targetPortId].push(
+      createInputExpressionSource(
+        edge.sourceNodeId,
+        edge.sourcePortId,
+        [],
+        `${edge.sourceNodeId}.${edge.sourcePortId}`,
+      ),
+    );
+
+    return acc;
+  }, {});
+}
+
+function getNodeRuntimeState(node: StudioNode, definition?: StudioNodeDefinition): StudioNodeRuntimeState {
+  return definition?.createRuntimeState?.(node) ?? {
+    parameters: {},
+    bindings: {},
+    documentState: {},
+  };
+}
+
+function getValueAtPath(value: unknown, path: string[]) {
+  return path.reduce<unknown>((current, segment) => {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+      return Number.isInteger(index) ? current[index] : undefined;
+    }
+
+    if (typeof current === 'object') {
+      return (current as Record<string, unknown>)[segment];
+    }
+
+    return undefined;
+  }, value);
+}
+
+function resolveLiteralValue(source: Extract<ExpressionSource, { kind: 'literal' }>) {
+  if (source.valueType === 'number') {
+    const parsed = Number(source.raw);
+    return Number.isNaN(parsed) ? source.raw : parsed;
+  }
+
+  if (source.valueType === 'boolean') {
+    if (source.raw === 'true') {
+      return true;
+    }
+
+    if (source.raw === 'false') {
+      return false;
+    }
+  }
+
+  if (source.valueType === 'json') {
+    try {
+      return JSON.parse(source.raw);
+    } catch {
+      return source.raw;
+    }
+  }
+
+  return source.raw;
+}
+
+export function resolveExpressionSource(
+  source: ExpressionSource,
+  snapshots: Record<string, NodeExecutionSnapshot>,
+) {
+  if (source.kind === 'literal') {
+    return resolveLiteralValue(source);
+  }
+
+  if (source.kind === 'input-expression') {
+    const sourceNodeId = source.sourceNodeId;
+    if (!sourceNodeId) {
+      return undefined;
+    }
+
+    const payload = snapshots[sourceNodeId]?.outputs[source.bindingSlot]?.payload;
+    if (payload === undefined) {
+      return undefined;
+    }
+
+    return getValueAtPath(payload, source.sourcePath);
+  }
+
+  return {
+    classStableId: source.classStableId,
+    memberStableId: source.memberStableId,
+    displayText: source.displayText,
+    expression: source.expression,
+  };
+}
+
+function resolveBindingValue(
+  binding: ExpressionSource | ExpressionSource[],
+  snapshots: Record<string, NodeExecutionSnapshot>,
+) {
+  if (Array.isArray(binding)) {
+    return binding.map((entry) => resolveExpressionSource(entry, snapshots));
+  }
+
+  return resolveExpressionSource(binding, snapshots);
+}
+
 export function createNodeExecutionContext(
+  documentId: string,
   nodeId: string,
   nodes: StudioNode[],
   edges: StudioEdge[],
   snapshots: Record<string, NodeExecutionSnapshot>,
+  definition?: StudioNodeDefinition,
 ): NodeExecutionContext | null {
   const node = getStudioNodeById(nodeId, nodes);
   if (!node) {
     return null;
   }
 
+  const runtimeState = getNodeRuntimeState(node, definition);
+  const incoming = getIncomingJsonInputs(nodeId, nodes, edges, snapshots);
+
   return {
-    node,
-    nodes,
-    edges,
-    incoming: getIncomingJsonInputs(nodeId, nodes, edges, snapshots),
+    documentId,
+    nodeId,
+    nodeType: node.type,
+    parameters: runtimeState.parameters,
+    bindings: runtimeState.bindings,
+    resolvedBindings: Object.fromEntries(
+      Object.entries(runtimeState.bindings).map(([key, value]) => [key, resolveBindingValue(value, snapshots)]),
+    ),
+    documentState: runtimeState.documentState,
+    inputBindings: getIncomingInputBindings(nodeId, nodes, edges),
+    resolvedInputs: Object.fromEntries(
+      Object.entries(incoming).map(([key, envelopes]) => [key, envelopes.map((envelope) => envelope.payload)]),
+    ),
+    controlInputs: getIncomingControlNodeIds(nodeId, edges),
   };
 }
 
 export function validateNodeExecution(
   context: NodeExecutionContext,
   definition?: StudioNodeDefinition,
-): NodeValidationResult {
-  if (!definition?.validateExecution) {
-    return VALID_NODE_EXECUTION;
+): ValidationIssue[] {
+  if (!definition?.executionContract) {
+    return EMPTY_ISSUES;
   }
 
-  return definition.validateExecution(context);
+  return definition.executionContract.validate(context);
 }

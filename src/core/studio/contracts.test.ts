@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  arePortDataTypesCompatible,
+  arePortsCompatible,
   arePortTypesCompatible,
   CLASS_INFO_SCHEMA,
   createClassInfoEnvelope,
@@ -7,6 +9,7 @@ import {
   createFlowPort,
   createJsonPort,
   GENERIC_JSON_SCHEMA,
+  PARAMETER_DEFINITIONS_SCHEMA,
 } from './contracts';
 
 describe('studio contracts', () => {
@@ -19,6 +22,17 @@ describe('studio contracts', () => {
     expect(arePortTypesCompatible('flow', 'flow')).toBe(true);
     expect(arePortTypesCompatible('json', 'json')).toBe(true);
     expect(arePortTypesCompatible('flow', 'json')).toBe(false);
+  });
+
+  it('matches json ports only when their declared schemas align', () => {
+    const genericOutput = createJsonPort('json-out', 'Json Out', GENERIC_JSON_SCHEMA);
+    const classInfoInput = createJsonPort('info-in', 'Info In', CLASS_INFO_SCHEMA, undefined, { direction: 'input' });
+    const classInfoOutput = createJsonPort('info-out', 'Info Out', CLASS_INFO_SCHEMA);
+    const paramsInput = createJsonPort('params-in', 'Params In', PARAMETER_DEFINITIONS_SCHEMA, undefined, { direction: 'input' });
+
+    expect(arePortDataTypesCompatible(genericOutput, classInfoInput)).toBe(false);
+    expect(arePortsCompatible(classInfoOutput, classInfoInput)).toBe(true);
+    expect(arePortsCompatible(classInfoOutput, paramsInput)).toBe(false);
   });
 
   it('creates a generic workflow envelope with schema and meta', () => {
@@ -41,10 +55,15 @@ describe('studio contracts', () => {
   });
 
   it('emits only the selected class info entries in a bound class envelope', () => {
+    const memberHealth = 'field:player:health' as any;
+    const memberSpeed = 'field:player:speed' as any;
+    const staticInstance = 'field:player:instance' as any;
+    const functionMove = 'method:player:move' as any;
+
     const envelope = createClassInfoEnvelope(
       {
-        imageId: 'img-a',
-        classId: 'player',
+        imageStableId: 'image:img-a' as any,
+        classStableId: 'class:player' as any,
         fullName: 'Gameplay.PlayerController',
         name: 'PlayerController',
         namespace: 'Gameplay',
@@ -52,23 +71,23 @@ describe('studio contracts', () => {
       },
       {
         members: [
-          { id: 'member:health', label: 'health' },
-          { id: 'member:speed', label: 'speed' },
+          { id: memberHealth, label: 'health' },
+          { id: memberSpeed, label: 'speed' },
         ],
-        statics: [{ id: 'static:Instance', label: 'Instance' }],
-        functions: [{ id: 'function:Move', label: 'Move' }],
+        statics: [{ id: staticInstance, label: 'Instance' }],
+        functions: [{ id: functionMove, label: 'Move' }],
       },
       {
-        members: ['member:health'],
-        statics: ['static:Instance'],
+        members: [memberHealth],
+        statics: [staticInstance],
         functions: [],
       },
     );
 
     expect(envelope.meta).toMatchObject({ bindingState: 'bound' });
     expect(envelope.payload).toEqual({
-      statics: { 'static:Instance': null },
-      members: { 'member:health': null },
+      statics: { [staticInstance]: null },
+      members: { [memberHealth]: null },
       functions: [],
     });
   });

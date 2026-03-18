@@ -1,18 +1,20 @@
 import React from 'react';
 import { Hexagon, Layers3, ChevronRight, LoaderCircle, Waypoints, Plus } from 'lucide-react';
-import type { ClassInfo, FieldInfo, StaticFieldInfo } from '../../types';
+import type { AnalysisClassInfo, AnalysisFieldInfo, AnalysisStaticFieldInfo } from '../../domain/analysis/view-models';
+import type { ClassBinding } from '../../domain/studio/editor';
+import type { InspectorTab } from '../../domain/analysis/AnalysisWorkspaceContext';
 
 interface ClassInspectorAppProps {
-  classInfo: ClassInfo;
-  classLookupMap: Map<string, { imageId: string; classId: string; name: string; namespace: string; imageName: string }>;
+  classInfo: AnalysisClassInfo;
+  classLookupMap: Map<string, { imageStableId: string; classStableId: string; name: string; namespace: string; imageName: string }>;
   navigateToType: (typeName: string) => void;
-  runtimeStaticFields: StaticFieldInfo[];
-  runtimeFields: FieldInfo[];
+  runtimeStaticFields: AnalysisStaticFieldInfo[];
+  runtimeFields: AnalysisFieldInfo[];
   isLoadingRuntimeFields: boolean;
   runtimeFieldError: string | null;
-  activeTabId: string;
+  activeTab: InspectorTab | null;
   onSetReferenceTarget?: (fullName: string) => void;
-  onAddToStudio?: (classInfo: ClassInfo, source: { imageId: string; classId: string; imageName: string }) => void;
+  onAddToStudio?: (binding: ClassBinding) => void;
 }
 
 export default function ClassInspectorApp({
@@ -23,17 +25,11 @@ export default function ClassInspectorApp({
   runtimeFields,
   isLoadingRuntimeFields,
   runtimeFieldError,
-  activeTabId,
+  activeTab,
   onSetReferenceTarget,
   onAddToStudio,
 }: ClassInspectorAppProps) {
-  const [activeTabImageId, activeTabClassId] = activeTabId.split('::');
-  const activeTabImageName = classLookupMap.get(classInfo.full_name)?.imageName || 'Unknown Assembly';
-  const resolvedClassInfo: ClassInfo = {
-    ...classInfo,
-    static_fields: runtimeStaticFields,
-    fields: runtimeFields,
-  };
+  const activeTabImageName = activeTab?.imageName ?? classLookupMap.get(classInfo.fullName)?.imageName ?? 'Unknown Assembly';
 
   return (
     <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-6 z-10 w-full h-full">
@@ -45,7 +41,7 @@ export default function ClassInspectorApp({
           </h1>
           {onSetReferenceTarget && (
             <button
-              onClick={() => onSetReferenceTarget(classInfo.full_name)}
+              onClick={() => onSetReferenceTarget(classInfo.fullName)}
               className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
               title="Find references to this class"
             >
@@ -54,9 +50,12 @@ export default function ClassInspectorApp({
           )}
           {onAddToStudio && (
             <button
-              onClick={() => onAddToStudio(resolvedClassInfo, {
-                imageId: activeTabImageId,
-                classId: activeTabClassId,
+              onClick={() => activeTab && onAddToStudio({
+                imageStableId: activeTab.imageStableId,
+                classStableId: activeTab.classStableId,
+                fullName: classInfo.fullName,
+                name: classInfo.name,
+                namespace: classInfo.namespace,
                 imageName: activeTabImageName,
               })}
               className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
@@ -93,7 +92,7 @@ export default function ClassInspectorApp({
             headers={['Type', 'Name', 'Address', 'Value']}
             columnClassNames={['min-w-[10rem]', 'min-w-[12rem]', 'min-w-[10rem] whitespace-nowrap', 'min-w-[8rem]']}
             data={runtimeStaticFields.map((f, index) => [
-              <TypeLink key={`stype-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
+              <TypeLink key={`stype-${index}`} typeName={f.fieldType} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
               <span key={`sname-${index}`} className="text-slate-200">{f.name}</span>,
               <span key={`saddr-${index}`} className="text-cyan-400 font-mono text-[10px] whitespace-nowrap">{f.address ?? '?'}</span>,
               <span key={`sval-${index}`} className="text-yellow-400 font-mono text-[10px] break-all">{f.value ?? '?'}</span>
@@ -106,7 +105,7 @@ export default function ClassInspectorApp({
             headers={['Offset', 'Type', 'Name']}
             data={runtimeFields.map((f, index) => [
               <span key={`offset-${index}`} className="text-cyan-400">0x{f.offset?.toUpperCase() ?? '?'}</span>,
-              <TypeLink key={`type-${index}`} typeName={f.field_type} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
+              <TypeLink key={`type-${index}`} typeName={f.fieldType} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
               <span key={`name-${index}`} className="text-slate-200">{f.name}</span>
             ])}
           />

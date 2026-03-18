@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Layers3, Search, X } from 'lucide-react';
-import { createEmptyClassInfoSelection, filterStudioClassCatalog } from '../../../core/studio/classCatalog';
-import { useStudioClassCatalog } from '../../../core/studio/StudioClassCatalogContext';
-import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { createEmptyClassInfoSelection, filterStudioClassCatalog } from '../../../domain/studio/editor';
+import { useStudioClassCatalog, useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
 import { globalNodeRegistry } from '../../../core/studio/NodeRegistry';
 
 type ModalMode = 'nodes' | 'class-picker';
@@ -30,9 +29,9 @@ export function AddNodeModal() {
     const query = searchQuery.toLowerCase();
     return availableNodes.filter(
       (node) =>
-        node.displayName.toLowerCase().includes(query) ||
-        node.description.toLowerCase().includes(query) ||
-        node.typeId.toLowerCase().includes(query)
+        node.manifest.displayName.toLowerCase().includes(query) ||
+        node.manifest.description.toLowerCase().includes(query) ||
+        node.manifest.type.toLowerCase().includes(query)
     );
   }, [searchQuery, availableNodes]);
 
@@ -109,13 +108,13 @@ export function AddNodeModal() {
             onKeyDown={(e) => {
               if (e.key === 'Escape') closeAddModal();
               if (e.key === 'Enter' && mode === 'nodes' && filteredNodes.length > 0) {
-                if (filteredNodes[0].typeId === 'class-ref') {
+                if (filteredNodes[0].manifest.type === 'class-ref') {
                   setMode('class-picker');
                   setSearchQuery('');
                   return;
                 }
 
-                handleCreateGenericNode(filteredNodes[0].typeId);
+                handleCreateGenericNode(filteredNodes[0].manifest.type);
               }
               if (e.key === 'Enter' && mode === 'class-picker' && filteredClasses.length > 0) {
                 handleCreateClassNode(filteredClasses[0]);
@@ -145,16 +144,16 @@ export function AddNodeModal() {
                 const Icon = node.icon;
                 return (
                   <button
-                    key={node.typeId}
+                    key={node.manifest.type}
                     className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-800/80 transition-all text-left group border border-transparent hover:border-slate-700/50"
                     onClick={() => {
-                      if (node.typeId === 'class-ref') {
+                      if (node.manifest.type === 'class-ref') {
                         setMode('class-picker');
                         setSearchQuery('');
                         return;
                       }
 
-                      handleCreateGenericNode(node.typeId);
+                      handleCreateGenericNode(node.manifest.type);
                     }}
                   >
                     <div className="w-8 h-8 rounded bg-cyan-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500/20 transition-colors">
@@ -162,13 +161,13 @@ export function AddNodeModal() {
                     </div>
                     <div className="flex flex-col">
                       <span className="text-slate-200 text-sm font-medium group-hover:text-cyan-400 transition-colors">
-                        {node.displayName}
+                        {node.manifest.displayName}
                       </span>
-                      {node.category ? (
-                        <span className="text-[10px] uppercase tracking-wider text-cyan-500/80 mt-0.5">{node.category}</span>
+                      {node.manifest.category ? (
+                        <span className="text-[10px] uppercase tracking-wider text-cyan-500/80 mt-0.5">{node.manifest.category}</span>
                       ) : null}
                       <span className="text-slate-500 text-xs mt-0.5 line-clamp-2">
-                        {node.description}
+                        {node.manifest.description}
                       </span>
                     </div>
                   </button>
@@ -195,7 +194,7 @@ export function AddNodeModal() {
             <div className="flex flex-col gap-1">
               {filteredClasses.map((entry) => (
                 <button
-                  key={`${entry.imageId}::${entry.classId}`}
+                  key={`${entry.imageStableId}::${entry.classStableId}`}
                   className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-800/80 transition-all text-left group border border-transparent hover:border-emerald-500/30"
                   onClick={() => handleCreateClassNode(entry)}
                 >

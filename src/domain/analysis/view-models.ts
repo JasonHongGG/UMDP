@@ -1,0 +1,121 @@
+import type { StableId } from '../contracts/shared-identity';
+import type { ClassDescriptor, ImageDescriptor, RuntimeClassOverlayDescriptor } from './contracts';
+
+export type AnalysisImageInfo = ImageDescriptor;
+
+export interface AnalysisClassSummary {
+  stableId: StableId;
+  imageStableId: StableId;
+  legacyImageId: string;
+  legacyClassId: string;
+  name: string;
+  namespace: string;
+  fullName: string;
+  imageName: string;
+}
+
+export interface AnalysisFieldInfo {
+  offset: string | null;
+  name: string;
+  fieldType: string;
+}
+
+export interface AnalysisStaticFieldInfo extends AnalysisFieldInfo {
+  address: string | null;
+  value: string | null;
+}
+
+export interface AnalysisMethodInfo {
+  name: string;
+  signature: string;
+  tags: string[];
+}
+
+export interface AnalysisClassInfo {
+  stableId: StableId;
+  imageStableId: StableId;
+  legacyImageId: string;
+  legacyClassId: string;
+  name: string;
+  namespace: string;
+  fullName: string;
+  inheritance: Array<{ name: string }>;
+  staticFields: AnalysisStaticFieldInfo[];
+  fields: AnalysisFieldInfo[];
+  methods: AnalysisMethodInfo[];
+}
+
+export interface GlobalSearchResult {
+  imageStableId: StableId;
+  classStableId: StableId;
+  imageName: string;
+  className: string;
+  matchType: 'Class' | 'Field' | 'StaticField' | 'Method';
+  matchText: string;
+  isInherited?: boolean;
+}
+
+export interface ClassReferenceResult {
+  imageStableId: StableId;
+  classStableId: StableId;
+  imageName: string;
+  className: string;
+  matchType: 'Inheritance' | 'Member' | 'Function';
+  matchDetail: string;
+}
+
+function mapFieldInfo(field: ClassDescriptor['fields'][number] | RuntimeClassOverlayDescriptor['fields'][number]): AnalysisFieldInfo {
+  return {
+    offset: field.offset,
+    name: field.name,
+    fieldType: field.fieldType,
+  };
+}
+
+function mapStaticFieldInfo(
+  field: ClassDescriptor['staticFields'][number] | RuntimeClassOverlayDescriptor['staticFields'][number],
+): AnalysisStaticFieldInfo {
+  return {
+    offset: field.offset,
+    name: field.name,
+    fieldType: field.fieldType,
+    address: field.address,
+    value: field.value,
+  };
+}
+
+export function createAnalysisClassSummary(image: ImageDescriptor, descriptor: ClassDescriptor): AnalysisClassSummary {
+  return {
+    stableId: descriptor.stableId,
+    imageStableId: descriptor.imageStableId,
+    legacyImageId: descriptor.legacyImageId,
+    legacyClassId: descriptor.legacyClassId,
+    name: descriptor.name,
+    namespace: descriptor.namespace,
+    fullName: descriptor.fullName,
+    imageName: image.name,
+  };
+}
+
+export function createAnalysisClassInfo(
+  descriptor: ClassDescriptor,
+  runtimeOverlay?: RuntimeClassOverlayDescriptor,
+): AnalysisClassInfo {
+  return {
+    stableId: descriptor.stableId,
+    imageStableId: descriptor.imageStableId,
+    legacyImageId: descriptor.legacyImageId,
+    legacyClassId: descriptor.legacyClassId,
+    name: descriptor.name,
+    namespace: descriptor.namespace,
+    fullName: descriptor.fullName,
+    inheritance: descriptor.inheritance.map((node) => ({ name: node.name })),
+    staticFields: (runtimeOverlay?.staticFields ?? descriptor.staticFields).map(mapStaticFieldInfo),
+    fields: (runtimeOverlay?.fields ?? descriptor.fields).map(mapFieldInfo),
+    methods: descriptor.methods.map((method) => ({
+      name: method.name,
+      signature: method.signature,
+      tags: method.tags,
+    })),
+  };
+}
