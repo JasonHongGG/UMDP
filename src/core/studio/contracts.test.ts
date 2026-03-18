@@ -66,8 +66,10 @@ describe('studio contracts', () => {
     );
 
     expect(envelope.meta).toMatchObject({ bindingState: 'bound' });
-    expect(envelope.payload?.info.members).toEqual({ 'member:health': null });
-    expect(envelope.payload?.info.statics).toEqual({ 'static:Instance': null });
-    expect(envelope.payload?.info.functions).toEqual([]);
+    expect(envelope.payload).toEqual({
+      statics: { 'static:Instance': null },
+      members: { 'member:health': null },
+      functions: [],
+    });
   });
 });

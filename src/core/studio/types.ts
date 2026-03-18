@@ -146,13 +146,9 @@ export interface NodeExecutionSnapshot {
 }
 
 export interface ClassInfoPayload {
-  binding: ClassBinding;
-  selected: ClassInfoSelection;
-  info: {
-    members: Record<string, WorkflowJsonValue>;
-    statics: Record<string, WorkflowJsonValue>;
-    functions: Array<{ id: string; label: string }>;
-  };
+  statics: Record<string, WorkflowJsonValue>;
+  members: Record<string, WorkflowJsonValue>;
+  functions: Array<{ id: string; label: string }>;
 }
 
 export interface INodeDefinition<T extends BaseNodeData = BaseNodeData> {

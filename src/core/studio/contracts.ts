@@ -76,13 +76,9 @@ export function createClassInfoEnvelope(
   const selectedFunctions = catalog.functions.filter((item) => selected.functions.includes(item.id));
 
   return createEnvelope(CLASS_INFO_SCHEMA, {
-    binding,
-    selected,
-    info: {
-      statics: Object.fromEntries(selectedStatics.map((item) => [item.id, null])),
-      members: Object.fromEntries(selectedMembers.map((item) => [item.id, null])),
-      functions: selectedFunctions.map((item) => ({ id: item.id, label: item.label })),
-    },
+    statics: Object.fromEntries(selectedStatics.map((item) => [item.id, null])),
+    members: Object.fromEntries(selectedMembers.map((item) => [item.id, null])),
+    functions: selectedFunctions.map((item) => ({ id: item.id, label: item.label })),
   }, {
     source: 'class-node',
     bindingState: 'bound',
