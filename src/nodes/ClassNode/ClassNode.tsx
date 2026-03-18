@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Code, AlertCircle, Layers3, Search, User } from 'lucide-react';
+import { Box, Code, AlertCircle, Layers3, Search, User, Check } from 'lucide-react';
 import {
   INodeComponentProps,
   INodeEditProps,
@@ -30,18 +30,18 @@ import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContex
 
 export interface ClassNodeData extends BaseNodeData {
   binding: ClassBinding | null;
-  staticFallbackAddress?: string;
+  instanceAddress?: string;
   availableInfo: ClassInfoCatalog;
   infoSelection: ClassInfoSelection;
 }
 
 function validateClassNodeExecution(data: ClassNodeData, hasIncomingInstance: boolean) {
-  const hasStaticFallback = Boolean(data.staticFallbackAddress && data.staticFallbackAddress.trim().length > 0);
+  const hasInstanceAddress = Boolean(data.instanceAddress && data.instanceAddress.trim().length > 0);
 
-  if (!hasIncomingInstance && !hasStaticFallback) {
+  if (!hasIncomingInstance && !hasInstanceAddress) {
     return {
       valid: false,
-      error: 'Class node requires an incoming instance reference or a static fallback address.',
+      error: 'Class node requires an incoming instance reference or a static instance address.',
     };
   }
 
@@ -73,7 +73,7 @@ function createEmptyCatalog(): ClassInfoCatalog {
 function createClassNodeData(): ClassNodeData {
   return {
     binding: null,
-    staticFallbackAddress: '',
+    instanceAddress: '',
     availableInfo: createEmptyCatalog(),
     infoSelection: createEmptyClassInfoSelection(),
     inputs: CLASS_NODE_INPUTS.map((port) => ({ ...port })),
@@ -101,8 +101,10 @@ function createSectionTone(bucket: SelectionBucketKey) {
   if (bucket === 'members') {
     return {
       accentText: 'text-emerald-400',
-      accentBg: 'bg-emerald-500/10 border-emerald-500/30',
-      accentInput: 'text-emerald-500 focus:ring-emerald-500/30',
+      accentBg: 'bg-emerald-500/10',
+      accentBorder: 'border-emerald-500/30',
+      accentFill: 'bg-emerald-500',
+      shadow: 'shadow-[0_0_15px_rgba(16,185,129,0.1)]',
       icon: User,
       label: 'Members',
     };
@@ -111,8 +113,10 @@ function createSectionTone(bucket: SelectionBucketKey) {
   if (bucket === 'statics') {
     return {
       accentText: 'text-purple-400',
-      accentBg: 'bg-purple-500/10 border-purple-500/30',
-      accentInput: 'text-purple-500 focus:ring-purple-500/30',
+      accentBg: 'bg-purple-500/10',
+      accentBorder: 'border-purple-500/30',
+      accentFill: 'bg-purple-500',
+      shadow: 'shadow-[0_0_15px_rgba(168,85,247,0.1)]',
       icon: Box,
       label: 'Statics',
     };
@@ -120,8 +124,10 @@ function createSectionTone(bucket: SelectionBucketKey) {
 
   return {
     accentText: 'text-blue-400',
-    accentBg: 'bg-blue-500/10 border-blue-500/30',
-    accentInput: 'text-blue-500 focus:ring-blue-500/30',
+    accentBg: 'bg-blue-500/10',
+    accentBorder: 'border-blue-500/30',
+    accentFill: 'bg-blue-500',
+    shadow: 'shadow-[0_0_15px_rgba(59,130,246,0.1)]',
     icon: Code,
     label: 'Methods',
   };
@@ -133,9 +139,9 @@ const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, dat
   
   // Logic to determine if we are missing the required instance address and static fallback
   const hasInputConnection = edges.some(e => e.targetNodeId === id && e.targetPortId === 'instance-in');
-  const hasStaticFallback = !!data.staticFallbackAddress && data.staticFallbackAddress.trim().length > 0;
+  const hasInstanceAddress = !!data.instanceAddress && data.instanceAddress.trim().length > 0;
   
-  const isErrorState = !hasInputConnection && !hasStaticFallback;
+  const isErrorState = !hasInputConnection && !hasInstanceAddress;
   const executionState = nodeStates?.[id] || 'idle';
 
   return (
@@ -151,7 +157,7 @@ const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, dat
         
         {/* Error Indicator */}
         {isErrorState && (
-            <span title="Missing Instance Address or Static Fallback" className="absolute -top-1.5 -right-1.5 z-30 bg-[#0f172a] rounded-full border border-red-900/50">
+            <span title="Missing Instance Address" className="absolute -top-1.5 -right-1.5 z-30 bg-[#0f172a] rounded-full border border-red-900/50">
                 <AlertCircle size={14} className="text-red-400 animate-pulse" />
             </span>
         )}
@@ -188,12 +194,33 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
   const { classes, createNodeRequestFromBinding } = useStudioClassCatalog();
   const [bindingSearchQuery, setBindingSearchQuery] = useState('');
   const [isBindingPickerOpen, setIsBindingPickerOpen] = useState(!data.binding);
+  const [isDragOverInput, setIsDragOverInput] = useState(false);
 
   useEffect(() => {
     if (!data.binding) {
       setIsBindingPickerOpen(true);
     }
   }, [data.binding]);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDragOverInput) setIsDragOverInput(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOverInput(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOverInput(false);
+    const address = e.dataTransfer.getData('text/plain');
+    if (address) {
+      updateData({ instanceAddress: address });
+    }
+  };
 
   const handleToggle = (type: 'member' | 'static' | 'function', itemId: string) => {
     const listKey = type === 'member' ? 'members' : type === 'static' ? 'statics' : 'functions';
@@ -256,24 +283,24 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
     const selectedIds = data.infoSelection[bucket];
 
     return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${tone.accentText}`}>
-            <Icon size={12} /> {tone.label}
-            <span className="text-slate-600">{selectedIds.length}/{descriptors.length}</span>
+      <div className="space-y-3 mb-6">
+        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+          <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${tone.accentText}`}>
+            <Icon size={14} /> {tone.label}
+            <span className="text-slate-500 font-medium ml-1 bg-slate-800/80 px-2 py-0.5 rounded-full">{selectedIds.length}/{descriptors.length}</span>
           </div>
           {descriptors.length > 0 ? (
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider">
+            <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider">
               <button
                 type="button"
-                className="text-slate-500 hover:text-slate-300 transition-colors"
+                className={`${tone.accentText} opacity-70 hover:opacity-100 transition-opacity`}
                 onClick={() => updateSelectionBucket(bucket, descriptors.map((item) => item.id))}
               >
                 Select all
               </button>
               <button
                 type="button"
-                className="text-slate-600 hover:text-slate-300 transition-colors"
+                className="text-slate-500 hover:text-slate-300 transition-opacity"
                 onClick={() => updateSelectionBucket(bucket, [])}
               >
                 Clear
@@ -283,27 +310,40 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
         </div>
 
         {descriptors.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-700 p-3 text-xs text-slate-500">
+          <div className="rounded-xl border border-dashed border-slate-700/60 p-6 text-sm text-slate-500 flex flex-col items-center justify-center text-center bg-slate-900/40">
+            <Icon size={24} className="mb-3 opacity-20" />
             No {tone.label.toLowerCase()} available for this class binding.
           </div>
         ) : (
-          descriptors.map((descriptor) => (
-            <label
-              key={descriptor.id}
-              className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors border ${isDescriptorSelected(selectedIds, descriptor) ? tone.accentBg : 'hover:bg-slate-800 border-transparent'}`}
-            >
-              <input
-                type="checkbox"
-                checked={isDescriptorSelected(selectedIds, descriptor)}
-                onChange={() => handleToggle(bucket === 'members' ? 'member' : bucket === 'statics' ? 'static' : 'function', descriptor.id)}
-                className={`rounded border-slate-600 bg-slate-800 ${tone.accentInput} w-4 h-4 cursor-pointer`}
-              />
-              <div className="min-w-0">
-                <span className="text-sm block truncate">{descriptor.label}</span>
-                {descriptor.detail ? <span className="text-[10px] text-slate-500 font-mono block truncate">{descriptor.detail}</span> : null}
-              </div>
-            </label>
-          ))
+          <div className="grid grid-cols-1 gap-2">
+            {descriptors.map((descriptor) => {
+              const isSelected = isDescriptorSelected(selectedIds, descriptor);
+              return (
+                <div
+                  key={descriptor.id}
+                  onClick={() => handleToggle(bucket === 'members' ? 'member' : bucket === 'statics' ? 'static' : 'function', descriptor.id)}
+                  className={`group relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer overflow-hidden
+                    ${isSelected 
+                      ? `${tone.accentBg} ${tone.accentBorder} ${tone.shadow} scale-[1.01]` 
+                      : 'bg-slate-800/30 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 opacity-80 hover:opacity-100'}
+                  `}
+                >
+                  <div className={`flex-1 min-w-0 flex flex-col justify-center`}>
+                    <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>{descriptor.label}</span>
+                    {descriptor.detail ? <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">{descriptor.detail}</span> : null}
+                  </div>
+
+                  <div className={`flex items-center justify-center w-5 h-5 rounded-full border transition-all duration-300 shrink-0
+                    ${isSelected 
+                      ? `${tone.accentFill} text-white border-transparent scale-100` 
+                      : 'border-slate-600 text-transparent scale-90 delay-75'}
+                  `}>
+                    <Check size={12} className={isSelected ? 'scale-100 opacity-100' : 'scale-50 opacity-0'} style={{ transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     );
@@ -311,67 +351,82 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
 
   return (
     <div className="flex flex-col h-full text-slate-300">
-      <div className="mb-6 p-4 rounded-lg bg-slate-800/50 border border-slate-700 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Bound Class</label>
+      <div className="mb-8 p-1 space-y-5">
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide px-1">Bound Class</label>
+          
+          <div className="relative group">
             {data.binding ? (
-              <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-3">
-                <div className="text-sm text-cyan-300 font-medium truncate">{data.binding.fullName}</div>
-                <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
-                  <span>{data.binding.namespace || 'Global'}</span>
-                  <span className="text-slate-700">•</span>
-                  <span className="inline-flex items-center gap-1"><Layers3 size={10} /> {data.binding.imageName}</span>
+              <div className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-slate-900/50 p-4 shadow-[0_4px_20px_rgba(6,182,212,0.1)] transition-all duration-300 hover:shadow-[0_4px_25px_rgba(6,182,212,0.15)] hover:border-cyan-400/50">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-base text-cyan-100 font-bold truncate tracking-tight">{data.binding.fullName}</div>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-slate-400 flex-wrap font-medium">
+                      <span className="bg-slate-900/80 px-2 py-0.5 rounded text-slate-300 border border-slate-700/50">{data.binding.namespace || 'Global'}</span>
+                      <span className="inline-flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700/50 text-cyan-400/80"><Layers3 size={12} /> {data.binding.imageName}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsBindingPickerOpen((prev) => !prev)}
+                    className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-300 transition-all text-xs font-semibold text-slate-300 ml-4 backdrop-blur-sm"
+                  >
+                    {isBindingPickerOpen ? 'Hide Picker' : 'Rebind'}
+                  </button>
                 </div>
               </div>
             ) : (
-              <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">
-                This node is not bound yet. Pick a concrete class below before configuring the info payload.
+              <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-slate-900/50 p-5 shadow-[0_4px_20px_rgba(245,158,11,0.1)]">
+                 <div className="flex items-center justify-between">
+                   <div className="text-sm font-medium text-amber-200/90 leading-relaxed">
+                     This node is not bound yet. <br/> <span className="text-amber-400/70 text-xs">Pick a concrete class below to configure the info payload.</span>
+                   </div>
+                   <button
+                    type="button"
+                    onClick={() => setIsBindingPickerOpen((prev) => !prev)}
+                    className="shrink-0 px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-200 transition-all text-xs font-semibold shadow-sm"
+                   >
+                    {isBindingPickerOpen ? 'Close' : 'Select Class'}
+                   </button>
+                 </div>
               </div>
             )}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0 pt-6">
-            <button
-              type="button"
-              onClick={() => setIsBindingPickerOpen((prev) => !prev)}
-              className="px-3 py-2 rounded-md border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors"
-            >
-              {isBindingPickerOpen ? 'Hide picker' : 'Rebind'}
-            </button>
           </div>
         </div>
 
         {isBindingPickerOpen ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-950/60 overflow-hidden">
-            <div className="px-3 py-2 border-b border-slate-700/70 bg-slate-900/70 flex items-center gap-2">
-              <Search size={14} className="text-cyan-400" />
+          <div className="rounded-xl border border-slate-700/80 bg-slate-900/90 backdrop-blur-md overflow-hidden shadow-2xl relative">
+            <div className="px-4 py-3 border-b border-slate-700/70 bg-slate-800/80 flex items-center gap-3 relative">
+              <Search size={16} className="text-cyan-400 absolute left-4" />
               <input
                 type="text"
                 value={bindingSearchQuery}
                 onChange={(event) => setBindingSearchQuery(event.target.value)}
-                placeholder="Search classes by full name, namespace, or assembly..."
-                className="flex-1 bg-transparent border-none outline-none text-sm text-slate-200 placeholder:text-slate-500"
+                placeholder="Search classes by name, namespace, or assembly..."
+                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:border-cyan-500/50 focus:bg-slate-950 transition-all"
               />
             </div>
-            <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+            <div className="max-h-72 overflow-y-auto p-2 space-y-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/50 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full pr-1">
               {filteredBindings.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-700 px-3 py-4 text-sm text-slate-500">
-                  No classes found for "{bindingSearchQuery}".
+                <div className="rounded-lg border border-dashed border-slate-700/50 px-3 py-8 text-sm text-slate-500 text-center">
+                  No classes found matching "<span className="text-slate-300">{bindingSearchQuery}</span>".
                 </div>
               ) : (
                 filteredBindings.map((entry) => (
                   <button
                     key={`${entry.imageId}::${entry.classId}`}
                     type="button"
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${data.binding?.imageId === entry.imageId && data.binding?.classId === entry.classId ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-transparent hover:border-cyan-500/20 hover:bg-slate-800/70'}`}
+                    className={`group w-full text-left p-3 rounded-lg border transition-all duration-200 hover:-translate-y-0.5
+                      ${data.binding?.imageId === entry.imageId && data.binding?.classId === entry.classId 
+                        ? 'border-cyan-500/50 bg-cyan-500/15 shadow-[0_2px_10px_rgba(6,182,212,0.15)]' 
+                        : 'border-transparent hover:border-slate-600/50 hover:bg-slate-800/80 hover:shadow-md'}`}
                     onClick={() => handleBindClass(entry)}
                   >
-                    <div className="text-sm font-medium text-slate-100 truncate">{entry.fullName}</div>
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
-                      <span>{entry.namespace || 'Global'}</span>
+                    <div className={`text-sm font-semibold truncate transition-colors ${data.binding?.classId === entry.classId ? 'text-cyan-100' : 'text-slate-200 group-hover:text-white'}`}>{entry.fullName}</div>
+                    <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-500 flex-wrap">
+                      <span className="bg-slate-950/50 px-1.5 py-0.5 rounded border border-slate-800">{entry.namespace || 'Global'}</span>
                       <span className="text-slate-700">•</span>
-                      <span className="inline-flex items-center gap-1 text-cyan-500/80"><Layers3 size={10} /> {entry.imageName}</span>
+                      <span className="inline-flex items-center gap-1 text-slate-400 group-hover:text-cyan-400/70 transition-colors"><Layers3 size={10} /> {entry.imageName}</span>
                     </div>
                   </button>
                 ))
@@ -380,18 +435,27 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
           </div>
         ) : null}
 
-        <div>
-          <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Static Fallback Address</label>
-          <input
-            type="text"
-            placeholder="e.g. 0x12345678"
-            value={data.staticFallbackAddress || ''}
-            onChange={(e) => updateData({ staticFallbackAddress: e.target.value })}
-            className="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
-          />
-          <p className="text-xs text-slate-500 mt-2">
-            Used if the <span className="text-cyan-400 bg-cyan-400/10 px-1 py-0.5 rounded font-mono">Instance Ref</span> port is unconnected.
-          </p>
+        <div 
+          className={`relative rounded-xl border p-5 transition-all duration-300
+                     ${isDragOverInput ? 'bg-cyan-500/10 border-cyan-400 border-dashed shadow-[0_0_25px_rgba(6,182,212,0.25)] scale-[1.01]' : 'bg-slate-900/80 border-slate-700/70 hover:border-slate-600'}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <label className="block text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider flex items-center justify-between">
+            <span>Instance Address</span>
+            {isDragOverInput && <span className="text-cyan-300 text-[10px] bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-1 rounded-full animate-pulse shadow-[0_0_10px_rgba(6,182,212,0.5)]">Drop item here to assign</span>}
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="e.g. 0x12345678 or drag instance ref here..."
+              value={data.instanceAddress || ''}
+              onChange={(e) => updateData({ instanceAddress: e.target.value })}
+              className={`w-full bg-slate-950 border rounded-lg px-4 py-2.5 text-sm text-slate-200 outline-none transition-all font-mono
+                         ${isDragOverInput ? 'border-cyan-400 ring-2 ring-cyan-500/20 bg-cyan-950/20' : 'border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20'}`}
+            />
+          </div>
         </div>
       </div>
 
