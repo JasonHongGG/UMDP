@@ -29,6 +29,11 @@ export default function ClassInspectorApp({
 }: ClassInspectorAppProps) {
   const [activeTabImageId, activeTabClassId] = activeTabId.split('::');
   const activeTabImageName = classLookupMap.get(classInfo.full_name)?.imageName || 'Unknown Assembly';
+  const resolvedClassInfo: ClassInfo = {
+    ...classInfo,
+    static_fields: runtimeStaticFields,
+    fields: runtimeFields,
+  };
 
   return (
     <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-6 z-10 w-full h-full">
@@ -49,7 +54,7 @@ export default function ClassInspectorApp({
           )}
           {onAddToStudio && (
             <button
-              onClick={() => onAddToStudio(classInfo, {
+              onClick={() => onAddToStudio(resolvedClassInfo, {
                 imageId: activeTabImageId,
                 classId: activeTabClassId,
                 imageName: activeTabImageName,

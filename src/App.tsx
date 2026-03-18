@@ -226,6 +226,27 @@ export default function App() {
   const displayFields = activeTab ? (runtimeFieldsByKey[activeCacheKey] ?? selectedClass?.fields ?? []) : [];
   const activeRuntimeFieldError = runtimeFieldErrorByKey[activeCacheKey];
   const isLoadingRuntimeFields = loadingRuntimeByKey[activeCacheKey] ?? false;
+  const studioClassDetailsByKey = useMemo(() => {
+    const runtimeDetailKeys = new Set([
+      ...Object.keys(runtimeStaticFieldsByKey),
+      ...Object.keys(runtimeFieldsByKey),
+    ]);
+
+    if (runtimeDetailKeys.size === 0) {
+      return classDetailsByKey;
+    }
+
+    return Object.fromEntries(
+      Object.entries(classDetailsByKey).map(([key, info]) => [
+        key,
+        {
+          ...info,
+          static_fields: runtimeStaticFieldsByKey[key] ?? info.static_fields,
+          fields: runtimeFieldsByKey[key] ?? info.fields,
+        },
+      ]),
+    );
+  }, [classDetailsByKey, runtimeFieldsByKey, runtimeStaticFieldsByKey]);
 
   useEffect(() => {
     if (pendingScrollImageId && pendingScrollClassId && selectedImageId === pendingScrollImageId) {
@@ -388,7 +409,7 @@ export default function App() {
           pendingClassNode={pendingClassNode}
           images={images}
           classesByImage={classesByImage}
-          classDetailsByKey={classDetailsByKey}
+          classDetailsByKey={studioClassDetailsByKey}
           onOpenInspectorForBinding={handleOpenInspectorForBinding}
           onPendingClassNodeHandled={() => setPendingClassNode(null)}
         />
