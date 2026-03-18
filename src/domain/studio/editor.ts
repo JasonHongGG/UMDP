@@ -1,4 +1,4 @@
-import type { ClassDescriptor } from '../analysis/contracts';
+import type { ClassDescriptor, RuntimeClassOverlayDescriptor } from '../analysis/contracts';
 import type { AnalysisClassSummary, AnalysisImageInfo } from '../analysis/view-models';
 import type { StableId } from '../contracts/shared-identity';
 
@@ -48,14 +48,20 @@ export function createEmptyClassInfoSelection(): ClassInfoSelection {
   };
 }
 
-export function createClassInfoCatalogFromClassDescriptor(classInfo: ClassDescriptor): ClassInfoCatalog {
+export function createClassInfoCatalogFromClassDescriptor(
+  classInfo: ClassDescriptor,
+  runtimeOverlay?: RuntimeClassOverlayDescriptor,
+): ClassInfoCatalog {
+  const fields = runtimeOverlay?.fields ?? classInfo.fields;
+  const staticFields = runtimeOverlay?.staticFields ?? classInfo.staticFields;
+
   return {
-    members: classInfo.fields.map((field) => ({
+    members: fields.map((field) => ({
       id: field.stableId,
       label: field.name,
       detail: field.fieldType,
     })),
-    statics: classInfo.staticFields.map((field) => ({
+    statics: staticFields.map((field) => ({
       id: field.stableId,
       label: field.name,
       detail: `${field.fieldType}${field.address ? ` @ ${field.address}` : ''}`,

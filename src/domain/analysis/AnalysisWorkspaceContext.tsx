@@ -316,9 +316,12 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     }
 
     return Object.fromEntries(
-      Object.values(analysisSnapshot.classes).map((descriptor) => [descriptor.stableId, createClassInfoCatalogFromClassDescriptor(descriptor)]),
+      Object.values(analysisSnapshot.classes).map((descriptor) => [
+        descriptor.stableId,
+        createClassInfoCatalogFromClassDescriptor(descriptor, runtimeOverlays[descriptor.stableId]),
+      ]),
     );
-  }, [analysisSnapshot]);
+  }, [analysisSnapshot, runtimeOverlays]);
 
   const filteredImages = useMemo(() => {
     if (!images.length) {

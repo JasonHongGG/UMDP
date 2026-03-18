@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ClassDescriptor } from '../analysis/contracts';
+import type { ClassDescriptor, RuntimeClassOverlayDescriptor } from '../analysis/contracts';
 import {
   createClassStableId,
   createFieldStableId,
@@ -25,6 +25,8 @@ const FIELD_SPEED = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName
 const STATIC_INSTANCE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'Instance', fieldType: 'Gameplay.PlayerController', fieldKind: 'static' });
 const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void Move(System.Single x, System.Single y)' });
 const METHOD_MISSING = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Missing', signature: 'System.Void Missing()' });
+const STATIC_RUNTIME_MESSAGE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'objectIsNullMessage', fieldType: 'System.String', fieldKind: 'static' });
+const FIELD_RUNTIME_CACHED_PTR = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'm_CachedPtr', fieldType: 'System.IntPtr', fieldKind: 'instance' });
 
 const sampleClassDescriptor: ClassDescriptor = {
   stableId: CLASS_PLAYER,
@@ -44,6 +46,18 @@ const sampleClassDescriptor: ClassDescriptor = {
   ],
   methods: [
     { stableId: METHOD_MOVE, name: 'Move', signature: 'System.Void Move(System.Single x, System.Single y)', tags: [] },
+  ],
+};
+
+const sampleRuntimeOverlay: RuntimeClassOverlayDescriptor = {
+  classStableId: CLASS_PLAYER,
+  staticFields: [
+    { stableId: STATIC_RUNTIME_MESSAGE, name: 'objectIsNullMessage', legacyFieldName: 'objectIsNullMessage', fieldType: 'System.String', offset: null, address: '0x2000', value: '?' },
+    { stableId: STATIC_INSTANCE, name: 'Instance', legacyFieldName: 'Instance', fieldType: 'Gameplay.PlayerController', offset: null, address: '0x1000', value: '0x1234' },
+  ],
+  fields: [
+    { stableId: FIELD_RUNTIME_CACHED_PTR, offset: '0x10', name: 'm_CachedPtr', legacyFieldName: 'm_CachedPtr', fieldType: 'System.IntPtr' },
+    { stableId: FIELD_HEALTH, offset: '10', name: 'health', legacyFieldName: 'health', fieldType: 'System.Int32' },
   ],
 };
 
@@ -116,6 +130,13 @@ describe('studio editor catalog', () => {
       statics: [STATIC_INSTANCE],
       functions: [],
     });
+  });
+
+  it('prefers runtime overlay members and statics when building a class info catalog', () => {
+    const catalog = createClassInfoCatalogFromClassDescriptor(sampleClassDescriptor, sampleRuntimeOverlay);
+
+    expect(catalog.statics.map((item) => item.id)).toEqual([STATIC_RUNTIME_MESSAGE, STATIC_INSTANCE]);
+    expect(catalog.members.map((item) => item.id)).toEqual([FIELD_RUNTIME_CACHED_PTR, FIELD_HEALTH]);
   });
 
   it('creates a pending class node request from a concrete binding and canonical info catalog', () => {

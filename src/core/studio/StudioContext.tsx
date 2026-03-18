@@ -1,11 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphDocument } from '../../domain/studio/contracts';
 import {
-  createClassInfoCatalogSignature,
+  type ClassInfoCatalog,
   hasSameClassInfoSelection,
   reconcileClassInfoSelection,
   type ClassBinding,
-  type ClassInfoCatalog,
   type ClassInfoSelection,
   type PendingClassNodeRequest,
   type StudioClassCatalogEntry,
@@ -306,7 +305,6 @@ export function StudioProvider({ children, classCatalog }: { children: React.Rea
 
       const data = node.data as Partial<{
         binding: ClassBinding | null;
-        availableInfo: ClassInfoCatalog;
         infoSelection: ClassInfoSelection;
       }>;
 
@@ -319,17 +317,14 @@ export function StudioProvider({ children, classCatalog }: { children: React.Rea
         continue;
       }
 
-      const currentCatalog = data.availableInfo ?? { members: [], statics: [], functions: [] };
       const reconciledSelection = reconcileClassInfoSelection(data.infoSelection, resolvedCatalog);
-      const catalogChanged = createClassInfoCatalogSignature(currentCatalog) !== createClassInfoCatalogSignature(resolvedCatalog);
       const selectionChanged = !hasSameClassInfoSelection(data.infoSelection, reconciledSelection);
 
-      if (!catalogChanged && !selectionChanged) {
+      if (!selectionChanged) {
         continue;
       }
 
       graphStore.updateNodeData(node.id, {
-        availableInfo: resolvedCatalog,
         infoSelection: reconciledSelection,
       });
     }

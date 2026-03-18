@@ -19,8 +19,6 @@ interface ParametersNodeData extends BaseNodeData {
   parameters: ParameterDefinitionEntry[];
 }
 
-const PARAMETERS_INPUTS: IPort[] = [];
-
 const PARAMETERS_OUTPUTS: IPort[] = [
   createJsonPort('params-out', 'Params', PARAMETER_DEFINITIONS_SCHEMA, 'Parameter definitions for downstream node inputs.'),
 ];
@@ -124,7 +122,7 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
     description: 'Defines reusable parameters for downstream node inputs.',
     category: 'Data',
     tags: ['json', 'params', 'input', 'definitions'],
-    inputs: PARAMETERS_INPUTS,
+    inputs: [],
     outputs: PARAMETERS_OUTPUTS.map((port) => ({ key: port.id, displayName: port.label, direction: 'output', channel: 'data', cardinality: 'single', dataType: PARAMETER_DEFINITIONS_SCHEMA.id })),
     parameters: [{
       name: 'parameters',
