@@ -2,6 +2,11 @@ import type { StableId } from '../../contracts/shared-identity';
 
 export type RuntimeFlavor = 'mono' | 'il2cpp' | 'unknown';
 
+export interface ProcessInfo {
+  pid: number;
+  name: string;
+}
+
 export interface ProcessSession {
   pid: number;
   processName: string;

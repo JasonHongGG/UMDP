@@ -25,7 +25,7 @@ export default function App() {
 
 function AppContent() {
   const {
-    attached,
+    processSession,
     attachError,
     images,
     classesByImage,
@@ -135,7 +135,7 @@ function AppContent() {
   return (
     <MainLayout>
       <TopBar
-        attachedProcess={attached ? `${attached.process_name} (${attached.process_id})` : null}
+        attachedProcess={processSession ? `${processSession.processName} (${processSession.pid})` : null}
         onOpenSelector={openSelector}
         activePage={activePage}
         onPageChange={setActivePage}
@@ -266,13 +266,13 @@ function AppContent() {
       <div className="h-7 border-t border-[#1c2838] bg-[#05080c] flex items-center px-4 justify-between text-[10px] text-slate-500 shrink-0 select-none z-20 relative">
         <div className="flex items-center gap-4 uppercase tracking-wider font-semibold">
           <span className="flex items-center gap-1">
-            <Binary size={12} className={attached ? "text-cyan-500" : "text-slate-600"} />
-            {attached?.exe_path ? "Attached" : "Detached"}
+            <Binary size={12} className={processSession ? "text-cyan-500" : "text-slate-600"} />
+            {processSession?.exePath ? "Attached" : "Detached"}
           </span>
-          {attached && (
+          {processSession && (
             <span className="flex items-center gap-1">
               <Database size={12} className="text-blue-500" />
-              {attached.runtime} Runtime
+              {processSession.runtime} Runtime
             </span>
           )}
         </div>

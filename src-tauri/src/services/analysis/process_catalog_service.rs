@@ -1,4 +1,4 @@
-use crate::models::ProcessInfo;
+use crate::domain::analysis_models::ProcessInfo;
 use std::collections::HashSet;
 use sysinfo::System;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM};

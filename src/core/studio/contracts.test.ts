@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createClassStableId,
+  createFieldStableId,
+  createImageStableId,
+  createMethodStableId,
+} from '../../domain/contracts/shared-identity';
+import {
   arePortDataTypesCompatible,
   arePortsCompatible,
   arePortTypesCompatible,
@@ -11,6 +17,13 @@ import {
   GENERIC_JSON_SCHEMA,
   PARAMETER_DEFINITIONS_SCHEMA,
 } from './contracts';
+
+const IMAGE_A = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
+const CLASS_PLAYER = createClassStableId({ imageStableId: IMAGE_A, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player' });
+const MEMBER_HEALTH = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'health', fieldType: 'System.Int32', fieldKind: 'instance' });
+const MEMBER_SPEED = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'speed', fieldType: 'System.Single', fieldKind: 'instance' });
+const STATIC_INSTANCE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'Instance', fieldType: 'Gameplay.PlayerController', fieldKind: 'static' });
+const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void Move()' });
 
 describe('studio contracts', () => {
   it('creates flow and json ports with the expected metadata', () => {
@@ -55,15 +68,10 @@ describe('studio contracts', () => {
   });
 
   it('emits only the selected class info entries in a bound class envelope', () => {
-    const memberHealth = 'field:player:health' as any;
-    const memberSpeed = 'field:player:speed' as any;
-    const staticInstance = 'field:player:instance' as any;
-    const functionMove = 'method:player:move' as any;
-
     const envelope = createClassInfoEnvelope(
       {
-        imageStableId: 'image:img-a' as any,
-        classStableId: 'class:player' as any,
+        imageStableId: IMAGE_A,
+        classStableId: CLASS_PLAYER,
         fullName: 'Gameplay.PlayerController',
         name: 'PlayerController',
         namespace: 'Gameplay',
@@ -71,23 +79,23 @@ describe('studio contracts', () => {
       },
       {
         members: [
-          { id: memberHealth, label: 'health' },
-          { id: memberSpeed, label: 'speed' },
+          { id: MEMBER_HEALTH, label: 'health' },
+          { id: MEMBER_SPEED, label: 'speed' },
         ],
-        statics: [{ id: staticInstance, label: 'Instance' }],
-        functions: [{ id: functionMove, label: 'Move' }],
+        statics: [{ id: STATIC_INSTANCE, label: 'Instance' }],
+        functions: [{ id: METHOD_MOVE, label: 'Move' }],
       },
       {
-        members: [memberHealth],
-        statics: [staticInstance],
+        members: [MEMBER_HEALTH],
+        statics: [STATIC_INSTANCE],
         functions: [],
       },
     );
 
     expect(envelope.meta).toMatchObject({ bindingState: 'bound' });
     expect(envelope.payload).toEqual({
-      statics: { [staticInstance]: null },
-      members: { [memberHealth]: null },
+      statics: { [STATIC_INSTANCE]: null },
+      members: { [MEMBER_HEALTH]: null },
       functions: [],
     });
   });

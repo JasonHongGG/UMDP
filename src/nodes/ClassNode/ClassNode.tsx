@@ -156,25 +156,12 @@ function toggleSelectionEntry(selection: string[], itemId: string) {
 }
 
 function createInfoPreview(data: ClassNodeData) {
-  return createClassInfoEnvelope(data.binding, data.availableInfo, data.infoSelection);
+  const selection = reconcileClassInfoSelection(data.infoSelection, data.availableInfo);
+  return createClassInfoEnvelope(data.binding, data.availableInfo, selection);
 }
 
 function isDescriptorSelected(ids: string[], descriptor: ClassInfoItemDescriptor) {
   return ids.includes(descriptor.id);
-}
-
-function createCatalogSignature(catalog: ClassInfoCatalog) {
-  return [
-    catalog.members.map((item) => item.id).join(','),
-    catalog.statics.map((item) => item.id).join(','),
-    catalog.functions.map((item) => item.id).join(','),
-  ].join('|');
-}
-
-function hasSameStableIdSelection(left: ClassInfoSelection, right: ClassInfoSelection) {
-  return left.members.join(',') === right.members.join(',')
-    && left.statics.join(',') === right.statics.join(',')
-    && left.functions.join(',') === right.functions.join(',');
 }
 
 type SelectionBucketKey = keyof ClassInfoSelection;
@@ -216,29 +203,18 @@ function createSectionTone(bucket: SelectionBucketKey) {
 }
 
 const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { edges, updateNodeData } = useStudioGraph();
+  const { edges } = useStudioGraph();
   const { nodeStates } = useStudioRuntime();
   const { getClassInfoCatalogByBinding } = useStudioClassCatalog();
 
-  const resolvedCatalog = useMemo(() => getClassInfoCatalogByBinding(data.binding), [data.binding, getClassInfoCatalogByBinding]);
-
-  useEffect(() => {
-    if (!data.binding || !resolvedCatalog) {
-      return;
-    }
-
-    const reconciledSelection = reconcileClassInfoSelection(data.infoSelection, resolvedCatalog);
-    const catalogChanged = createCatalogSignature(data.availableInfo) !== createCatalogSignature(resolvedCatalog);
-    const selectionChanged = !hasSameStableIdSelection(data.infoSelection, reconciledSelection);
-    if (!catalogChanged && !selectionChanged) {
-      return;
-    }
-
-    updateNodeData(id, {
-      availableInfo: resolvedCatalog,
-      infoSelection: reconciledSelection,
-    });
-  }, [data.availableInfo, data.binding, data.infoSelection, id, resolvedCatalog, updateNodeData]);
+  const resolvedCatalog = useMemo(
+    () => getClassInfoCatalogByBinding(data.binding) ?? data.availableInfo,
+    [data.availableInfo, data.binding, getClassInfoCatalogByBinding],
+  );
+  const resolvedSelection = useMemo(
+    () => reconcileClassInfoSelection(data.infoSelection, resolvedCatalog),
+    [data.infoSelection, resolvedCatalog],
+  );
   
   const hasInputConnection = edges.some(e => e.channel === 'data' && e.targetNodeId === id && e.targetPortId === 'instance-in');
   const hasInstanceSource = hasExpressionSourceValue(data.instanceSource);
@@ -413,12 +389,22 @@ const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data,
 };
 
 const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
+  const { getClassInfoCatalogByBinding } = useStudioClassCatalog();
+  const resolvedCatalog = useMemo(
+    () => getClassInfoCatalogByBinding(data.binding) ?? data.availableInfo,
+    [data.availableInfo, data.binding, getClassInfoCatalogByBinding],
+  );
+  const resolvedSelection = useMemo(
+    () => reconcileClassInfoSelection(data.infoSelection, resolvedCatalog),
+    [data.infoSelection, resolvedCatalog],
+  );
+
   const handleToggle = (type: 'member' | 'static' | 'function', itemId: string) => {
     const listKey = type === 'member' ? 'members' : type === 'static' ? 'statics' : 'functions';
     updateData({
       infoSelection: {
-        ...data.infoSelection,
-        [listKey]: toggleSelectionEntry(data.infoSelection[listKey], itemId),
+        ...resolvedSelection,
+        [listKey]: toggleSelectionEntry(resolvedSelection[listKey], itemId),
       },
     });
   };
@@ -426,7 +412,7 @@ const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ dat
   const updateSelectionBucket = (bucket: SelectionBucketKey, ids: string[]) => {
     updateData({
       infoSelection: {
-        ...data.infoSelection,
+        ...resolvedSelection,
         [bucket]: ids,
       },
     });
@@ -434,17 +420,17 @@ const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ dat
 
   const hasBinding = Boolean(data.binding);
   const hasSelectableInfo =
-    data.availableInfo.members.length > 0 ||
-    data.availableInfo.statics.length > 0 ||
-    data.availableInfo.functions.length > 0;
+    resolvedCatalog.members.length > 0 ||
+    resolvedCatalog.statics.length > 0 ||
+    resolvedCatalog.functions.length > 0;
   const availableCount =
-    data.availableInfo.members.length +
-    data.availableInfo.statics.length +
-    data.availableInfo.functions.length;
+    resolvedCatalog.members.length +
+    resolvedCatalog.statics.length +
+    resolvedCatalog.functions.length;
   const selectedCount =
-    data.infoSelection.members.length +
-    data.infoSelection.statics.length +
-    data.infoSelection.functions.length;
+    resolvedSelection.members.length +
+    resolvedSelection.statics.length +
+    resolvedSelection.functions.length;
 
   const renderSelectionSection = (
     bucket: SelectionBucketKey,
@@ -452,7 +438,7 @@ const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ dat
   ) => {
     const tone = createSectionTone(bucket);
     const Icon = tone.icon;
-    const selectedIds = data.infoSelection[bucket];
+    const selectedIds = resolvedSelection[bucket];
 
     return (
       <div className="space-y-3 mb-6">
@@ -566,9 +552,9 @@ const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ dat
           </div>
         ) : null}
 
-        {renderSelectionSection('statics', data.availableInfo.statics)}
-        {renderSelectionSection('members', data.availableInfo.members)}
-        {renderSelectionSection('functions', data.availableInfo.functions)}
+        {renderSelectionSection('statics', resolvedCatalog.statics)}
+        {renderSelectionSection('members', resolvedCatalog.members)}
+        {renderSelectionSection('functions', resolvedCatalog.functions)}
       </div>
     </div>
   );
@@ -613,7 +599,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       nodeName: instance.displayName,
       binding: fromClassBindingReference(documentState.classBinding),
       instanceSource: (instance.bindings.instanceSource as ExpressionSource | undefined) ?? null,
-      availableInfo: (instance.documentState.availableInfo as ClassInfoCatalog | undefined) ?? createEmptyCatalog(),
+      availableInfo: createEmptyCatalog(),
       infoSelection: fromClassExportSelection(documentState.exportSelection),
     };
   },
@@ -629,7 +615,6 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       bindings,
       documentState: {
         ...createClassNodeDocumentState(data),
-        availableInfo: data.availableInfo,
       },
     };
   },
@@ -667,13 +652,14 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
     },
     execute: ({ documentState }) => {
       const classDocumentState = parseClassNodeDocumentState(documentState);
+      const availableInfo = (documentState.availableInfo as ClassInfoCatalog | undefined) ?? createEmptyCatalog();
       return {
         state: 'success',
         outputs: {
           'info-out': createClassInfoEnvelope(
             fromClassBindingReference(classDocumentState.classBinding),
-            (documentState.availableInfo as ClassInfoCatalog | undefined) ?? createEmptyCatalog(),
-            fromClassExportSelection(classDocumentState.exportSelection),
+            availableInfo,
+            reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo),
           ),
         },
       };
@@ -681,7 +667,11 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
   },
   getExecutionPreview: (data) => {
     return {
-      'info-out': createClassInfoEnvelope(data.binding, data.availableInfo, data.infoSelection),
+      'info-out': createClassInfoEnvelope(
+        data.binding,
+        data.availableInfo,
+        reconcileClassInfoSelection(data.infoSelection, data.availableInfo),
+      ),
     };
   },
   CanvasComponent: ClassNodeCanvas,

@@ -1,4 +1,4 @@
-use crate::models::{ClassInfo, ClassSummary, DumpAllResponse, ImageInfo, RuntimeClassOverlayResponse};
+use crate::domain::analysis_models::{AnalysisSnapshot, RuntimeOverlaySnapshot};
 use crate::services::analysis::{metadata_query_service, runtime_overlay_service};
 use crate::state::AppState;
 use std::fmt::Display;
@@ -9,7 +9,7 @@ fn join_error_message(error: impl Display) -> String {
 }
 
 #[tauri::command]
-pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> Result<DumpAllResponse, String> {
+pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> Result<AnalysisSnapshot, String> {
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
@@ -20,32 +20,15 @@ pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> R
 }
 
 #[tauri::command]
-pub fn get_image_catalog(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
-    metadata_query_service::get_image_catalog(&state)
-}
-
-#[tauri::command]
-pub fn get_image_classes(state: State<'_, AppState>, image_id: String) -> Result<Vec<ClassSummary>, String> {
-    metadata_query_service::get_image_classes(&state, &image_id)
-}
-
-#[tauri::command]
-pub fn get_class_details(state: State<'_, AppState>, image_id: String, class_id: String) -> Result<ClassInfo, String> {
-    metadata_query_service::get_class_details(&state, &image_id, &class_id)
-}
-
-#[tauri::command]
 pub async fn get_runtime_static_fields(
     app: AppHandle,
     _state: State<'_, AppState>,
-    image_id: String,
-    class_namespace: String,
-    class_name: String,
-) -> Result<RuntimeClassOverlayResponse, String> {
+    class_stable_id: String,
+) -> Result<RuntimeOverlaySnapshot, String> {
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
-        runtime_overlay_service::get_runtime_static_fields(&app_handle, &state, &image_id, &class_namespace, &class_name)
+        runtime_overlay_service::get_runtime_static_fields(&app_handle, &state, &class_stable_id)
     })
     .await
     .map_err(join_error_message)?

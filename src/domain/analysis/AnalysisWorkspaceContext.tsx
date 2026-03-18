@@ -3,14 +3,11 @@ import { listen } from '@tauri-apps/api/event';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AnalysisSnapshot,
-  AttachResponse,
-  DumpAllResponse,
   ProcessInfo,
   ProcessSession,
-  RuntimeClassOverlayResponse,
   RuntimeClassOverlayDescriptor,
+  RuntimeOverlaySnapshot,
 } from './contracts';
-import { mapAttachResponseToProcessSession, mapDumpAllResponseToAnalysisSnapshot, mapRuntimeOverlayResponseToSnapshot } from './contracts';
 import {
   buildStudioClassCatalog,
   createClassInfoCatalogFromClassDescriptor,
@@ -55,7 +52,6 @@ interface ClassLookupEntry {
 }
 
 interface AnalysisWorkspaceContextValue {
-  attached: AttachResponse | null;
   processSession: ProcessSession | null;
   attachError: string | null;
   analysisSnapshot: AnalysisSnapshot | null;
@@ -123,7 +119,6 @@ interface AnalysisWorkspaceContextValue {
 const AnalysisWorkspaceContext = createContext<AnalysisWorkspaceContextValue | null>(null);
 
 export function AnalysisWorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [attached, setAttached] = useState<AttachResponse | null>(null);
   const [processSession, setProcessSession] = useState<ProcessSession | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
@@ -181,8 +176,11 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   const fetchMetadata = useCallback(async (session: ProcessSession | null) => {
     setLoadingImages(true);
     try {
-      const dumpAll = await invoke<DumpAllResponse>('load_all_metadata');
-      setAnalysisSnapshot(mapDumpAllResponseToAnalysisSnapshot(dumpAll, session));
+      const snapshot = await invoke<AnalysisSnapshot>('load_all_metadata');
+      setAnalysisSnapshot({
+        ...snapshot,
+        process: session,
+      });
     } catch (error) {
       console.error('Failed to load metadata', error);
     } finally {
@@ -195,18 +193,15 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
       setAttachError(null);
       setLoadingImages(true);
       try {
-        const result = await invoke<AttachResponse>('attach_to_process', {
+        const session = await invoke<ProcessSession>('attach_to_process', {
           pid: event.payload.pid,
           name: event.payload.name,
         });
 
-        const session = mapAttachResponseToProcessSession(result);
-        setAttached(result);
         setProcessSession(session);
         resetWorkspace();
         await fetchMetadata(session);
       } catch (error) {
-        setAttached(null);
         setProcessSession(null);
         resetWorkspace();
         setAttachError(String(error));
@@ -376,7 +371,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   }, [images, selectedImageStableId]);
 
   useEffect(() => {
-    if (!attached || !activeTab || !analysisSnapshot) {
+    if (!processSession || !activeTab || !analysisSnapshot) {
       return;
     }
 
@@ -393,13 +388,10 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     fetchingRuntimeRef.current.add(cacheKey);
     setLoadingRuntimeByKey((current) => ({ ...current, [cacheKey]: true }));
 
-    invoke<RuntimeClassOverlayResponse>('get_runtime_static_fields', {
-      imageId: descriptor.legacyImageId,
-      classNamespace: descriptor.namespace,
-      className: descriptor.name,
+    invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', {
+      classStableId: cacheKey,
     })
-      .then((response) => {
-        const snapshot = mapRuntimeOverlayResponseToSnapshot(cacheKey, response);
+      .then((snapshot) => {
         setRuntimeOverlays((current) => ({
           ...current,
           [cacheKey]: snapshot.classes[cacheKey],
@@ -413,7 +405,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
         fetchingRuntimeRef.current.delete(cacheKey);
         setLoadingRuntimeByKey((current) => ({ ...current, [cacheKey]: false }));
       });
-  }, [activeTab, analysisSnapshot, attached, runtimeOverlays]);
+  }, [activeTab, analysisSnapshot, processSession, runtimeOverlays]);
 
   const activeCacheKey = activeTab ? activeTab.classStableId : '';
   const studioClassDetailsByStableId = useMemo(() => {
@@ -721,7 +713,6 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   }, []);
 
   const value = useMemo<AnalysisWorkspaceContextValue>(() => ({
-    attached,
     processSession,
     attachError,
     analysisSnapshot,
@@ -794,7 +785,6 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     activeTabIndex,
     analysisSnapshot,
     attachError,
-    attached,
     classDetailsByStableId,
     classInfoCatalogByStableId,
     classLookupMap,

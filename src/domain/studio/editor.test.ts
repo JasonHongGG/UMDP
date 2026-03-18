@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ClassDescriptor } from '../analysis/contracts';
 import {
+  createClassStableId,
+  createFieldStableId,
+  createImageStableId,
+  createMethodStableId,
+} from '../contracts/shared-identity';
+import {
   buildStudioClassCatalog,
   createClassInfoCatalogFromClassDescriptor,
   createPendingClassNodeRequest,
@@ -9,16 +15,16 @@ import {
   reconcileClassInfoSelection,
 } from './editor';
 
-const IMAGE_A = 'image:assembly-csharp' as any;
-const IMAGE_B = 'image:zeta' as any;
-const CLASS_PLAYER = 'class:player' as any;
-const CLASS_HUD = 'class:hud' as any;
-const CLASS_ENEMY = 'class:enemy' as any;
-const FIELD_HEALTH = 'field:player:health' as any;
-const FIELD_SPEED = 'field:player:speed' as any;
-const STATIC_INSTANCE = 'field:player:instance' as any;
-const METHOD_MOVE = 'method:player:move' as any;
-const METHOD_MISSING = 'method:player:missing' as any;
+const IMAGE_A = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
+const IMAGE_B = createImageStableId({ imageName: 'Zeta.dll', imagePath: 'Zeta.dll' });
+const CLASS_PLAYER = createClassStableId({ imageStableId: IMAGE_A, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player' });
+const CLASS_HUD = createClassStableId({ imageStableId: IMAGE_A, namespace: 'Ui', className: 'Hud', legacyClassId: 'hud' });
+const CLASS_ENEMY = createClassStableId({ imageStableId: IMAGE_B, namespace: 'Gameplay', className: 'Enemy', legacyClassId: 'enemy' });
+const FIELD_HEALTH = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'health', fieldType: 'System.Int32', fieldKind: 'instance' });
+const FIELD_SPEED = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'speed', fieldType: 'System.Single', fieldKind: 'instance' });
+const STATIC_INSTANCE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'Instance', fieldType: 'Gameplay.PlayerController', fieldKind: 'static' });
+const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void Move(System.Single x, System.Single y)' });
+const METHOD_MISSING = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Missing', signature: 'System.Void Missing()' });
 
 const sampleClassDescriptor: ClassDescriptor = {
   stableId: CLASS_PLAYER,
@@ -75,7 +81,16 @@ describe('studio editor catalog', () => {
       {
         [IMAGE_A]: [
           { stableId: CLASS_PLAYER, imageStableId: IMAGE_A, legacyImageId: 'img-a', legacyClassId: 'player', name: 'PlayerController', namespace: 'Gameplay', fullName: 'Gameplay.PlayerController', imageName: 'Assembly-CSharp.dll' },
-          { stableId: 'class:camera' as any, imageStableId: IMAGE_A, legacyImageId: 'img-a', legacyClassId: 'camera', name: 'CameraRig', namespace: 'Cinematics', fullName: 'Cinematics.CameraRig', imageName: 'Assembly-CSharp.dll' },
+          {
+            stableId: createClassStableId({ imageStableId: IMAGE_A, namespace: 'Cinematics', className: 'CameraRig', legacyClassId: 'camera' }),
+            imageStableId: IMAGE_A,
+            legacyImageId: 'img-a',
+            legacyClassId: 'camera',
+            name: 'CameraRig',
+            namespace: 'Cinematics',
+            fullName: 'Cinematics.CameraRig',
+            imageName: 'Assembly-CSharp.dll',
+          },
         ],
       },
     );
@@ -89,7 +104,7 @@ describe('studio editor catalog', () => {
 
     const reconciled = reconcileClassInfoSelection(
       {
-        members: [FIELD_HEALTH, 'field:missing' as any],
+        members: [FIELD_HEALTH, createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'missing', fieldType: 'System.Int32', fieldKind: 'instance' })],
         statics: [STATIC_INSTANCE],
         functions: [METHOD_MISSING],
       },
@@ -117,7 +132,7 @@ describe('studio editor catalog', () => {
       { x: 320, y: 240 },
     );
 
-    expect(request.requestId).toContain('image:assembly-csharp::class:player::');
+  expect(request.requestId).toContain(`${IMAGE_A}::${CLASS_PLAYER}::`);
     expect(request.suggestedPosition).toEqual({ x: 320, y: 240 });
     expect(request.availableInfo.members.map((item) => item.id)).toEqual([FIELD_HEALTH, FIELD_SPEED]);
     expect(request.availableInfo.functions[0]?.detail).toContain('Move');

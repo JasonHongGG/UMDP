@@ -19,9 +19,9 @@ interface ParametersNodeData extends BaseNodeData {
   parameters: ParameterDefinitionEntry[];
 }
 
-const STRING_PARAMS_INPUTS: IPort[] = [];
+const PARAMETERS_INPUTS: IPort[] = [];
 
-const STRING_PARAMS_OUTPUTS: IPort[] = [
+const PARAMETERS_OUTPUTS: IPort[] = [
   createJsonPort('params-out', 'Params', PARAMETER_DEFINITIONS_SCHEMA, 'Parameter definitions for downstream node inputs.'),
 ];
 
@@ -121,11 +121,11 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
     typeVersion: 1,
     family: 'data',
     displayName: 'Parameters',
-    description: 'Defines reusable parameters for downstream node inputs. Currently supports string values.',
+    description: 'Defines reusable parameters for downstream node inputs.',
     category: 'Data',
     tags: ['json', 'params', 'input', 'definitions'],
-    inputs: [],
-    outputs: [{ key: 'params-out', displayName: 'Params', direction: 'output', channel: 'data', cardinality: 'single', dataType: PARAMETER_DEFINITIONS_SCHEMA.id }],
+    inputs: PARAMETERS_INPUTS,
+    outputs: PARAMETERS_OUTPUTS.map((port) => ({ key: port.id, displayName: port.label, direction: 'output', channel: 'data', cardinality: 'single', dataType: PARAMETER_DEFINITIONS_SCHEMA.id })),
     parameters: [{
       name: 'parameters',
       displayName: 'Parameter Definitions',
@@ -133,7 +133,7 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
       expressionSupport: 'disabled',
       ui: {
         section: 'Definitions',
-        helperText: 'Define reusable parameters for downstream nodes. Current supported type: string.',
+        helperText: 'Define reusable parameters for downstream nodes.',
         collection: {
           minItems: 1,
           addLabel: 'Add Param',
@@ -225,6 +225,6 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
   CanvasComponent: ParametersNodeCanvas,
 };
 
-export const StringParametersNodeDef = defineStudioNode(ParametersNodeDefinition);
+export const ParametersNodeDef = defineStudioNode(ParametersNodeDefinition);
 
-export default StringParametersNodeDef;
+export default ParametersNodeDef;

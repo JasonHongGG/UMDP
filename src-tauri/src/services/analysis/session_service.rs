@@ -1,9 +1,9 @@
-use crate::models::{AttachResponse, AttachedProcess};
+use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
 use crate::state::AppState;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
 
-pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<AttachResponse, String> {
+pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
     let mut sys = System::new_all();
     sys.refresh_processes();
 
@@ -20,22 +20,19 @@ pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<Att
     let managed_dir = data_dir.as_deref().and_then(derive_managed_dir);
     let runtime = detect_runtime(data_dir.as_deref(), managed_dir.as_deref());
 
-    state.analysis.set_process_session(AttachedProcess {
+    let session = ProcessSession {
         pid,
+        process_name: name,
+        exe_path,
         data_dir: data_dir.clone(),
         managed_dir: managed_dir.clone(),
-    });
+        runtime,
+    };
+
+    state.analysis.set_process_session(session.clone());
     state.analysis.clear_metadata();
 
-    Ok(AttachResponse {
-        attached: true,
-        process_name: name,
-        process_id: pid,
-        exe_path,
-        data_dir,
-        managed_dir,
-        runtime,
-    })
+    Ok(session)
 }
 
 fn derive_data_dir(exe_path: &str) -> Option<String> {
@@ -59,9 +56,9 @@ fn derive_managed_dir(data_dir: &str) -> Option<String> {
     }
 }
 
-fn detect_runtime(data_dir: Option<&str>, managed_dir: Option<&str>) -> String {
+fn detect_runtime(data_dir: Option<&str>, managed_dir: Option<&str>) -> RuntimeFlavor {
     let Some(dir) = data_dir else {
-        return "Unknown".to_string();
+        return RuntimeFlavor::Unknown;
     };
 
     let data_path = Path::new(dir);
@@ -70,10 +67,10 @@ fn detect_runtime(data_dir: Option<&str>, managed_dir: Option<&str>) -> String {
     let global_metadata = data_path.join(r"il2cpp_data\Metadata\global-metadata.dat");
 
     if game_assembly.exists() && global_metadata.exists() {
-        "IL2CPP".to_string()
+        RuntimeFlavor::Il2cpp
     } else if mono_bleeding.exists() || managed_dir.is_some() {
-        "Mono".to_string()
+        RuntimeFlavor::Mono
     } else {
-        "Unknown".to_string()
+        RuntimeFlavor::Unknown
     }
 }

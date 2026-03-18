@@ -1,6 +1,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphDocument } from '../../domain/studio/contracts';
-import type { ClassBinding, ClassInfoCatalog, PendingClassNodeRequest, StudioClassCatalogEntry } from '../../domain/studio/editor';
+import {
+  createClassInfoCatalogSignature,
+  hasSameClassInfoSelection,
+  reconcileClassInfoSelection,
+  type ClassBinding,
+  type ClassInfoCatalog,
+  type ClassInfoSelection,
+  type PendingClassNodeRequest,
+  type StudioClassCatalogEntry,
+} from '../../domain/studio/editor';
 import { validateConnection } from './connectionPolicy';
 import { executeStudioFlow } from './executionEngine';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
@@ -288,6 +297,43 @@ export function StudioProvider({ children, classCatalog }: { children: React.Rea
   const { nodes, edges, document, connectPorts } = graphStore;
   const uiValue = useStudioUiState({ nodes, edges, connectPorts });
   const runtimeValue = useStudioRuntimeState(document, nodes, edges);
+
+  useEffect(() => {
+    for (const node of nodes) {
+      if (node.type !== 'class-ref') {
+        continue;
+      }
+
+      const data = node.data as Partial<{
+        binding: ClassBinding | null;
+        availableInfo: ClassInfoCatalog;
+        infoSelection: ClassInfoSelection;
+      }>;
+
+      if (!data.binding || !data.infoSelection) {
+        continue;
+      }
+
+      const resolvedCatalog = classCatalog.getClassInfoCatalogByBinding(data.binding);
+      if (!resolvedCatalog) {
+        continue;
+      }
+
+      const currentCatalog = data.availableInfo ?? { members: [], statics: [], functions: [] };
+      const reconciledSelection = reconcileClassInfoSelection(data.infoSelection, resolvedCatalog);
+      const catalogChanged = createClassInfoCatalogSignature(currentCatalog) !== createClassInfoCatalogSignature(resolvedCatalog);
+      const selectionChanged = !hasSameClassInfoSelection(data.infoSelection, reconciledSelection);
+
+      if (!catalogChanged && !selectionChanged) {
+        continue;
+      }
+
+      graphStore.updateNodeData(node.id, {
+        availableInfo: resolvedCatalog,
+        infoSelection: reconciledSelection,
+      });
+    }
+  }, [classCatalog, graphStore, nodes]);
 
   return (
     <StudioGraphContext.Provider value={graphStore}>

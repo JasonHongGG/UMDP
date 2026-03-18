@@ -51,7 +51,7 @@ describe('studio persistence', () => {
     expect(parsed?.nodes[0]?.id).toBe('node-a');
   });
 
-  it('strips derived class catalogs from persisted workflow documents', () => {
+  it('preserves canonical class node document state without persistence-time mutation', () => {
     const document = createEmptyGraphDocument();
     document.nodes.push({
       id: 'class-node',
@@ -61,7 +61,7 @@ describe('studio persistence', () => {
       parameters: {},
       bindings: {},
       documentState: {
-        binding: {
+        classBinding: {
           imageStableId: 'image:a',
           classStableId: 'class:a',
           fullName: 'Gameplay.Player',
@@ -69,15 +69,10 @@ describe('studio persistence', () => {
           namespace: 'Gameplay',
           imageName: 'Assembly-CSharp.dll',
         },
-        availableInfo: {
-          members: [{ id: 'field:a' }],
-          statics: [],
-          functions: [],
-        },
-        infoSelection: {
-          members: ['field:a'],
-          statics: [],
-          functions: [],
+        exportSelection: {
+          memberStableIds: ['field:a'],
+          staticStableIds: [],
+          methodStableIds: [],
         },
       },
     });
@@ -85,7 +80,7 @@ describe('studio persistence', () => {
     const parsed = parseGraphDocument(serializeGraphDocument(document));
 
     expect(parsed?.nodes[0]?.documentState).toEqual({
-      binding: {
+      classBinding: {
         imageStableId: 'image:a',
         classStableId: 'class:a',
         fullName: 'Gameplay.Player',
@@ -93,10 +88,10 @@ describe('studio persistence', () => {
         namespace: 'Gameplay',
         imageName: 'Assembly-CSharp.dll',
       },
-      infoSelection: {
-        members: ['field:a'],
-        statics: [],
-        functions: [],
+      exportSelection: {
+        memberStableIds: ['field:a'],
+        staticStableIds: [],
+        methodStableIds: [],
       },
     });
   });

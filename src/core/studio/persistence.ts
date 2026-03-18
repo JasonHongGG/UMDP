@@ -8,31 +8,6 @@ interface StoredGraphDocumentRecord {
   document: GraphDocument;
 }
 
-function normalizeNodeForPersistence(node: NodeInstance): NodeInstance {
-  if (node.nodeType !== 'class-ref') {
-    return node;
-  }
-
-  const documentState = node.documentState as Record<string, unknown>;
-  if (!('availableInfo' in documentState)) {
-    return node;
-  }
-
-  const { availableInfo: _availableInfo, ...persistedDocumentState } = documentState;
-  return {
-    ...node,
-    documentState: persistedDocumentState,
-  };
-}
-
-function normalizeGraphDocumentForPersistence(document: GraphDocument): GraphDocument {
-  const clonedDocument = cloneGraphDocument(document);
-  return {
-    ...clonedDocument,
-    nodes: clonedDocument.nodes.map((node) => normalizeNodeForPersistence(node)),
-  };
-}
-
 function isStudioNodeInstance(value: unknown): value is NodeInstance {
   if (!value || typeof value !== 'object') {
     return false;
@@ -99,7 +74,7 @@ export function cloneGraphDocument(document: GraphDocument): GraphDocument {
 }
 
 export function serializeGraphDocument(document: GraphDocument) {
-  return JSON.stringify(normalizeGraphDocumentForPersistence(document));
+  return JSON.stringify(cloneGraphDocument(document));
 }
 
 export function isGraphDocument(value: unknown): value is GraphDocument {
@@ -125,7 +100,7 @@ export function parseGraphDocument(raw: string): GraphDocument | null {
       return null;
     }
 
-    return normalizeGraphDocumentForPersistence(parsed);
+    return cloneGraphDocument(parsed);
   } catch {
     return null;
   }
@@ -158,7 +133,7 @@ export function readStoredGraphDocument(storageKey: string): StoredGraphDocument
 
     return {
       savedAt: parsed.savedAt,
-      document: normalizeGraphDocumentForPersistence(parsed.document),
+      document: cloneGraphDocument(parsed.document),
     };
   } catch {
     return null;
@@ -172,7 +147,7 @@ export function writeStoredGraphDocument(storageKey: string, document: GraphDocu
 
   const record: StoredGraphDocumentRecord = {
     savedAt: Date.now(),
-    document: normalizeGraphDocumentForPersistence(document),
+    document: cloneGraphDocument(document),
   };
 
   window.localStorage.setItem(storageKey, JSON.stringify(record));

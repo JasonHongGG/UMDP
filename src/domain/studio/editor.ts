@@ -68,6 +68,14 @@ export function createClassInfoCatalogFromClassDescriptor(classInfo: ClassDescri
   };
 }
 
+export function createClassInfoCatalogSignature(catalog: ClassInfoCatalog) {
+  return [
+    catalog.members.map((item) => item.id).join(','),
+    catalog.statics.map((item) => item.id).join(','),
+    catalog.functions.map((item) => item.id).join(','),
+  ].join('|');
+}
+
 export function reconcileClassInfoSelection(
   selection: ClassInfoSelection,
   catalog: ClassInfoCatalog,
@@ -81,6 +89,12 @@ export function reconcileClassInfoSelection(
     statics: selection.statics.filter((itemId) => staticIds.has(itemId)),
     functions: selection.functions.filter((itemId) => functionIds.has(itemId)),
   };
+}
+
+export function hasSameClassInfoSelection(left: ClassInfoSelection, right: ClassInfoSelection) {
+  return left.members.join(',') === right.members.join(',')
+    && left.statics.join(',') === right.statics.join(',')
+    && left.functions.join(',') === right.functions.join(',');
 }
 
 export function buildStudioClassCatalog(

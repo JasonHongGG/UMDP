@@ -6,9 +6,6 @@ pub fn get_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool {
         process::fetch_system_processes,
         process::attach_to_process,
         metadata::load_all_metadata,
-        metadata::get_image_catalog,
-        metadata::get_image_classes,
-        metadata::get_class_details,
         metadata::get_runtime_static_fields,
     ]
 }

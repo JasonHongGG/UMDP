@@ -99,36 +99,41 @@ internal sealed class ManagedMetadataCatalog : IDisposable
         return CreateClassDetails(type);
     }
 
-    public DumpAllResponseContract DumpAll()
+    public CanonicalAnalysisSnapshot DumpAll()
     {
-        var images = GetImages();
-        var classesByImage = new Dictionary<string, List<ClassSummaryContract>>(StringComparer.Ordinal);
-        var classDetails = new Dictionary<string, ClassDetailsContract>(StringComparer.Ordinal);
+        var images = GetImages().Select(CreateCanonicalImageDescriptor).ToList();
+        var imagesByLegacyId = images.ToDictionary(image => image.LegacyImageId, StringComparer.Ordinal);
+        var classes = new Dictionary<string, CanonicalClassDescriptor>(StringComparer.Ordinal);
+        var imageClassIndex = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
         if (_source.Kind == MetadataSourceKind.Il2Cpp)
         {
             foreach (var assembly in _il2cppAssemblies.OrderBy(GetImageId, StringComparer.OrdinalIgnoreCase))
             {
                 var imageId = GetImageId(assembly);
-                var classSummaries = new List<ClassSummaryContract>();
+                if (!imagesByLegacyId.TryGetValue(imageId, out var image))
+                {
+                    continue;
+                }
+
+                var classStableIds = new List<string>();
 
                 foreach (var type in EnumerateVisibleTypes(assembly))
                 {
-                    var summary = CreateClassSummary(type);
-                    classSummaries.Add(summary);
-                    classDetails[$"{imageId}::{type.FullName}"] = CreateClassDetails(type);
+                    var descriptor = CreateCanonicalClassDescriptor(image, CreateClassDetails(type));
+                    classes[descriptor.StableId] = descriptor;
+                    classStableIds.Add(descriptor.StableId);
                 }
 
-                classesByImage[imageId] = classSummaries
-                    .OrderBy(type => type.FullName, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                imageClassIndex[image.StableId] = classStableIds;
             }
 
-            return new DumpAllResponseContract
+            return new CanonicalAnalysisSnapshot
             {
                 Images = images,
-                ClassesByImage = classesByImage,
-                ClassDetails = classDetails,
+                GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                Classes = classes,
+                ImageClassIndex = imageClassIndex,
             };
         }
 
@@ -136,19 +141,17 @@ internal sealed class ManagedMetadataCatalog : IDisposable
         {
             try
             {
-                using var assembly = LoadAssembly(image.Id);
-                var classSummaries = new List<ClassSummaryContract>();
+                using var assembly = LoadAssembly(image.LegacyImageId);
+                var classStableIds = new List<string>();
 
                 foreach (var type in EnumerateVisibleTypes(assembly))
                 {
-                    var summary = CreateClassSummary(type);
-                    classSummaries.Add(summary);
-                    classDetails[$"{image.Id}::{type.FullName}"] = CreateClassDetails(type);
+                    var descriptor = CreateCanonicalClassDescriptor(image, CreateClassDetails(type));
+                    classes[descriptor.StableId] = descriptor;
+                    classStableIds.Add(descriptor.StableId);
                 }
 
-                classesByImage[image.Id] = classSummaries
-                    .OrderBy(type => type.FullName, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                imageClassIndex[image.StableId] = classStableIds;
             }
             catch
             {
@@ -156,11 +159,12 @@ internal sealed class ManagedMetadataCatalog : IDisposable
             }
         }
 
-        return new DumpAllResponseContract
+        return new CanonicalAnalysisSnapshot
         {
             Images = images,
-            ClassesByImage = classesByImage,
-            ClassDetails = classDetails,
+            GeneratedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+            Classes = classes,
+            ImageClassIndex = imageClassIndex,
         };
     }
 
@@ -205,6 +209,63 @@ internal sealed class ManagedMetadataCatalog : IDisposable
             Id = imageId,
             Name = Path.GetFileNameWithoutExtension(imageId),
             Path = _source.GameAssemblyPath ?? imageId,
+        };
+    }
+
+    private static CanonicalImageDescriptor CreateCanonicalImageDescriptor(ImageContract image)
+    {
+        return new CanonicalImageDescriptor
+        {
+            StableId = CanonicalIdFactory.CreateImageStableId(image.Name, image.Path),
+            LegacyImageId = image.Id,
+            Name = image.Name,
+            Path = image.Path,
+        };
+    }
+
+    private static CanonicalClassDescriptor CreateCanonicalClassDescriptor(CanonicalImageDescriptor image, ClassDetailsContract classDetails)
+    {
+        var classStableId = CanonicalIdFactory.CreateClassStableId(
+            image.StableId,
+            classDetails.Namespace,
+            classDetails.Name,
+            classDetails.Id);
+
+        return new CanonicalClassDescriptor
+        {
+            StableId = classStableId,
+            LegacyClassId = classDetails.Id,
+            LegacyImageId = image.LegacyImageId,
+            ImageStableId = image.StableId,
+            Name = classDetails.Name,
+            Namespace = classDetails.Namespace,
+            FullName = classDetails.FullName,
+            Inheritance = classDetails.Inheritance,
+            Fields = classDetails.Fields.Select(field => new CanonicalFieldDescriptor
+            {
+                StableId = CanonicalIdFactory.CreateFieldStableId(classStableId, field.Name, field.FieldType, "instance"),
+                LegacyFieldName = field.Name,
+                Name = field.Name,
+                FieldType = field.FieldType,
+                Offset = field.Offset,
+            }).ToList(),
+            StaticFields = classDetails.StaticFields.Select(field => new CanonicalStaticFieldDescriptor
+            {
+                StableId = CanonicalIdFactory.CreateFieldStableId(classStableId, field.Name, field.FieldType, "static"),
+                LegacyFieldName = field.Name,
+                Name = field.Name,
+                FieldType = field.FieldType,
+                Offset = field.Offset,
+                Address = field.Address,
+                Value = field.Value,
+            }).ToList(),
+            Methods = classDetails.Methods.Select(method => new CanonicalMethodDescriptor
+            {
+                StableId = CanonicalIdFactory.CreateMethodStableId(classStableId, method.Name, method.Signature),
+                Name = method.Name,
+                Signature = method.Signature,
+                Tags = method.Tags,
+            }).ToList(),
         };
     }
 

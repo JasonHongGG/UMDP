@@ -1,22 +1,13 @@
 export type {
-  AttachResponse,
-  ClassInfo,
-  ClassSummary,
-  DumpAllResponse,
-  FieldInfo,
-  ImageInfo,
-  InheritanceNode,
-  MethodInfo,
-  ProcessInfo,
-  RuntimeClassOverlayResponse,
-  StaticFieldInfo,
-} from './domain/analysis/contracts/external';
-export type {
   AnalysisSnapshot,
   ClassDescriptor,
+  FieldDescriptor,
   ImageDescriptor,
+  MethodDescriptor,
+  ProcessInfo,
   ProcessSession,
   RuntimeClassOverlayDescriptor,
   RuntimeFlavor,
   RuntimeOverlaySnapshot,
+  StaticFieldDescriptor,
 } from './domain/analysis/contracts/canonical';

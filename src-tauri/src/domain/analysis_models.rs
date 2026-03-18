@@ -1,9 +1,13 @@
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub type StableId = String;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProcessInfo {
+    pub pid: u32,
+    pub name: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -110,4 +114,30 @@ pub struct RuntimeClassOverlayDescriptor {
     pub class_stable_id: StableId,
     pub fields: Vec<FieldDescriptor>,
     pub static_fields: Vec<StaticFieldDescriptor>,
+}
+
+fn normalize_segment(segment: &str) -> String {
+    segment.trim().replace(['|', '\\'], "_")
+}
+
+pub fn create_stable_id(kind: &str, parts: &[&str]) -> StableId {
+    let normalized = parts
+        .iter()
+        .map(|part| normalize_segment(part))
+        .collect::<Vec<_>>()
+        .join("|");
+
+    format!("{kind}:{normalized}")
+}
+
+pub fn create_field_stable_id(
+    class_stable_id: &StableId,
+    field_name: &str,
+    field_type: &str,
+    field_kind: &str,
+) -> StableId {
+    create_stable_id(
+        "field",
+        &[class_stable_id.as_str(), field_kind, field_name, field_type],
+    )
 }
