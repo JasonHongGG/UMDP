@@ -1,6 +1,12 @@
 import { globalNodeRegistry } from './NodeRegistry';
-import { createNodeExecutionContext, getOutgoingFlowEdges, validateNodeExecution } from './runtimeGraph';
-import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
+import {
+  getIncomingEdges,
+  getNodeOutputPort,
+  getOutgoingFlowEdges,
+  getStudioNodeById,
+  validateNodeExecution,
+} from './runtimeGraph';
+import { NodeExecutionContext, NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
 
 interface ExecuteStudioFlowOptions {
   startNodeId: string;
@@ -34,9 +40,116 @@ export function executeStudioFlow({
     onNodeSnapshot(snapshot);
   };
 
+  const canMaterializePassiveJsonNode = (node: StudioNode) => {
+    const hasFlowInputs = node.data.inputs.some((port) => port.type === 'flow');
+    const hasJsonOutputs = node.data.outputs.some((port) => port.type === 'json');
+
+    return !hasFlowInputs && hasJsonOutputs;
+  };
+
+  const createExecutionContext = (nodeId: string, resolving = new Set<string>()): NodeExecutionContext | null => {
+    const node = getStudioNodeById(nodeId, nodes);
+    if (!node) {
+      return null;
+    }
+
+    const jsonInputPortIds = new Set(node.data.inputs.filter((port) => port.type === 'json').map((port) => port.id));
+
+    const incoming = getIncomingEdges(nodeId, edges).reduce<NodeExecutionContext['incoming']>((acc, edge) => {
+      if (!jsonInputPortIds.has(edge.targetPortId)) {
+        return acc;
+      }
+
+      const sourceNode = getStudioNodeById(edge.sourceNodeId, nodes);
+      const sourcePort = getNodeOutputPort(sourceNode, edge.sourcePortId);
+      if (!sourceNode || sourcePort?.type !== 'json') {
+        return acc;
+      }
+
+      let envelope = snapshots[sourceNode.id]?.outputs[edge.sourcePortId];
+
+      if (!envelope && canMaterializePassiveJsonNode(sourceNode)) {
+        materializePassiveJsonNode(sourceNode.id, resolving);
+        envelope = snapshots[sourceNode.id]?.outputs[edge.sourcePortId];
+      }
+
+      if (!envelope) {
+        return acc;
+      }
+
+      if (!acc[edge.targetPortId]) {
+        acc[edge.targetPortId] = [];
+      }
+
+      acc[edge.targetPortId].push(envelope);
+      return acc;
+    }, {});
+
+    return {
+      node,
+      nodes,
+      edges,
+      incoming,
+    };
+  };
+
+  const materializePassiveJsonNode = (nodeId: string, resolving = new Set<string>()) => {
+    if (snapshots[nodeId] || resolving.has(nodeId)) {
+      return;
+    }
+
+    const node = getStudioNodeById(nodeId, nodes);
+    if (!node || !canMaterializePassiveJsonNode(node)) {
+      return;
+    }
+
+    const definition = globalNodeRegistry.get(node.type);
+    if (!definition) {
+      return;
+    }
+
+    resolving.add(nodeId);
+    const context = createExecutionContext(nodeId, resolving);
+    const startedAt = Date.now();
+
+    if (!context) {
+      resolving.delete(nodeId);
+      return;
+    }
+
+    const validation = validateNodeExecution(context, definition);
+    if (!validation.valid) {
+      publishSnapshot({
+        nodeId,
+        state: 'error',
+        inputs: context.incoming,
+        outputs: {},
+        error: validation.error ?? 'Node validation failed.',
+        startedAt,
+        completedAt: Date.now(),
+      });
+      resolving.delete(nodeId);
+      return;
+    }
+
+    const result = definition.execute?.(context) ?? { state: 'success', outputs: {} };
+
+    publishSnapshot({
+      nodeId,
+      state: result.state,
+      inputs: context.incoming,
+      outputs: result.outputs ?? {},
+      error: result.state === 'error' ? result.error ?? 'Node execution failed.' : undefined,
+      startedAt,
+      completedAt: Date.now(),
+    });
+
+    resolving.delete(nodeId);
+  };
+
   const runNode = (nodeId: string, delay: number) => {
     schedule(() => {
-      const context = createNodeExecutionContext(nodeId, nodes, edges, snapshots);
+      const context = createExecutionContext(nodeId);
       const startedAt = Date.now();
       const incoming = context?.incoming ?? {};
 

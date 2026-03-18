@@ -14,7 +14,7 @@ import {
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import {
   CLASS_INFO_SCHEMA,
-  INSTANCE_REFERENCE_SCHEMA,
+  PARAMETER_DEFINITIONS_SCHEMA,
   createClassInfoEnvelope,
   createFlowPort,
   createJsonPort,
@@ -54,7 +54,7 @@ const CLASS_INFO_OUTPUT: IPort = {
 
 const CLASS_NODE_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In'),
-  createJsonPort('instance-in', 'Instance Ref', INSTANCE_REFERENCE_SCHEMA, 'Runtime instance reference envelope.'),
+  createJsonPort('instance-in', 'Instance Ref', PARAMETER_DEFINITIONS_SCHEMA, 'Parameter definitions used to supply instance reference data to this class node.'),
 ];
 
 const CLASS_NODE_OUTPUTS: IPort[] = [

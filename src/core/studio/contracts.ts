@@ -5,7 +5,7 @@ import {
   ClassInfoSelection,
   IPort,
   JsonSchemaReference,
-  PortType,
+  ParameterDefinitionPayload,
   WORKFLOW_SCHEMA_IDS,
   WorkflowJsonEnvelope,
 } from './types';
@@ -23,6 +23,12 @@ export const INSTANCE_REFERENCE_SCHEMA: JsonSchemaReference = {
   id: WORKFLOW_SCHEMA_IDS.instanceReference,
   version: 1,
   title: 'Instance Reference',
+};
+
+export const PARAMETER_DEFINITIONS_SCHEMA: JsonSchemaReference = {
+  id: WORKFLOW_SCHEMA_IDS.parameterDefinitions,
+  version: 1,
+  title: 'Parameter Definitions',
 };
 
 export const CLASS_INFO_SCHEMA: JsonSchemaReference = {
@@ -82,5 +88,11 @@ export function createClassInfoEnvelope(
   }, {
     source: 'class-node',
     bindingState: 'bound',
+  });
+}
+
+export function createParameterDefinitionsEnvelope(parameters: ParameterDefinitionPayload): WorkflowJsonEnvelope<ParameterDefinitionPayload> {
+  return createEnvelope(PARAMETER_DEFINITIONS_SCHEMA, parameters, {
+    source: 'parameters-node',
   });
 }

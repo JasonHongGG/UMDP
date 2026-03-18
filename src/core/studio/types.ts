@@ -145,6 +145,15 @@ export interface NodeExecutionSnapshot {
   completedAt?: number;
 }
 
+export type ParameterValueType = 'string';
+
+export interface ParameterDefinitionValue {
+  type: ParameterValueType;
+  value: string;
+}
+
+export type ParameterDefinitionPayload = Record<string, ParameterDefinitionValue>;
+
 export interface ClassInfoPayload {
   statics: Record<string, WorkflowJsonValue>;
   members: Record<string, WorkflowJsonValue>;
@@ -190,6 +199,7 @@ export const WORKFLOW_SCHEMA_IDS = {
   genericJson: 'studio.json.generic',
   classInfo: 'studio.class.info',
   instanceReference: 'studio.instance.reference',
+  parameterDefinitions: 'studio.params.definition',
 } as const;
 
 export const PORT_COLORS: Record<PortType, string> = {
