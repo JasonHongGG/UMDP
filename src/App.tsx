@@ -5,7 +5,6 @@ import type { ClassInfo, FieldInfo, RuntimeClassOverlayResponse, StaticFieldInfo
 import { ScanSearch, Binary, Database } from 'lucide-react';
 import { createPendingClassNodeRequest } from './core/studio/classCatalog';
 import { ClassBinding, PendingClassNodeRequest } from './core/studio/types';
-import { StudioProvider } from './core/studio/StudioContext';
 
 import { MainLayout } from './components/layout/MainLayout';
 import { TopBar } from './components/features/TopBar';
@@ -264,7 +263,6 @@ export default function App() {
   }, [activeTabIndex, tabs.length]);
 
   return (
-    <StudioProvider>
     <MainLayout>
       <TopBar
         attachedProcess={attached ? `${attached.process_name} (${attached.process_id})` : null}
@@ -411,6 +409,5 @@ export default function App() {
         </div>
       </div>
     </MainLayout>
-    </StudioProvider>
   );
 }

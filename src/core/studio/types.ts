@@ -34,6 +34,7 @@ export interface IPort {
 }
 
 export interface BaseNodeData extends Record<string, unknown> {
+  nodeName?: string;
   inputs: IPort[];
   outputs: IPort[];
 }

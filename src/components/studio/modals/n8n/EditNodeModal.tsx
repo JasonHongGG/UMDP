@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut } from 'lucide-react';
 import { useStudioGraph, useStudioUi } from '../../../../core/studio/StudioContext';
 import { BaseNodeData, IPort } from '../../../../core/studio/types';
@@ -7,9 +7,23 @@ import { globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
 export function EditNodeModal() {
   const { nodes, edges, updateNodeData, updateNodePorts } = useStudioGraph();
   const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [draftNodeName, setDraftNodeName] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const node = useMemo(() => nodes.find(n => n.id === editingNodeId), [nodes, editingNodeId]);
   const nodeDef = useMemo(() => node ? globalNodeRegistry.get(node.type) : null, [node]);
+  const resolvedNodeName = useMemo(() => {
+    if (!node || !nodeDef) {
+      return '';
+    }
+
+    const classBindingName = typeof node.data.binding === 'object' && node.data.binding && 'name' in node.data.binding
+      ? String((node.data.binding as { name?: string }).name ?? '')
+      : '';
+
+    return (node.data.nodeName && node.data.nodeName.trim()) || classBindingName || nodeDef.displayName;
+  }, [node, nodeDef]);
 
   // Derived state for the left column
   const incomingData = useMemo(() => {
@@ -24,17 +38,54 @@ export function EditNodeModal() {
       .filter(d => d.node && d.port);
   }, [edges, nodes, node]);
 
-  if (!isEditModalOpen || !node || !nodeDef) return null;
-
-  const EditComponent = nodeDef.EditComponent;
+  const EditComponent = nodeDef?.EditComponent;
 
   const handleUpdateData = (newData: Partial<BaseNodeData>) => {
+    if (!node) {
+      return;
+    }
+
     updateNodeData(node.id, newData);
   };
 
   const handleUpdatePorts = (inputs: IPort[], outputs: IPort[]) => {
+    if (!node) {
+      return;
+    }
+
     updateNodePorts(node.id, inputs, outputs);
   };
+
+  const commitNodeName = () => {
+    if (!node || !nodeDef) {
+      return;
+    }
+
+    const trimmedName = draftNodeName.trim();
+    const classBindingName = typeof node.data.binding === 'object' && node.data.binding && 'name' in node.data.binding
+      ? String((node.data.binding as { name?: string }).name ?? '')
+      : '';
+    const fallbackName = classBindingName || nodeDef.displayName;
+
+    updateNodeData(node.id, {
+      nodeName: trimmedName && trimmedName !== fallbackName ? trimmedName : undefined,
+    });
+    setIsEditingName(false);
+  };
+
+  useEffect(() => {
+    setDraftNodeName(resolvedNodeName);
+    setIsEditingName(false);
+  }, [resolvedNodeName, node?.id]);
+
+  useEffect(() => {
+    if (isEditingName) {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }
+  }, [isEditingName]);
+
+  if (!isEditModalOpen || !node || !nodeDef) return null;
 
   const renderPortSchema = (port: IPort) => {
     if (port.type !== 'json' || !port.schema) return null;
@@ -64,7 +115,36 @@ export function EditNodeModal() {
                  <nodeDef.icon size={18} className="text-cyan-400" />
              </div>
              <div>
-                 <h2 className="text-slate-100 font-semibold text-lg leading-tight">{nodeDef.displayName}</h2>
+                 {isEditingName ? (
+                   <input
+                     ref={nameInputRef}
+                     type="text"
+                     value={draftNodeName}
+                     onChange={(event) => setDraftNodeName(event.target.value)}
+                     onBlur={commitNodeName}
+                     onKeyDown={(event) => {
+                       if (event.key === 'Enter') {
+                         event.preventDefault();
+                         commitNodeName();
+                       }
+
+                       if (event.key === 'Escape') {
+                         event.preventDefault();
+                         setDraftNodeName(resolvedNodeName);
+                         setIsEditingName(false);
+                       }
+                     }}
+                     className="bg-transparent border-b border-cyan-500/50 text-slate-100 font-semibold text-lg leading-tight outline-none focus:border-cyan-400 min-w-[16rem]"
+                   />
+                 ) : (
+                   <h2
+                     className="text-slate-100 font-semibold text-lg leading-tight cursor-text"
+                     onDoubleClick={() => setIsEditingName(true)}
+                     title="Double click to rename node"
+                   >
+                     {resolvedNodeName}
+                   </h2>
+                 )}
                  <p className="text-slate-500 text-xs">{node.id}</p>
              </div>
           </div>

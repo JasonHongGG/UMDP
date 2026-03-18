@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Code, ExternalLink, AlertCircle, Layers3, Search, User } from 'lucide-react';
+import { Box, Code, AlertCircle, Layers3, Search, User } from 'lucide-react';
 import {
   INodeComponentProps,
   INodeEditProps,
@@ -123,7 +123,7 @@ function createSectionTone(bucket: SelectionBucketKey) {
     accentBg: 'bg-blue-500/10 border-blue-500/30',
     accentInput: 'text-blue-500 focus:ring-blue-500/30',
     icon: Code,
-    label: 'Functions',
+    label: 'Methods',
   };
 }
 
@@ -175,7 +175,7 @@ const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, dat
       {/* Node Label (Below) */}
       <div className="absolute top-full mt-2 text-center pointer-events-none w-max flex flex-col items-center z-20">
         <span className="text-xs text-white font-medium tracking-wide">
-          {data.binding?.name || 'Select Class...'}
+          {data.nodeName?.trim() || data.binding?.name || 'Select Class...'}
         </span>
         <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">Class Ref</span>
       </div>
@@ -185,7 +185,7 @@ const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, dat
 
 // --- Edit Component ---
 const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
-  const { classes, createNodeRequestFromBinding, openInspectorForBinding } = useStudioClassCatalog();
+  const { classes, createNodeRequestFromBinding } = useStudioClassCatalog();
   const [bindingSearchQuery, setBindingSearchQuery] = useState('');
   const [isBindingPickerOpen, setIsBindingPickerOpen] = useState(!data.binding);
 
@@ -339,15 +339,6 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
             >
               {isBindingPickerOpen ? 'Hide picker' : 'Rebind'}
             </button>
-            {data.binding && openInspectorForBinding ? (
-              <button
-                type="button"
-                onClick={() => openInspectorForBinding(data.binding!)}
-                className="px-3 py-2 rounded-md border border-slate-700 bg-slate-900 text-xs font-medium text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors inline-flex items-center gap-1.5"
-              >
-                <ExternalLink size={12} /> Inspector
-              </button>
-            ) : null}
           </div>
         </div>
 
@@ -412,7 +403,7 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
       <div className="flex-1 overflow-y-auto pr-2 space-y-4">
           {!hasBinding ? (
               <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                  Bind a class first, then select which members, statics, and functions should be wrapped under the fixed <span className="text-cyan-400 font-mono">info</span> output payload.
+                    Bind a class first, then select which statics, members, and methods should be wrapped under the fixed <span className="text-cyan-400 font-mono">info</span> output payload.
               </div>
           ) : !hasSelectableInfo ? (
               <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
@@ -420,8 +411,8 @@ const ClassNodeEdit: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateDa
               </div>
           ) : null}
 
-          {renderSelectionSection('members', data.availableInfo.members)}
           {renderSelectionSection('statics', data.availableInfo.statics)}
+                {renderSelectionSection('members', data.availableInfo.members)}
           {renderSelectionSection('functions', data.availableInfo.functions)}
 
           <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4">

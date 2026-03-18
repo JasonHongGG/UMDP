@@ -79,8 +79,8 @@ export function createClassInfoEnvelope(
     binding,
     selected,
     info: {
-      members: Object.fromEntries(selectedMembers.map((item) => [item.id, null])),
       statics: Object.fromEntries(selectedStatics.map((item) => [item.id, null])),
+      members: Object.fromEntries(selectedMembers.map((item) => [item.id, null])),
       functions: selectedFunctions.map((item) => ({ id: item.id, label: item.label })),
     },
   }, {

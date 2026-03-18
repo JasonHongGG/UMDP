@@ -3,7 +3,7 @@ import { initializeStudioNodeRegistry } from '../../core/studio/NodeRegistry';
 import { StudioClassCatalogProvider } from '../../core/studio/StudioClassCatalogContext';
 import { createEmptyClassInfoSelection } from '../../core/studio/classCatalog';
 import { PendingClassNodeRequest, ClassBinding } from '../../core/studio/types';
-import { useStudioGraph, useStudioUi } from '../../core/studio/StudioContext';
+import { StudioProvider, useStudioGraph, useStudioUi } from '../../core/studio/StudioContext';
 import { CanvasCore } from '../studio/canvas/CanvasCore';
 import { StudioModalLayer } from '../studio/StudioModalLayer';
 import { StudioToolbar } from '../studio/StudioToolbar';
@@ -36,6 +36,28 @@ interface StudioPageProps {
 }
 
 export function StudioPage({
+  pendingClassNode,
+  images,
+  classesByImage,
+  classDetailsByKey,
+  onOpenInspectorForBinding,
+  onPendingClassNodeHandled,
+}: StudioPageProps) {
+  return (
+    <StudioProvider>
+      <StudioPageContent
+        pendingClassNode={pendingClassNode}
+        images={images}
+        classesByImage={classesByImage}
+        classDetailsByKey={classDetailsByKey}
+        onOpenInspectorForBinding={onOpenInspectorForBinding}
+        onPendingClassNodeHandled={onPendingClassNodeHandled}
+      />
+    </StudioProvider>
+  );
+}
+
+function StudioPageContent({
   pendingClassNode,
   images,
   classesByImage,

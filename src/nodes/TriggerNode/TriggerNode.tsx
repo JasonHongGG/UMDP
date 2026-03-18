@@ -44,7 +44,7 @@ const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id,
       {/* Node Label (Below) */}
       <div className="absolute top-full mt-2 text-center pointer-events-none w-max">
         <span className="text-xs text-white font-medium tracking-wide">
-          Trigger
+          {data.nodeName?.trim() || 'Trigger'}
         </span>
       </div>
     </div>
