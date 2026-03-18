@@ -12,7 +12,19 @@ import type { ClassInfo, ClassSummary, ImageInfo } from '../../types';
 
 initializeStudioNodeRegistry(studioNodeCatalog);
 
-const DEFAULT_CLASS_NODE_POSITION = { x: 160, y: 120 };
+const CLASS_NODE_CENTER_OFFSET = { x: 32, y: 44 };
+
+function getViewportCenterPosition(
+  canvasElement: HTMLDivElement,
+  transform: { x: number; y: number; scale: number }
+) {
+  const rect = canvasElement.getBoundingClientRect();
+
+  return {
+    x: (rect.width / 2 - transform.x) / transform.scale - CLASS_NODE_CENTER_OFFSET.x,
+    y: (rect.height / 2 - transform.y) / transform.scale - CLASS_NODE_CENTER_OFFSET.y,
+  };
+}
 
 interface StudioPageProps {
   pendingClassNode?: PendingClassNodeRequest | null;
@@ -37,14 +49,10 @@ export function StudioPage({
 
   const viewportCenterPosition = useMemo(() => {
     if (!canvasElement) {
-      return DEFAULT_CLASS_NODE_POSITION;
+      return null;
     }
 
-    const rect = canvasElement.getBoundingClientRect();
-    return {
-      x: (rect.width / 2 - transform.x) / transform.scale,
-      y: (rect.height / 2 - transform.y) / transform.scale,
-    };
+    return getViewportCenterPosition(canvasElement, transform);
   }, [canvasElement, transform]);
 
   useEffect(() => {
@@ -55,9 +63,13 @@ export function StudioPage({
       return;
     }
 
+    if (!pendingClassNode.suggestedPosition && !viewportCenterPosition) {
+      return;
+    }
+
     handledPendingRequestIdsRef.current.add(pendingClassNode.requestId);
 
-    addNode('class-ref', pendingClassNode.suggestedPosition ?? viewportCenterPosition, {
+    addNode('class-ref', pendingClassNode.suggestedPosition ?? viewportCenterPosition!, {
       binding: pendingClassNode.binding,
       availableInfo: pendingClassNode.availableInfo,
       infoSelection: createEmptyClassInfoSelection(),

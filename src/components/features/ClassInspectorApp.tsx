@@ -54,7 +54,7 @@ export default function ClassInspectorApp({
                 classId: activeTabClassId,
                 imageName: activeTabImageName,
               })}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all shrink-0"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
               title="Add this class as a Studio node"
             >
               <Plus size={16} />
