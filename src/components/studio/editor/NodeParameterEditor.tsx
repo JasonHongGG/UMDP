@@ -162,14 +162,7 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
         }
       }}
     >
-      {presentation ? (
-        <div className="flex items-center gap-2 border-b border-slate-800/80 px-3 py-2">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wider ${presentation.badgeClassName}`}>
-            {presentation.badgeText}
-          </span>
-          <span className="text-[11px] text-slate-400">{presentation.helperText}</span>
-        </div>
-      ) : null}
+      {/* Redesigned to be clean and minimal, without the complex special presentation header */}
       {definition.ui?.multiline ? (
         <textarea
           value={getExpressionSourceDisplayValue(expressionValue)}

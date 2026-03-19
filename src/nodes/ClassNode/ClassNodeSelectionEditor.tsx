@@ -71,6 +71,7 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
         ...resolvedSelection,
         [listKey]: toggleSelectionEntry(resolvedSelection[listKey], itemId),
       },
+      availableInfo: resolvedCatalog,
     });
   };
 
@@ -80,6 +81,7 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
         ...resolvedSelection,
         [bucket]: ids,
       },
+      availableInfo: resolvedCatalog,
     });
   };
 

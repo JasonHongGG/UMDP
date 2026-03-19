@@ -116,7 +116,7 @@ export function parseClassNodeDataFromDocumentState(baseData: BaseNodeData, inst
     nodeName: instance.displayName,
     binding: fromClassBindingReference(documentState.classBinding),
     instanceSource: (instance.bindings.instanceSource as ExpressionSource | undefined) ?? null,
-    availableInfo: createEmptyCatalog(),
+    availableInfo: (instance.documentState.availableInfo as ClassNodeData['availableInfo']) ?? createEmptyCatalog(),
     infoSelection: fromClassExportSelection(documentState.exportSelection),
   };
 }

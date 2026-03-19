@@ -64,17 +64,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       cardinality: port.cardinality,
       dataType: port.dataType,
     })),
-    parameters: [{
-      name: 'instanceSource',
-      displayName: 'Instance Address',
-      valueType: 'string',
-      expressionSupport: 'optional',
-      ui: {
-        section: 'Binding',
-        placeholder: 'literal address or drag expression source here...',
-        helperText: 'Accepts literal, input-expression, or static-expression bindings.',
-      },
-    }],
+    parameters: [],
   },
   icon: Box,
   createInitialData: createClassNodeData,
@@ -92,6 +82,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       bindings,
       documentState: {
         ...createClassNodeDocumentState(data),
+        availableInfo: data.availableInfo,
       },
     };
   },
