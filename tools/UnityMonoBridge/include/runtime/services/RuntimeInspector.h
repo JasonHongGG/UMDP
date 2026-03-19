@@ -5,7 +5,7 @@
 #include "runtime/services/AssemblyService.h"
 #include "runtime/services/ClassService.h"
 #include "runtime/services/FieldEnumerationService.h"
-#include "runtime/services/StaticValueReader.h"
+#include "runtime/services/FieldValueReader.h"
 
 namespace bridge::runtime {
 
@@ -20,7 +20,7 @@ private:
     AssemblyService assembly_service_;
     ClassService class_service_;
     FieldEnumerationService field_enumeration_service_;
-    StaticValueReader static_value_reader_;
+    FieldValueReader field_value_reader_;
 };
 
 } // namespace bridge::runtime

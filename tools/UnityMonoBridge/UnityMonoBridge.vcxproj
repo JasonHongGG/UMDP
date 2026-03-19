@@ -91,7 +91,7 @@
     <ClCompile Include="src\runtime\services\ClassService.cpp" />
     <ClCompile Include="src\runtime\services\FieldEnumerationService.cpp" />
     <ClCompile Include="src\runtime\services\RuntimeInspector.cpp" />
-    <ClCompile Include="src\runtime\services\StaticValueReader.cpp" />
+    <ClCompile Include="src\runtime\services\FieldValueReader.cpp" />
     <ClCompile Include="src\shared\Formatting.cpp" />
     <ClCompile Include="src\shared\StringUtils.cpp" />
     <ClCompile Include="src\win32\Memory.cpp" />
@@ -113,7 +113,7 @@
     <ClInclude Include="include\runtime\services\ClassService.h" />
     <ClInclude Include="include\runtime\services\FieldEnumerationService.h" />
     <ClInclude Include="include\runtime\services\RuntimeInspector.h" />
-    <ClInclude Include="include\runtime\services\StaticValueReader.h" />
+    <ClInclude Include="include\runtime\services\FieldValueReader.h" />
     <ClInclude Include="include\shared\Formatting.h" />
     <ClInclude Include="include\shared\StringUtils.h" />
     <ClInclude Include="include\shared\Types.h" />

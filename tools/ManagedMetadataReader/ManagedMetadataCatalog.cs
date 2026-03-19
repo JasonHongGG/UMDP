@@ -264,6 +264,14 @@ internal sealed class ManagedMetadataCatalog : IDisposable
                 StableId = CanonicalIdFactory.CreateMethodStableId(classStableId, method.Name, method.Signature),
                 Name = method.Name,
                 Signature = method.Signature,
+                ReturnType = method.ReturnType,
+                Parameters = method.Parameters.Select(parameter => new CanonicalMethodParameterDescriptor
+                {
+                    Position = parameter.Position,
+                    Name = parameter.Name,
+                    TypeName = parameter.TypeName,
+                }).ToList(),
+                IsStatic = method.IsStatic,
                 Tags = method.Tags,
             }).ToList(),
         };
@@ -380,6 +388,14 @@ internal sealed class ManagedMetadataCatalog : IDisposable
         {
             Name = method.Name,
             Signature = BuildSignature(method),
+            ReturnType = FormatType(method.ReturnType),
+            Parameters = method.Parameters.Select((parameter, index) => new MethodParameterContract
+            {
+                Position = index,
+                Name = parameter.Name,
+                TypeName = FormatType(parameter.ParameterType),
+            }).ToList(),
+            IsStatic = method.IsStatic,
             Tags = BuildMethodTags(method),
         };
     }

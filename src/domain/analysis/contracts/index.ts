@@ -7,7 +7,9 @@ export type {
   ProcessInfo,
   ProcessSession,
   RuntimeClassOverlayDescriptor,
+  RuntimeInstanceFieldSnapshot,
   RuntimeFlavor,
   RuntimeOverlaySnapshot,
+  RuntimeResolvedFieldDescriptor,
   StaticFieldDescriptor,
 } from './canonical';

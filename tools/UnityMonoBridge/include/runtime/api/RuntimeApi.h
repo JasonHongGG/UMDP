@@ -35,6 +35,7 @@ public:
     virtual Address GetParentClass(Address klass) const = 0;
     virtual std::vector<FieldRecord> EnumerateFields(Address class_handle) const = 0;
     virtual bool TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const = 0;
+    virtual bool TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const = 0;
 };
 
 } // namespace bridge::runtime

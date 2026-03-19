@@ -16,6 +16,7 @@ public:
     Address GetParentClass(Address klass) const override;
     std::vector<FieldRecord> EnumerateFields(Address class_handle) const override;
     bool TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const override;
+    bool TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const override;
 };
 
 } // namespace bridge::runtime

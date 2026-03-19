@@ -151,4 +151,14 @@ bool Il2CppRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* b
     return true;
 }
 
+bool Il2CppRuntimeApi::TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const
+{
+    if (instance_address == 0 || field.is_static || field.offset < 0) {
+        return false;
+    }
+
+    memory().Read(instance_address + static_cast<Address>(field.offset), buffer, size);
+    return true;
+}
+
 } // namespace bridge::runtime

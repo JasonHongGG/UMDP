@@ -7,5 +7,6 @@ pub fn get_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool {
         process::attach_to_process,
         metadata::load_all_metadata,
         metadata::get_runtime_static_fields,
+        metadata::get_runtime_instance_fields,
     ]
 }

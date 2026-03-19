@@ -23,8 +23,8 @@ const CLASS_ENEMY = createClassStableId({ imageStableId: IMAGE_B, namespace: 'Ga
 const FIELD_HEALTH = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'health', fieldType: 'System.Int32', fieldKind: 'instance' });
 const FIELD_SPEED = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'speed', fieldType: 'System.Single', fieldKind: 'instance' });
 const STATIC_INSTANCE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'Instance', fieldType: 'Gameplay.PlayerController', fieldKind: 'static' });
-const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void Move(System.Single x, System.Single y)' });
-const METHOD_MISSING = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Missing', signature: 'System.Void Missing()' });
+const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void (System.Single x, System.Single y)' });
+const METHOD_MISSING = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Missing', signature: 'System.Void ()' });
 const STATIC_RUNTIME_MESSAGE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'objectIsNullMessage', fieldType: 'System.String', fieldKind: 'static' });
 const FIELD_RUNTIME_CACHED_PTR = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'm_CachedPtr', fieldType: 'System.IntPtr', fieldKind: 'instance' });
 
@@ -45,7 +45,18 @@ const sampleClassDescriptor: ClassDescriptor = {
     { stableId: FIELD_SPEED, offset: '14', name: 'speed', legacyFieldName: 'speed', fieldType: 'System.Single' },
   ],
   methods: [
-    { stableId: METHOD_MOVE, name: 'Move', signature: 'System.Void Move(System.Single x, System.Single y)', tags: [] },
+    {
+      stableId: METHOD_MOVE,
+      name: 'Move',
+      signature: 'System.Void (System.Single x, System.Single y)',
+      returnType: 'System.Void',
+      parameters: [
+        { position: 0, name: 'x', typeName: 'System.Single' },
+        { position: 1, name: 'y', typeName: 'System.Single' },
+      ],
+      isStatic: false,
+      tags: [],
+    },
   ],
 };
 
@@ -137,6 +148,7 @@ describe('studio editor catalog', () => {
 
     expect(catalog.statics.map((item) => item.id)).toEqual([STATIC_RUNTIME_MESSAGE, STATIC_INSTANCE]);
     expect(catalog.members.map((item) => item.id)).toEqual([FIELD_RUNTIME_CACHED_PTR, FIELD_HEALTH]);
+    expect(catalog.statics[1]?.address).toBe('0x1000');
   });
 
   it('creates a pending class node request from a concrete binding and canonical info catalog', () => {
@@ -156,6 +168,10 @@ describe('studio editor catalog', () => {
   expect(request.requestId).toContain(`${IMAGE_A}::${CLASS_PLAYER}::`);
     expect(request.suggestedPosition).toEqual({ x: 320, y: 240 });
     expect(request.availableInfo.members.map((item) => item.id)).toEqual([FIELD_HEALTH, FIELD_SPEED]);
-    expect(request.availableInfo.functions[0]?.detail).toContain('Move');
+    expect(request.availableInfo.functions[0]?.returnType).toBe('System.Void');
+    expect(request.availableInfo.functions[0]?.parameters).toEqual([
+      { position: 0, name: 'x', typeName: 'System.Single' },
+      { position: 1, name: 'y', typeName: 'System.Single' },
+    ]);
   });
 });

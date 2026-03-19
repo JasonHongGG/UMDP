@@ -7,6 +7,7 @@ import type {
   ProcessInfo,
   ProcessSession,
   RuntimeClassOverlayDescriptor,
+  RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
 } from './contracts';
 import {
@@ -128,6 +129,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   const [attachError, setAttachError] = useState<string | null>(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [runtimeOverlays, setRuntimeOverlays] = useState<Record<string, RuntimeClassOverlayDescriptor>>({});
+  const [runtimeInstanceFieldSnapshots, setRuntimeInstanceFieldSnapshots] = useState<Record<string, RuntimeInstanceFieldSnapshot>>({});
   const [selectedImageStableId, setSelectedImageStableId] = useState<StableId | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
 
@@ -136,6 +138,8 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
 
   const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
   const [loadingRuntimeByKey, setLoadingRuntimeByKey] = useState<Record<string, boolean>>({});
+  const [runtimeInstanceFieldErrorByKey, setRuntimeInstanceFieldErrorByKey] = useState<Record<string, string | null>>({});
+  const [loadingRuntimeInstanceByKey, setLoadingRuntimeInstanceByKey] = useState<Record<string, boolean>>({});
 
   const [activePage, setActivePage] = useState<ActivePage>('inspector');
   const [pendingClassNode, setPendingClassNode] = useState<PendingClassNodeRequest | null>(null);
@@ -159,15 +163,19 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   const [isReferenceSearching, setIsReferenceSearching] = useState(false);
 
   const fetchingRuntimeRef = useRef<Set<string>>(new Set());
+  const fetchingRuntimeInstanceRef = useRef<Set<string>>(new Set());
 
   const resetWorkspace = useCallback(() => {
     setAnalysisSnapshot(null);
     setRuntimeOverlays({});
+    setRuntimeInstanceFieldSnapshots({});
     setSelectedImageStableId(null);
     setTabs([]);
     setActiveTabIndex(-1);
     setRuntimeFieldErrorByKey({});
     setLoadingRuntimeByKey({});
+    setRuntimeInstanceFieldErrorByKey({});
+    setLoadingRuntimeInstanceByKey({});
     setPendingClassNode(null);
     setGlobalSearchQuery('');
     setGlobalSearchResults([]);
@@ -429,6 +437,70 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
         setLoadingRuntimeByKey((current) => ({ ...current, [classStableId]: false }));
       });
   }, [analysisSnapshot, processSession, runtimeOverlays]);
+
+  const ensureRuntimeInstanceFieldsLoaded = useCallback((classStableId: StableId, instanceAddress: string) => {
+    if (!processSession || !analysisSnapshot) {
+      return;
+    }
+
+    const normalizedAddress = formatHexAddress(instanceAddress);
+    if (!normalizedAddress) {
+      return;
+    }
+
+    const descriptor = analysisSnapshot.classes[classStableId];
+    if (!descriptor) {
+      return;
+    }
+
+    const requestKey = `${classStableId}::${normalizedAddress}`;
+    if (runtimeInstanceFieldSnapshots[requestKey] || fetchingRuntimeInstanceRef.current.has(requestKey)) {
+      return;
+    }
+
+    fetchingRuntimeInstanceRef.current.add(requestKey);
+    setLoadingRuntimeInstanceByKey((current) => ({ ...current, [requestKey]: true }));
+
+    invoke<RuntimeInstanceFieldSnapshot>('get_runtime_instance_fields', {
+      classStableId,
+      instanceAddress: normalizedAddress,
+    })
+      .then((snapshot) => {
+        setRuntimeInstanceFieldSnapshots((current) => ({
+          ...current,
+          [requestKey]: snapshot,
+        }));
+        setRuntimeInstanceFieldErrorByKey((current) => ({ ...current, [requestKey]: null }));
+      })
+      .catch((error) => {
+        setRuntimeInstanceFieldErrorByKey((current) => ({ ...current, [requestKey]: String(error) }));
+      })
+      .finally(() => {
+        fetchingRuntimeInstanceRef.current.delete(requestKey);
+        setLoadingRuntimeInstanceByKey((current) => ({ ...current, [requestKey]: false }));
+      });
+  }, [analysisSnapshot, processSession, runtimeInstanceFieldSnapshots]);
+
+  const resolveClassMemberValues = useCallback((classStableId: string, instanceAddress: unknown) => {
+    if (typeof instanceAddress !== 'string') {
+      return undefined;
+    }
+
+    const normalizedAddress = formatHexAddress(instanceAddress);
+    if (!normalizedAddress) {
+      return undefined;
+    }
+
+    const snapshot = runtimeInstanceFieldSnapshots[`${classStableId}::${normalizedAddress}`];
+    if (!snapshot) {
+      return undefined;
+    }
+
+    return Object.fromEntries(snapshot.fields.map((field) => [field.stableId, {
+      address: formatHexAddress(field.address),
+      value: field.value,
+    }]));
+  }, [runtimeInstanceFieldSnapshots]);
 
   useEffect(() => {
     if (!activeTab) {
@@ -734,11 +806,15 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     classInfoCatalogByStableId,
     staticFieldAddressByClassAndMember,
     ensureRuntimeOverlayLoaded,
+    resolveClassMemberValues,
+    ensureRuntimeInstanceFieldsLoaded,
     openInspectorForBinding: handleOpenInspectorForBinding,
   }), [
     classInfoCatalogByStableId,
+    ensureRuntimeInstanceFieldsLoaded,
     ensureRuntimeOverlayLoaded,
     handleOpenInspectorForBinding,
+    resolveClassMemberValues,
     staticFieldAddressByClassAndMember,
     studioClassCatalogEntries,
   ]);

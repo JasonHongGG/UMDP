@@ -55,11 +55,25 @@ export interface StaticFieldDescriptor extends FieldDescriptor {
   value: string | null;
 }
 
+export interface MethodParameterDescriptor {
+  position: number;
+  name: string;
+  typeName: string;
+}
+
 export interface MethodDescriptor {
   stableId: StableId;
   name: string;
   signature: string;
+  returnType: string;
+  parameters: MethodParameterDescriptor[];
+  isStatic: boolean;
   tags: string[];
+}
+
+export interface RuntimeResolvedFieldDescriptor extends FieldDescriptor {
+  address: string | null;
+  value: string | null;
 }
 
 export interface ClassDescriptor {
@@ -80,4 +94,10 @@ export interface RuntimeClassOverlayDescriptor {
   classStableId: StableId;
   fields: FieldDescriptor[];
   staticFields: StaticFieldDescriptor[];
+}
+
+export interface RuntimeInstanceFieldSnapshot {
+  classStableId: StableId;
+  instanceAddress: string;
+  fields: RuntimeResolvedFieldDescriptor[];
 }

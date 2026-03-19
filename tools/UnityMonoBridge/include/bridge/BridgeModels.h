@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "shared/Types.h"
+
 namespace bridge {
 
 struct BridgeRequest {
@@ -12,6 +14,7 @@ struct BridgeRequest {
     std::string image_name;
     std::string class_namespace;
     std::string class_name;
+    std::optional<Address> instance_address;
 };
 
 struct FieldRow {

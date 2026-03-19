@@ -25,6 +25,9 @@ BridgeRequest ArgumentParser::Parse(int argc, char* argv[])
         else if (key == "--class") {
             request.class_name = value;
         }
+        else if (key == "--instance") {
+            request.instance_address = static_cast<std::size_t>(std::stoull(value, nullptr, 0));
+        }
     }
 
     if (request.pid == 0 || request.image_name.empty() || request.class_name.empty()) {

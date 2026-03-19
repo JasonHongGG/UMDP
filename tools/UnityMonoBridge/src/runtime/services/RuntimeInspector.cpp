@@ -9,7 +9,7 @@ RuntimeInspector::RuntimeInspector(std::size_t pid)
       assembly_service_(context_.api()),
       class_service_(context_.api()),
       field_enumeration_service_(context_.api()),
-      static_value_reader_(context_.api())
+    field_value_reader_(context_.api())
 {
 }
 
@@ -34,7 +34,7 @@ RuntimeClassOverlayResponse RuntimeInspector::InspectClass(const BridgeRequest& 
         row.name = field.name;
         row.field_type = field.type_name;
         row.address = field.static_address.has_value() ? std::optional<std::string>(shared::HexAddress(*field.static_address)) : std::nullopt;
-        row.value = static_value_reader_.ReadStaticValue(field);
+        row.value = field_value_reader_.ReadFieldValue(field);
         response.static_fields.push_back(std::move(row));
     }
 
@@ -43,6 +43,10 @@ RuntimeClassOverlayResponse RuntimeInspector::InspectClass(const BridgeRequest& 
         row.name = field.name;
         row.field_type = field.type_name;
         row.offset = shared::HexOffset(field.offset);
+        if (request.instance_address.has_value()) {
+            row.address = shared::HexAddress(*request.instance_address + static_cast<Address>(field.offset));
+            row.value = field_value_reader_.ReadFieldValue(field, request.instance_address);
+        }
         response.fields.push_back(std::move(row));
     }
 

@@ -85,11 +85,34 @@ pub struct StaticFieldDescriptor {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MethodParameterDescriptor {
+    pub position: usize,
+    pub name: String,
+    pub type_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MethodDescriptor {
     pub stable_id: StableId,
     pub name: String,
     pub signature: String,
+    pub return_type: String,
+    pub parameters: Vec<MethodParameterDescriptor>,
+    pub is_static: bool,
     pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeResolvedFieldDescriptor {
+    pub stable_id: StableId,
+    pub legacy_field_name: String,
+    pub name: String,
+    pub field_type: String,
+    pub offset: Option<String>,
+    pub address: Option<String>,
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +137,14 @@ pub struct RuntimeClassOverlayDescriptor {
     pub class_stable_id: StableId,
     pub fields: Vec<FieldDescriptor>,
     pub static_fields: Vec<StaticFieldDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeInstanceFieldSnapshot {
+    pub class_stable_id: StableId,
+    pub instance_address: String,
+    pub fields: Vec<RuntimeResolvedFieldDescriptor>,
 }
 
 fn normalize_segment(segment: &str) -> String {

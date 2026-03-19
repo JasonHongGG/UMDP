@@ -1,4 +1,6 @@
 import {
+  ClassInfoFieldPayload,
+  ClassInfoFunctionPayload,
   ConnectionDirection,
   ClassInfoPayload,
   IPort,
@@ -10,6 +12,8 @@ import {
 } from './types';
 import type { ConnectionChannel } from '../../domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '../../domain/studio/editor';
+import { addHexOffset, formatHexAddress } from '../addressFormat';
+import { coerceRuntimeFieldValue } from '../runtimeValue';
 export { arePortDataTypesCompatible, arePortTypesCompatible, arePortsCompatible } from './connectionPolicy';
 
 export const WORKFLOW_DOCUMENT_VERSION = 1;
@@ -100,11 +104,56 @@ export function createEnvelope<TPayload>(schema: JsonSchemaReference, payload: T
   };
 }
 
+export interface ResolvedMemberRuntimeValue {
+  address: string | null;
+  value: string | null;
+}
+
+function createFieldPayload(
+  item: ClassInfoCatalog['members'][number] | ClassInfoCatalog['statics'][number],
+  instanceAddress: WorkflowJsonValue,
+  resolvedMemberValues?: Record<string, ResolvedMemberRuntimeValue>,
+): ClassInfoFieldPayload {
+  const resolvedAddress = item.isStatic
+    ? item.address
+    : resolvedMemberValues?.[item.id]?.address ?? (typeof instanceAddress === 'string' ? addHexOffset(instanceAddress, item.offset) : null);
+  const rawValue = item.isStatic ? item.value : resolvedMemberValues?.[item.id]?.value ?? null;
+
+  return {
+    name: item.name,
+    typeName: item.typeName,
+    offset: item.offset,
+    address: formatHexAddress(resolvedAddress),
+    value: coerceRuntimeFieldValue(item.typeName, rawValue),
+    isStatic: item.isStatic,
+  };
+}
+
+function createFunctionPayload(binding: ClassBinding, item: ClassInfoCatalog['functions'][number]): ClassInfoFunctionPayload {
+  return {
+    name: item.name,
+    signature: item.signature,
+    returnType: item.returnType,
+    parameters: item.parameters.map((parameter) => ({
+      position: parameter.position,
+      name: parameter.name,
+      typeName: parameter.typeName,
+    })),
+    isStatic: item.isStatic,
+    runtimeRef: {
+      imageStableId: binding.imageStableId,
+      classStableId: binding.classStableId,
+      methodStableId: item.id,
+    },
+  };
+}
+
 export function createClassInfoEnvelope(
   binding: ClassBinding | null,
   catalog: ClassInfoCatalog,
   selected: ClassInfoSelection,
   instanceAddress: WorkflowJsonValue = null,
+  resolvedMemberValues?: Record<string, ResolvedMemberRuntimeValue>,
 ): WorkflowJsonEnvelope<ClassInfoPayload | null> {
   if (!binding) {
     return createEnvelope(CLASS_INFO_SCHEMA, null, {
@@ -118,10 +167,16 @@ export function createClassInfoEnvelope(
   const selectedFunctions = catalog.functions.filter((item) => selected.functions.includes(item.id));
 
   return createEnvelope(CLASS_INFO_SCHEMA, {
+    basic: {
+      imageName: binding.imageName,
+      className: binding.name,
+      namespace: binding.namespace,
+      fullName: binding.fullName,
+    },
     instanceAddress,
-    statics: Object.fromEntries(selectedStatics.map((item) => [item.id, null])),
-    members: Object.fromEntries(selectedMembers.map((item) => [item.id, null])),
-    functions: selectedFunctions.map((item) => ({ id: item.id, label: item.label })),
+    statics: selectedStatics.map((item) => createFieldPayload(item, instanceAddress, resolvedMemberValues)),
+    members: selectedMembers.map((item) => createFieldPayload(item, instanceAddress, resolvedMemberValues)),
+    functions: selectedFunctions.map((item) => createFunctionPayload(binding, item)),
   }, {
     source: 'class-node',
     bindingState: 'bound',

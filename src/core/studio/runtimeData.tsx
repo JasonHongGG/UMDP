@@ -3,6 +3,7 @@ import { createPendingClassNodeRequest, type ClassBinding, type ClassInfoCatalog
 import type { StableId } from '../../domain/contracts/shared-identity';
 import type { ExpressionSource } from '../../domain/studio/contracts';
 import { resolveExpressionSource } from './expression';
+import type { ResolvedMemberRuntimeValue } from './contracts';
 import type { NodeExecutionSnapshot, WorkflowJsonValue } from './types';
 
 export interface StudioRuntimeDataState {
@@ -10,8 +11,10 @@ export interface StudioRuntimeDataState {
   createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => PendingClassNodeRequest | null;
   getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
   resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => string | null;
+  resolveClassMemberValues: (classStableId: string, instanceAddress: WorkflowJsonValue | null | undefined) => Record<string, ResolvedMemberRuntimeValue> | undefined;
   resolveExpressionSource: (source: ExpressionSource, snapshots: Record<string, NodeExecutionSnapshot>) => WorkflowJsonValue | undefined;
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
+  ensureRuntimeInstanceFieldsLoaded: (classStableId: StableId, instanceAddress: string) => void;
   openInspectorForBinding?: (binding: ClassBinding) => void;
 }
 
@@ -20,6 +23,8 @@ interface CreateStudioRuntimeDataStateOptions {
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
+  resolveClassMemberValues: (classStableId: string, instanceAddress: WorkflowJsonValue | null | undefined) => Record<string, ResolvedMemberRuntimeValue> | undefined;
+  ensureRuntimeInstanceFieldsLoaded: (classStableId: StableId, instanceAddress: string) => void;
   openInspectorForBinding?: (binding: ClassBinding) => void;
 }
 
@@ -30,6 +35,8 @@ export function createStudioRuntimeDataState({
   classInfoCatalogByStableId,
   staticFieldAddressByClassAndMember,
   ensureRuntimeOverlayLoaded,
+  resolveClassMemberValues,
+  ensureRuntimeInstanceFieldsLoaded,
   openInspectorForBinding,
 }: CreateStudioRuntimeDataStateOptions): StudioRuntimeDataState {
   const resolveStaticFieldAddress = (classStableId: string, memberStableId: string) => {
@@ -54,11 +61,13 @@ export function createStudioRuntimeDataState({
       return classInfoCatalogByStableId[binding.classStableId] ?? null;
     },
     resolveStaticFieldAddress,
+    resolveClassMemberValues,
     resolveExpressionSource: (source, snapshots) => resolveExpressionSource(source, {
       snapshots,
       resolveStaticFieldAddress,
     }) as WorkflowJsonValue | undefined,
     ensureRuntimeOverlayLoaded,
+    ensureRuntimeInstanceFieldsLoaded,
     openInspectorForBinding,
   };
 }

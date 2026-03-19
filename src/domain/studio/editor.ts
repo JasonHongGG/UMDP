@@ -12,16 +12,41 @@ export interface ClassBinding {
   imageName: string;
 }
 
-export interface ClassInfoItemDescriptor {
+export interface ClassInfoFieldDescriptor {
   id: StableId;
   label: string;
+  name: string;
+  legacyFieldName: string;
+  typeName: string;
+  offset: string | null;
+  address: string | null;
+  value: string | null;
+  isStatic: boolean;
+  detail?: string;
+}
+
+export interface ClassInfoMethodParameterDescriptor {
+  position: number;
+  name: string;
+  typeName: string;
+}
+
+export interface ClassInfoMethodDescriptor {
+  id: StableId;
+  label: string;
+  name: string;
+  signature: string;
+  returnType: string;
+  parameters: ClassInfoMethodParameterDescriptor[];
+  isStatic: boolean;
+  tags: string[];
   detail?: string;
 }
 
 export interface ClassInfoCatalog {
-  members: ClassInfoItemDescriptor[];
-  statics: ClassInfoItemDescriptor[];
-  functions: ClassInfoItemDescriptor[];
+  members: ClassInfoFieldDescriptor[];
+  statics: ClassInfoFieldDescriptor[];
+  functions: ClassInfoMethodDescriptor[];
 }
 
 export interface ClassInfoSelection {
@@ -60,16 +85,40 @@ export function createClassInfoCatalogFromClassDescriptor(
     members: fields.map((field) => ({
       id: field.stableId,
       label: field.name,
+      name: field.name,
+      legacyFieldName: field.legacyFieldName,
+      typeName: field.fieldType,
+      offset: formatHexAddress(field.offset),
+      address: null,
+      value: null,
+      isStatic: false,
       detail: field.fieldType,
     })),
     statics: staticFields.map((field) => ({
       id: field.stableId,
       label: field.name,
+      name: field.name,
+      legacyFieldName: field.legacyFieldName,
+      typeName: field.fieldType,
+      offset: formatHexAddress(field.offset),
+      address: formatHexAddress(field.address),
+      value: field.value,
+      isStatic: true,
       detail: `${field.fieldType}${formatHexAddress(field.address) ? ` @ ${formatHexAddress(field.address)}` : ''}`,
     })),
     functions: classInfo.methods.map((method) => ({
       id: method.stableId,
       label: method.name,
+      name: method.name,
+      signature: method.signature,
+      returnType: method.returnType,
+      parameters: method.parameters.map((parameter) => ({
+        position: parameter.position,
+        name: parameter.name,
+        typeName: parameter.typeName,
+      })),
+      isStatic: method.isStatic,
+      tags: method.tags,
       detail: method.signature,
     })),
   };

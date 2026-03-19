@@ -174,6 +174,16 @@ bool MonoRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buf
     return true;
 }
 
+bool MonoRuntimeApi::TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const
+{
+    if (instance_address == 0 || field.is_static || field.offset < 0) {
+        return false;
+    }
+
+    memory().Read(instance_address + static_cast<Address>(field.offset), buffer, size);
+    return true;
+}
+
 Address MonoRuntimeApi::ResolveStaticFieldAddress(Address class_handle, int field_offset) const
 {
     const Address vtable = Invoke("mono_class_vtable", { root_domain(), class_handle });

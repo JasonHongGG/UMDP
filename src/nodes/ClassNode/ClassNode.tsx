@@ -1,4 +1,5 @@
 import { Box } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import {
@@ -7,9 +8,12 @@ import {
   createClassInfoEnvelope,
   createFlowPort,
   createJsonPort,
+  type ResolvedMemberRuntimeValue,
 } from '../../core/studio/contracts';
+import { formatHexAddress } from '../../core/addressFormat';
 import { reconcileClassInfoSelection } from '../../domain/studio/editor';
 import { parseClassNodeDocumentState } from '../../domain/studio/contracts';
+import type { RuntimeInstanceFieldSnapshot } from '../../domain/analysis/contracts';
 import { ClassNodeBindingEditor } from './ClassNodeBindingEditor';
 import { ClassNodeCanvas } from './ClassNodeCanvas';
 import { ClassNodeSelectionEditor } from './ClassNodeSelectionEditor';
@@ -38,6 +42,13 @@ const CLASS_NODE_OUTPUTS: IPort[] = [
   createFlowPort('flow-out', 'Flow Out'),
   CLASS_INFO_OUTPUT,
 ];
+
+function createResolvedMemberValueMap(snapshot: RuntimeInstanceFieldSnapshot): Record<string, ResolvedMemberRuntimeValue> {
+  return Object.fromEntries(snapshot.fields.map((field) => [field.stableId, {
+    address: formatHexAddress(field.address),
+    value: field.value,
+  }]));
+}
 
 const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
   manifest: {
@@ -118,18 +129,43 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
 
       return [];
     },
-    execute: ({ documentState, resolvedBindings }) => {
+    execute: async ({ documentState, resolvedBindings }) => {
       const classDocumentState = parseClassNodeDocumentState(documentState);
       const availableInfo = (documentState.availableInfo as ClassNodeData['availableInfo'] | undefined) ?? createEmptyCatalog();
+      const binding = fromClassBindingReference(classDocumentState.classBinding);
+      const selection = reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo);
+      const resolvedInstanceAddress = (resolvedBindings.instanceSource as import('../../core/studio/types').WorkflowJsonValue | undefined) ?? null;
+      const normalizedInstanceAddress = typeof resolvedInstanceAddress === 'string' ? formatHexAddress(resolvedInstanceAddress) : null;
+      let resolvedMemberValues: Record<string, ResolvedMemberRuntimeValue> | undefined;
+      let issues: import('../../domain/studio/contracts').ValidationIssue[] | undefined;
+
+      if (binding && normalizedInstanceAddress && selection.members.length > 0) {
+        try {
+          const snapshot = await invoke<RuntimeInstanceFieldSnapshot>('get_runtime_instance_fields', {
+            classStableId: binding.classStableId,
+            instanceAddress: normalizedInstanceAddress,
+          });
+          resolvedMemberValues = createResolvedMemberValueMap(snapshot);
+        } catch (error) {
+          issues = [{
+            severity: 'warning',
+            code: 'class.instance.resolve_failed',
+            message: `Failed to resolve runtime member values: ${String(error)}`,
+            target: 'instance-in',
+          }];
+        }
+      }
 
       return {
         state: 'success',
+        issues,
         outputs: {
           'info-out': createClassInfoEnvelope(
-            fromClassBindingReference(classDocumentState.classBinding),
+            binding,
             availableInfo,
-            reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo),
-            (resolvedBindings.instanceSource as import('../../core/studio/types').WorkflowJsonValue | undefined) ?? null,
+            selection,
+            normalizedInstanceAddress ?? resolvedInstanceAddress,
+            resolvedMemberValues,
           ),
         },
       };

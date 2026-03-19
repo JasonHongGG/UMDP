@@ -187,18 +187,9 @@ export function EditNodeModal() {
     }, {});
   }, [nodeSnapshots, nodes]);
 
-  const liveOutputPreview = useMemo(() => {
-    if (!node || !nodeDef) {
+  const classNodePreviewState = useMemo(() => {
+    if (!node || node.type !== 'class-ref') {
       return null;
-    }
-
-    const runtimeOutputs = nodeSnapshots[node.id]?.outputs;
-    if (runtimeOutputs) {
-      return runtimeOutputs;
-    }
-
-    if (node.type !== 'class-ref') {
-      return simulatedOutputPreview;
     }
 
     const classData = node.data as BaseNodeData & {
@@ -215,14 +206,56 @@ export function EditNodeModal() {
       : null;
 
     return {
+      binding: classData.binding ?? null,
+      availableInfo,
+      selection: reconcileClassInfoSelection(infoSelection, availableInfo),
+      resolvedInstanceAddress,
+    };
+  }, [node, previewSnapshots, runtimeData]);
+
+  useEffect(() => {
+    if (!classNodePreviewState?.binding || typeof classNodePreviewState.resolvedInstanceAddress !== 'string') {
+      return;
+    }
+
+    if (classNodePreviewState.selection.members.length === 0) {
+      return;
+    }
+
+    runtimeData.ensureRuntimeInstanceFieldsLoaded(
+      classNodePreviewState.binding.classStableId,
+      classNodePreviewState.resolvedInstanceAddress,
+    );
+  }, [classNodePreviewState, runtimeData]);
+
+  const liveOutputPreview = useMemo(() => {
+    if (!node || !nodeDef) {
+      return null;
+    }
+
+    const runtimeOutputs = nodeSnapshots[node.id]?.outputs;
+    if (runtimeOutputs) {
+      return runtimeOutputs;
+    }
+
+    if (node.type !== 'class-ref') {
+      return simulatedOutputPreview;
+    }
+
+    const resolvedMemberValues = classNodePreviewState?.binding
+      ? runtimeData.resolveClassMemberValues(classNodePreviewState.binding.classStableId, classNodePreviewState.resolvedInstanceAddress ?? null)
+      : undefined;
+
+    return {
       'info-out': createClassInfoEnvelope(
-        classData.binding ?? null,
-        availableInfo,
-        reconcileClassInfoSelection(infoSelection, availableInfo),
-        resolvedInstanceAddress ?? null,
+        classNodePreviewState?.binding ?? null,
+        classNodePreviewState?.availableInfo ?? { members: [], statics: [], functions: [] },
+        classNodePreviewState?.selection ?? { members: [], statics: [], functions: [] },
+        classNodePreviewState?.resolvedInstanceAddress ?? null,
+        resolvedMemberValues,
       ),
     };
-  }, [node, nodeDef, nodeSnapshots, previewSnapshots, runtimeData, simulatedOutputPreview]);
+  }, [classNodePreviewState, node, nodeDef, nodeSnapshots, runtimeData, simulatedOutputPreview]);
 
   const EditComponent = nodeDef?.EditComponent;
   const EditFooterComponent = nodeDef?.EditFooterComponent;

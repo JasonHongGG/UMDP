@@ -111,11 +111,47 @@ export interface ParameterDefinitionValue {
 
 export type ParameterDefinitionPayload = Record<string, ParameterDefinitionValue>;
 
+export interface ClassInfoBasicPayload {
+  imageName: string;
+  className: string;
+  namespace: string;
+  fullName: string;
+}
+
+export interface ClassInfoFieldPayload {
+  name: string;
+  typeName: string;
+  offset: string | null;
+  address: WorkflowJsonValue;
+  value: WorkflowJsonValue;
+  isStatic: boolean;
+}
+
+export interface ClassInfoFunctionParameterPayload {
+  position: number;
+  name: string;
+  typeName: string;
+}
+
+export interface ClassInfoFunctionPayload {
+  name: string;
+  signature: string;
+  returnType: string;
+  parameters: ClassInfoFunctionParameterPayload[];
+  isStatic: boolean;
+  runtimeRef: {
+    imageStableId: string;
+    classStableId: string;
+    methodStableId: string;
+  };
+}
+
 export interface ClassInfoPayload {
+  basic: ClassInfoBasicPayload;
   instanceAddress: WorkflowJsonValue;
-  statics: Record<string, WorkflowJsonValue>;
-  members: Record<string, WorkflowJsonValue>;
-  functions: Array<{ id: string; label: string }>;
+  statics: ClassInfoFieldPayload[];
+  members: ClassInfoFieldPayload[];
+  functions: ClassInfoFunctionPayload[];
 }
 
 export interface StudioNodeRuntimeState {

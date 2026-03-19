@@ -5,14 +5,15 @@ import { useStudioRuntimeData } from '../../core/studio/runtimeData';
 import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
 import { beginPointerExpressionDrag } from '../../core/studio/drag/expressionPointerDrag';
 import { createExpressionReferenceDragPayload, createStaticExpressionSource } from '../../core/studio/expression';
-import { reconcileClassInfoSelection, type ClassInfoItemDescriptor } from '../../domain/studio/editor';
+import { reconcileClassInfoSelection, type ClassInfoCatalog } from '../../domain/studio/editor';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import type { ClassNodeData } from './classNodeModel';
 import { toggleSelectionEntry } from './classNodeModel';
 
 type SelectionBucketKey = 'members' | 'statics' | 'functions';
+type SelectionDescriptor = ClassInfoCatalog[SelectionBucketKey][number];
 
-function isDescriptorSelected(ids: string[], descriptor: ClassInfoItemDescriptor) {
+function isDescriptorSelected(ids: string[], descriptor: SelectionDescriptor) {
   return ids.includes(descriptor.id);
 }
 
@@ -99,7 +100,7 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
     resolvedSelection.statics.length +
     resolvedSelection.functions.length;
 
-  const renderSelectionSection = (bucket: SelectionBucketKey, descriptors: ClassInfoItemDescriptor[]) => {
+  const renderSelectionSection = (bucket: SelectionBucketKey, descriptors: SelectionDescriptor[]) => {
     const tone = createSectionTone(bucket);
     const Icon = tone.icon;
     const selectedIds = resolvedSelection[bucket];

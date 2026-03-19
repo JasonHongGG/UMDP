@@ -109,6 +109,27 @@ internal sealed class MethodContract
     [JsonPropertyName("signature")]
     public string Signature { get; init; } = string.Empty;
 
+    [JsonPropertyName("return_type")]
+    public string ReturnType { get; init; } = string.Empty;
+
+    [JsonPropertyName("parameters")]
+    public List<MethodParameterContract> Parameters { get; init; } = [];
+
+    [JsonPropertyName("is_static")]
+    public bool IsStatic { get; init; }
+
     [JsonPropertyName("tags")]
     public List<string> Tags { get; init; } = [];
+}
+
+internal sealed class MethodParameterContract
+{
+    [JsonPropertyName("position")]
+    public int Position { get; init; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; init; } = string.Empty;
+
+    [JsonPropertyName("type_name")]
+    public string TypeName { get; init; } = string.Empty;
 }

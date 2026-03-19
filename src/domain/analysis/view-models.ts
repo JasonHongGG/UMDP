@@ -29,6 +29,9 @@ export interface AnalysisStaticFieldInfo extends AnalysisFieldInfo {
 export interface AnalysisMethodInfo {
   name: string;
   signature: string;
+  returnType: string;
+  parameters: Array<{ position: number; name: string; typeName: string }>;
+  isStatic: boolean;
   tags: string[];
 }
 
@@ -116,6 +119,13 @@ export function createAnalysisClassInfo(
     methods: descriptor.methods.map((method) => ({
       name: method.name,
       signature: method.signature,
+      returnType: method.returnType,
+      parameters: method.parameters.map((parameter) => ({
+        position: parameter.position,
+        name: parameter.name,
+        typeName: parameter.typeName,
+      })),
+      isStatic: method.isStatic,
       tags: method.tags,
     })),
   };

@@ -23,7 +23,7 @@ const CLASS_PLAYER = createClassStableId({ imageStableId: IMAGE_A, namespace: 'G
 const MEMBER_HEALTH = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'health', fieldType: 'System.Int32', fieldKind: 'instance' });
 const MEMBER_SPEED = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'speed', fieldType: 'System.Single', fieldKind: 'instance' });
 const STATIC_INSTANCE = createFieldStableId({ classStableId: CLASS_PLAYER, fieldName: 'Instance', fieldType: 'Gameplay.PlayerController', fieldKind: 'static' });
-const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void Move()' });
+const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void ()' });
 
 describe('studio contracts', () => {
   it('creates flow and json ports with the expected metadata', () => {
@@ -79,11 +79,11 @@ describe('studio contracts', () => {
       },
       {
         members: [
-          { id: MEMBER_HEALTH, label: 'health' },
-          { id: MEMBER_SPEED, label: 'speed' },
+          { id: MEMBER_HEALTH, label: 'health', name: 'health', legacyFieldName: 'health', typeName: 'System.Int32', offset: '0x10', address: null, value: null, isStatic: false },
+          { id: MEMBER_SPEED, label: 'speed', name: 'speed', legacyFieldName: 'speed', typeName: 'System.Single', offset: '0x14', address: null, value: null, isStatic: false },
         ],
-        statics: [{ id: STATIC_INSTANCE, label: 'Instance' }],
-        functions: [{ id: METHOD_MOVE, label: 'Move' }],
+        statics: [{ id: STATIC_INSTANCE, label: 'Instance', name: 'Instance', legacyFieldName: 'Instance', typeName: 'Gameplay.PlayerController', offset: null, address: '0x2000', value: '0x1234', isStatic: true }],
+        functions: [{ id: METHOD_MOVE, label: 'Move', name: 'Move', signature: 'System.Void ()', returnType: 'System.Void', parameters: [], isStatic: false, tags: [] }],
       },
       {
         members: [MEMBER_HEALTH],
@@ -94,9 +94,29 @@ describe('studio contracts', () => {
 
     expect(envelope.meta).toMatchObject({ bindingState: 'bound' });
     expect(envelope.payload).toEqual({
+      basic: {
+        imageName: 'Assembly-CSharp.dll',
+        className: 'PlayerController',
+        namespace: 'Gameplay',
+        fullName: 'Gameplay.PlayerController',
+      },
       instanceAddress: null,
-      statics: { [STATIC_INSTANCE]: null },
-      members: { [MEMBER_HEALTH]: null },
+      statics: [{
+        name: 'Instance',
+        typeName: 'Gameplay.PlayerController',
+        offset: null,
+        address: '0x2000',
+        value: '0x1234',
+        isStatic: true,
+      }],
+      members: [{
+        name: 'health',
+        typeName: 'System.Int32',
+        offset: '0x10',
+        address: null,
+        value: null,
+        isStatic: false,
+      }],
       functions: [],
     });
   });
@@ -117,9 +137,15 @@ describe('studio contracts', () => {
     );
 
     expect(envelope.payload).toEqual({
+      basic: {
+        imageName: 'Assembly-CSharp.dll',
+        className: 'PlayerController',
+        namespace: 'Gameplay',
+        fullName: 'Gameplay.PlayerController',
+      },
       instanceAddress: '0x12345678',
-      statics: {},
-      members: {},
+      statics: [],
+      members: [],
       functions: [],
     });
   });

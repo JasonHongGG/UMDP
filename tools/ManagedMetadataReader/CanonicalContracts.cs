@@ -38,7 +38,17 @@ internal sealed class CanonicalMethodDescriptor
     public string StableId { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public string Signature { get; init; } = string.Empty;
+    public string ReturnType { get; init; } = string.Empty;
+    public List<CanonicalMethodParameterDescriptor> Parameters { get; init; } = [];
+    public bool IsStatic { get; init; }
     public List<string> Tags { get; init; } = [];
+}
+
+internal sealed class CanonicalMethodParameterDescriptor
+{
+    public int Position { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string TypeName { get; init; } = string.Empty;
 }
 
 internal sealed class CanonicalClassDescriptor
