@@ -14,6 +14,7 @@ import { StudioModalLayer } from '../studio/StudioModalLayer';
 import { StudioToolbar } from '../studio/StudioToolbar';
 import { studioNodeCatalog } from '../../nodes';
 import type { AnalysisClassSummary, AnalysisImageInfo } from '../../domain/analysis/view-models';
+import type { StableId } from '../../domain/contracts/shared-identity';
 
 initializeStudioNodeRegistry(studioNodeCatalog);
 
@@ -36,6 +37,8 @@ interface StudioPageProps {
   images: AnalysisImageInfo[];
   classesByImage: Record<string, AnalysisClassSummary[]>;
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
+  staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
+  ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   onOpenInspectorForBinding?: (binding: ClassBinding) => void;
   onPendingClassNodeHandled?: () => void;
 }
@@ -45,6 +48,8 @@ export function StudioPage({
   images,
   classesByImage,
   classInfoCatalogByStableId,
+  staticFieldAddressByClassAndMember,
+  ensureRuntimeOverlayLoaded,
   onOpenInspectorForBinding,
   onPendingClassNodeHandled,
 }: StudioPageProps) {
@@ -67,9 +72,13 @@ export function StudioPage({
 
         return classInfoCatalogByStableId[binding.classStableId] ?? null;
       },
+      resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => {
+        return staticFieldAddressByClassAndMember[classStableId]?.[memberStableId] ?? null;
+      },
+      ensureRuntimeOverlayLoaded,
       openInspectorForBinding: onOpenInspectorForBinding,
     };
-  }, [classInfoCatalogByStableId, classesByImage, images, onOpenInspectorForBinding]);
+  }, [classInfoCatalogByStableId, classesByImage, ensureRuntimeOverlayLoaded, images, onOpenInspectorForBinding, staticFieldAddressByClassAndMember]);
 
   return (
     <StudioProvider classCatalog={classCatalog}>
@@ -78,6 +87,8 @@ export function StudioPage({
         images={images}
         classesByImage={classesByImage}
         classInfoCatalogByStableId={classInfoCatalogByStableId}
+        staticFieldAddressByClassAndMember={staticFieldAddressByClassAndMember}
+        ensureRuntimeOverlayLoaded={ensureRuntimeOverlayLoaded}
         onOpenInspectorForBinding={onOpenInspectorForBinding}
         onPendingClassNodeHandled={onPendingClassNodeHandled}
       />

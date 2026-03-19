@@ -1,6 +1,7 @@
 import type { ClassDescriptor, RuntimeClassOverlayDescriptor } from '../analysis/contracts';
 import type { AnalysisClassSummary, AnalysisImageInfo } from '../analysis/view-models';
 import type { StableId } from '../contracts/shared-identity';
+import { formatHexAddress } from '../../core/addressFormat';
 
 export interface ClassBinding {
   imageStableId: StableId;
@@ -64,7 +65,7 @@ export function createClassInfoCatalogFromClassDescriptor(
     statics: staticFields.map((field) => ({
       id: field.stableId,
       label: field.name,
-      detail: `${field.fieldType}${field.address ? ` @ ${field.address}` : ''}`,
+      detail: `${field.fieldType}${formatHexAddress(field.address) ? ` @ ${formatHexAddress(field.address)}` : ''}`,
     })),
     functions: classInfo.methods.map((method) => ({
       id: method.stableId,

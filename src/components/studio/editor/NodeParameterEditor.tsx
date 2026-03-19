@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { createLiteralExpressionSource, getExpressionSourceDisplayValue, readExpressionDragData } from '../../../core/studio/expressionUtils';
+import { useStudioUi } from '../../../core/studio/StudioContext';
 import type { ExpressionSource, ParameterDefinition } from '../../../domain/studio/contracts';
 import type { BaseNodeData, INodeEditProps, StudioNodeDefinition } from '../../../core/studio/types';
 
@@ -110,11 +111,32 @@ const FieldShell: React.FC<FieldShellProps> = ({ label, required, helperText, ch
 
 const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, value, onChange }) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isCustomDragOver, setIsCustomDragOver] = useState(false);
   const expressionValue = (value ?? null) as ExpressionSource | null;
+  const { activeExpressionDrag, endExpressionDrag } = useStudioUi();
 
   return (
     <div
-      className={`rounded-lg border transition-all ${isDragOver ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_18px_rgba(6,182,212,0.18)]' : 'border-slate-700 bg-slate-950'}`}
+      className={`rounded-lg border transition-all ${(isDragOver || isCustomDragOver) ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_18px_rgba(6,182,212,0.18)]' : 'border-slate-700 bg-slate-950'}`}
+      onMouseEnter={() => {
+        if (activeExpressionDrag) {
+          setIsCustomDragOver(true);
+        }
+      }}
+      onMouseLeave={() => {
+        setIsCustomDragOver(false);
+      }}
+      onMouseUpCapture={(event) => {
+        if (!activeExpressionDrag) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        setIsCustomDragOver(false);
+        onChange(activeExpressionDrag.source);
+        endExpressionDrag();
+      }}
       onDragOver={(event) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
@@ -127,6 +149,7 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
       onDrop={(event) => {
         event.preventDefault();
         setIsDragOver(false);
+        setIsCustomDragOver(false);
         const expressionSource = readExpressionDragData(event.dataTransfer);
         if (expressionSource) {
           onChange(expressionSource);
@@ -139,6 +162,7 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
           rows={definition.ui.rows ?? 3}
           placeholder={definition.ui?.placeholder}
           onChange={(event) => onChange(createLiteralExpressionSource(event.target.value))}
+          readOnly={Boolean(activeExpressionDrag)}
           className="w-full resize-y rounded-lg bg-transparent px-3 py-2.5 text-sm text-slate-200 outline-none placeholder:text-slate-500"
         />
       ) : (
@@ -147,6 +171,7 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
           value={getExpressionSourceDisplayValue(expressionValue)}
           placeholder={definition.ui?.placeholder}
           onChange={(event) => onChange(createLiteralExpressionSource(event.target.value))}
+          readOnly={Boolean(activeExpressionDrag)}
           className="w-full rounded-lg bg-transparent px-3 py-2.5 text-sm text-slate-200 outline-none placeholder:text-slate-500"
         />
       )}

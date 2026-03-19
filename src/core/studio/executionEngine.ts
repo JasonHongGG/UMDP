@@ -15,6 +15,7 @@ interface ExecuteStudioFlowOptions {
   startNodeId: string;
   nodes: StudioNode[];
   edges: StudioEdge[];
+  resolveStaticFieldAddress?: (classStableId: string, memberStableId: string) => string | null;
   onReset: () => void;
   onNodeStateChange: (nodeId: string, state: NodeExecutionState) => void;
   onNodeSnapshot: (snapshot: NodeExecutionSnapshot) => void;
@@ -26,6 +27,7 @@ export function executeStudioFlow({
   startNodeId,
   nodes,
   edges,
+  resolveStaticFieldAddress,
   onReset,
   onNodeStateChange,
   onNodeSnapshot,
@@ -78,7 +80,7 @@ export function executeStudioFlow({
     });
 
     const definition = globalNodeRegistry.get(node.type);
-    const context = createNodeExecutionContext(documentId, nodeId, nodes, edges, snapshots, definition);
+    const context = createNodeExecutionContext(documentId, nodeId, nodes, edges, snapshots, definition, resolveStaticFieldAddress);
     if (!context) {
       return null;
     }

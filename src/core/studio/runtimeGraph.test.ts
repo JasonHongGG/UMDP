@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
-import { createNodeExecutionContext, getIncomingJsonInputs, getOutgoingFlowEdges, validateNodeExecution } from './runtimeGraph';
+import { createNodeExecutionContext, getIncomingJsonInputs, getOutgoingFlowEdges, resolveExpressionSource, validateNodeExecution } from './runtimeGraph';
 import { StudioNodeDefinition } from './types';
 import type { StudioEdge } from './types';
+import type { StableId } from '../../domain/contracts/shared-identity';
+import type { StaticExpressionSource } from '../../domain/studio/contracts';
 
 function registerRuntimeGraphTestNodes() {
   initializeStudioNodeRegistry([
@@ -170,5 +172,23 @@ describe('runtimeGraph helpers', () => {
 
     expect(registeredContext).not.toBeNull();
     expect(validateNodeExecution(registeredContext!, definition)).toEqual([{ severity: 'error', code: 'dependency.missing', message: 'Missing dependency.' }]);
+  });
+
+  it('resolves static expressions to static field addresses', () => {
+    const source: StaticExpressionSource = {
+      kind: 'static-expression',
+      expression: '={{ $class["class-1"].static["field-1"] }}',
+      classStableId: 'class-1' as StableId,
+      memberStableId: 'field-1' as StableId,
+      displayText: 'PlayerMgr.Instance',
+    };
+
+    expect(resolveExpressionSource(source, {}, (classStableId, memberStableId) => {
+      if (classStableId === 'class-1' && memberStableId === 'field-1') {
+        return '0x12345678';
+      }
+
+      return null;
+    })).toBe('0x12345678');
   });
 });

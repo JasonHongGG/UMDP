@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
-import { useStudioGraph, useStudioUi, useStudioRuntime } from '../../../../core/studio/StudioContext';
-import { BaseNodeData, IPort, StudioNode } from '../../../../core/studio/types';
+import { useStudioClassCatalog, useStudioGraph, useStudioUi, useStudioRuntime } from '../../../../core/studio/StudioContext';
+import { BaseNodeData, IPort, NodeExecutionSnapshot, StudioNode } from '../../../../core/studio/types';
 import { getNodePortsByDirection, getStudioNodePort, globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
-import { createDragPayload, createInputExpressionSource, writeExpressionDragData } from '../../../../core/studio/expressionUtils';
+import { createDragPayload, createInputExpressionSource } from '../../../../core/studio/expressionUtils';
+import { createClassInfoEnvelope } from '../../../../core/studio/contracts';
+import { resolveExpressionSource } from '../../../../core/studio/runtimeGraph';
+import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoCatalog, type ClassInfoSelection } from '../../../../domain/studio/editor';
+import type { ExpressionSource } from '../../../../domain/studio/contracts';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
 
 // --- Helper for Draggable JSON Tree ---
@@ -15,29 +19,67 @@ interface JsonTreeProps {
   sourcePortId: string;
 }
 
+const DRAG_PREVIEW_X_OFFSET = 4;
+
 const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0, sourceNode, sourcePortId }) => {
   const [isExpanded, setIsExpanded] = useState(depth < 2);
+  const { beginExpressionDrag, updateExpressionDrag, endExpressionDrag } = useStudioUi();
   
   const isObject = data !== null && typeof data === 'object' && !Array.isArray(data);
   const isArray = Array.isArray(data);
   const isPrimitive = !isObject && !isArray;
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  const beginCustomDrag = (clientX: number, clientY: number) => {
     const pathSegments = path ? path.split('.') : [];
     const displayText = pathSegments.length > 0
       ? `${sourceNode.data.nodeName || sourceNode.id}.${sourcePortId}.${pathSegments.join('.')}`
       : `${sourceNode.data.nodeName || sourceNode.id}.${sourcePortId}`;
 
-    writeExpressionDragData(
-      e.dataTransfer,
-      createDragPayload(
-        createInputExpressionSource(sourceNode.id, sourcePortId, pathSegments, displayText),
-        'input-panel',
-      ),
+    const payload = createDragPayload(
+      createInputExpressionSource(sourceNode.id, sourcePortId, pathSegments, displayText),
+      'input-panel',
     );
+
+    beginExpressionDrag(payload, { x: clientX, y: clientY });
   };
 
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    if ((event.target as HTMLElement | null)?.closest('button')) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let dragStarted = true;
+
+    beginCustomDrag(startX, startY);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (dragStarted) {
+        updateExpressionDrag({ x: moveEvent.clientX, y: moveEvent.clientY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+
+      if (dragStarted) {
+        requestAnimationFrame(() => {
+          endExpressionDrag();
+        });
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp, { once: true });
+  };
   const getPrimitiveIcon = (val: any) => {
     if (typeof val === 'string') return <AlignLeft size={10} className="text-amber-400" />;
     if (typeof val === 'number') return <Hash size={10} className="text-blue-400" />;
@@ -50,10 +92,9 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
   if (isPrimitive) {
     return (
       <div 
-        draggable="true"
-        onDragStart={handleDragStart}
+        onMouseDown={handleMouseDown}
         className="flex items-center gap-2 py-1 px-2 rounded hover:bg-slate-800/80 cursor-grab active:cursor-grabbing group transition-colors ml-4"
-        style={{ WebkitUserDrag: 'element' } as any}
+        style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as any}
       >
         <span className="shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">{getPrimitiveIcon(data)}</span>
         <span className="text-xs text-slate-300 font-medium tracking-wide">{currentKey || 'root'}</span>
@@ -68,10 +109,9 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
   return (
     <div className="flex flex-col">
       <div 
-        draggable="true"
-        onDragStart={handleDragStart}
+        onMouseDown={handleMouseDown}
         className="flex items-center gap-1.5 py-1 px-1 rounded hover:bg-slate-800/80 cursor-grab active:cursor-grabbing group transition-colors"
-        style={{ WebkitUserDrag: 'element' } as any}
+        style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as any}
       >
         <button 
            type="button" 
@@ -109,7 +149,17 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 
 export function EditNodeModal() {
   const { nodes, edges, updateNodeData } = useStudioGraph();
-  const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
+  const { resolveStaticFieldAddress } = useStudioClassCatalog();
+  const {
+    isEditModalOpen,
+    closeEditModal,
+    editingNodeId,
+    activeExpressionDrag,
+    expressionDragPosition,
+    beginExpressionDrag,
+    updateExpressionDrag,
+    endExpressionDrag,
+  } = useStudioUi();
   const { nodeSnapshots } = useStudioRuntime();
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftNodeName, setDraftNodeName] = useState('');
@@ -150,6 +200,67 @@ export function EditNodeModal() {
       return null;
     }
   }, [node, nodeDef]);
+
+  const previewSnapshots = useMemo<Record<string, NodeExecutionSnapshot>>(() => {
+    return nodes.reduce<Record<string, NodeExecutionSnapshot>>((acc, candidateNode) => {
+      const snapshot = nodeSnapshots[candidateNode.id];
+      if (snapshot) {
+        acc[candidateNode.id] = snapshot;
+        return acc;
+      }
+
+      const candidateNodeDef = globalNodeRegistry.get(candidateNode.type);
+      const previewOutputs = candidateNodeDef?.getExecutionPreview?.(candidateNode.data);
+      if (!previewOutputs) {
+        return acc;
+      }
+
+      acc[candidateNode.id] = {
+        nodeId: candidateNode.id,
+        state: 'idle',
+        inputs: {},
+        outputs: previewOutputs,
+      };
+      return acc;
+    }, {});
+  }, [nodeSnapshots, nodes]);
+
+  const liveOutputPreview = useMemo(() => {
+    if (!node || !nodeDef) {
+      return null;
+    }
+
+    const runtimeOutputs = nodeSnapshots[node.id]?.outputs;
+    if (runtimeOutputs) {
+      return runtimeOutputs;
+    }
+
+    if (node.type !== 'class-ref') {
+      return simulatedOutputPreview;
+    }
+
+    const classData = node.data as BaseNodeData & {
+      binding?: ClassBinding | null;
+      instanceSource?: ExpressionSource | null;
+      availableInfo?: ClassInfoCatalog;
+      infoSelection?: ClassInfoSelection;
+    };
+
+    const availableInfo = classData.availableInfo ?? { members: [], statics: [], functions: [] };
+    const infoSelection = classData.infoSelection ?? { members: [], statics: [], functions: [] };
+    const resolvedInstanceAddress = classData.instanceSource
+      ? resolveExpressionSource(classData.instanceSource, previewSnapshots, resolveStaticFieldAddress)
+      : null;
+
+    return {
+      'info-out': createClassInfoEnvelope(
+        classData.binding ?? null,
+        availableInfo,
+        reconcileClassInfoSelection(infoSelection, availableInfo),
+        resolvedInstanceAddress ?? null,
+      ),
+    };
+  }, [node, nodeDef, nodeSnapshots, previewSnapshots, resolveStaticFieldAddress, simulatedOutputPreview]);
 
   const EditComponent = nodeDef?.EditComponent;
   const EditFooterComponent = nodeDef?.EditFooterComponent;
@@ -305,32 +416,57 @@ export function EditNodeModal() {
                       const staticPreview = sourceNodeDef?.getExecutionPreview ? sourceNodeDef.getExecutionPreview(d.node!.data) : null;
                       const snapshot = nodeSnapshots[d.node!.id];
                       
-                      const resolvedPayload = staticPreview?.[d.port!.id]?.payload || snapshot?.outputs[d.port!.id]?.payload || { _notice: 'No payload preview available. Connect and execute to view structural data.' };
+                      const resolvedPayload = snapshot?.outputs[d.port!.id]?.payload || staticPreview?.[d.port!.id]?.payload || { _notice: 'No payload preview available. Connect and execute to view structural data.' };
 
                       return (
                         <div key={i} className="bg-[#0f172a] border border-slate-700/60 rounded-xl overflow-hidden shadow-sm flex flex-col group/card hover:border-slate-600 transition-colors">
                             <div 
-                              draggable="true"
-                              onDragStart={(e) => {
-                                if (!d.node || !d.port) {
+                              onMouseDown={(event) => {
+                                if (event.button !== 0 || !d.node || !d.port) {
                                   return;
                                 }
-                                writeExpressionDragData(
-                                  e.dataTransfer,
-                                  createDragPayload(
-                                    createInputExpressionSource(
-                                      d.node.id,
-                                      d.port.id,
-                                      [],
-                                      `${d.node.data.nodeName || d.node.id}.${d.port.id}`,
-                                    ),
-                                    'input-panel',
+
+                                event.preventDefault();
+
+                                const startX = event.clientX;
+                                const startY = event.clientY;
+                                let dragStarted = true;
+
+                                const payload = createDragPayload(
+                                  createInputExpressionSource(
+                                    d.node.id,
+                                    d.port.id,
+                                    [],
+                                    `${d.node.data.nodeName || d.node.id}.${d.port.id}`,
                                   ),
+                                  'input-panel',
                                 );
+
+                                beginExpressionDrag(payload, { x: startX, y: startY });
+
+                                const handleMouseMove = (moveEvent: MouseEvent) => {
+                                  if (dragStarted) {
+                                    updateExpressionDrag({ x: moveEvent.clientX, y: moveEvent.clientY });
+                                  }
+                                };
+
+                                const handleMouseUp = () => {
+                                  window.removeEventListener('mousemove', handleMouseMove);
+                                  window.removeEventListener('mouseup', handleMouseUp);
+
+                                  if (dragStarted) {
+                                    requestAnimationFrame(() => {
+                                      endExpressionDrag();
+                                    });
+                                  }
+                                };
+
+                                window.addEventListener('mousemove', handleMouseMove);
+                                window.addEventListener('mouseup', handleMouseUp, { once: true });
                               }}
                               className="p-2.5 border-b border-slate-700/60 bg-slate-800/60 hover:bg-slate-800 flex items-center justify-between cursor-grab active:cursor-grabbing transition-colors"
                               title="Drag to reference entire object"
-                              style={{ WebkitUserDrag: 'element', WebkitAppRegion: 'no-drag' } as any}
+                              style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as any}
                             >
                                 <div className="flex items-center gap-2">
                                   <div className="w-5 h-5 rounded-md bg-slate-900 flex items-center justify-center border border-slate-700 shrink-0">
@@ -418,7 +554,7 @@ export function EditNodeModal() {
                 ) : (
                     <div className="space-y-6">
                         {nodeOutputs.map((out: IPort) => {
-                           const portPreview = simulatedOutputPreview?.[out.id] || nodeSnapshots[node.id]?.outputs?.[out.id];
+                           const portPreview = liveOutputPreview?.[out.id];
                            
                            return (
                             <div key={out.id} className="flex flex-col rounded-xl border border-slate-800 overflow-hidden bg-slate-900/20">
@@ -456,6 +592,19 @@ export function EditNodeModal() {
           </div>
 
         </div>
+
+        {activeExpressionDrag && expressionDragPosition ? (
+          <div
+            className="pointer-events-none fixed z-[120] rounded-lg border border-cyan-400/40 bg-[#06131d]/92 px-3 py-2 text-xs text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.18)]"
+            style={{
+              left: expressionDragPosition.x + DRAG_PREVIEW_X_OFFSET,
+              top: expressionDragPosition.y,
+              transform: 'translateY(-50%)',
+            }}
+          >
+            {activeExpressionDrag.source.displayText}
+          </div>
+        ) : null}
       </div>
     </div>
   );

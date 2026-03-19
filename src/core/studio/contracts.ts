@@ -6,6 +6,7 @@ import {
   ParameterDefinitionPayload,
   WORKFLOW_SCHEMA_IDS,
   WorkflowJsonEnvelope,
+  WorkflowJsonValue,
 } from './types';
 import type { ConnectionChannel } from '../../domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '../../domain/studio/editor';
@@ -103,6 +104,7 @@ export function createClassInfoEnvelope(
   binding: ClassBinding | null,
   catalog: ClassInfoCatalog,
   selected: ClassInfoSelection,
+  instanceAddress: WorkflowJsonValue = null,
 ): WorkflowJsonEnvelope<ClassInfoPayload | null> {
   if (!binding) {
     return createEnvelope(CLASS_INFO_SCHEMA, null, {
@@ -116,6 +118,7 @@ export function createClassInfoEnvelope(
   const selectedFunctions = catalog.functions.filter((item) => selected.functions.includes(item.id));
 
   return createEnvelope(CLASS_INFO_SCHEMA, {
+    instanceAddress,
     statics: Object.fromEntries(selectedStatics.map((item) => [item.id, null])),
     members: Object.fromEntries(selectedMembers.map((item) => [item.id, null])),
     functions: selectedFunctions.map((item) => ({ id: item.id, label: item.label })),

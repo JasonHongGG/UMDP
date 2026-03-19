@@ -29,6 +29,8 @@ function AppContent() {
     attachError,
     images,
     classesByImage,
+    staticFieldAddressByClassAndMember,
+    ensureRuntimeOverlayLoaded,
     classLookupMap,
     selectedImageStableId,
     setSelectedImageStableId,
@@ -258,6 +260,8 @@ function AppContent() {
           images={images}
           classesByImage={classesByImage}
           classInfoCatalogByStableId={classInfoCatalogByStableId}
+          staticFieldAddressByClassAndMember={staticFieldAddressByClassAndMember}
+          ensureRuntimeOverlayLoaded={ensureRuntimeOverlayLoaded}
           onOpenInspectorForBinding={handleOpenInspectorForBinding}
           onPendingClassNodeHandled={clearPendingClassNode}
         />

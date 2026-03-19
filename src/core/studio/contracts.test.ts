@@ -94,8 +94,32 @@ describe('studio contracts', () => {
 
     expect(envelope.meta).toMatchObject({ bindingState: 'bound' });
     expect(envelope.payload).toEqual({
+      instanceAddress: null,
       statics: { [STATIC_INSTANCE]: null },
       members: { [MEMBER_HEALTH]: null },
+      functions: [],
+    });
+  });
+
+  it('emits the resolved instance address value when provided', () => {
+    const envelope = createClassInfoEnvelope(
+      {
+        imageStableId: IMAGE_A,
+        classStableId: CLASS_PLAYER,
+        fullName: 'Gameplay.PlayerController',
+        name: 'PlayerController',
+        namespace: 'Gameplay',
+        imageName: 'Assembly-CSharp.dll',
+      },
+      { members: [], statics: [], functions: [] },
+      { members: [], statics: [], functions: [] },
+      '0x12345678',
+    );
+
+    expect(envelope.payload).toEqual({
+      instanceAddress: '0x12345678',
+      statics: {},
+      members: {},
       functions: [],
     });
   });

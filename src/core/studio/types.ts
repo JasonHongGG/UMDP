@@ -112,6 +112,7 @@ export interface ParameterDefinitionValue {
 export type ParameterDefinitionPayload = Record<string, ParameterDefinitionValue>;
 
 export interface ClassInfoPayload {
+  instanceAddress: WorkflowJsonValue;
   statics: Record<string, WorkflowJsonValue>;
   members: Record<string, WorkflowJsonValue>;
   functions: Array<{ id: string; label: string }>;

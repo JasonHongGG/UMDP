@@ -25,11 +25,10 @@ import {
   type ClassInfoSelection,
 } from '../../domain/studio/editor';
 import { Port } from '../../components/studio/canvas/Port';
-import { useStudioClassCatalog, useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import { useStudioClassCatalog, useStudioGraph, useStudioRuntime, useStudioUi } from '../../core/studio/StudioContext';
 import {
   createStaticExpressionSource,
   hasExpressionSourceValue,
-  writeExpressionDragData,
   createDragPayload,
 } from '../../core/studio/expressionUtils';
 import {
@@ -157,7 +156,7 @@ function toggleSelectionEntry(selection: string[], itemId: string) {
 
 function createInfoPreview(data: ClassNodeData) {
   const selection = reconcileClassInfoSelection(data.infoSelection, data.availableInfo);
-  return createClassInfoEnvelope(data.binding, data.availableInfo, selection);
+  return createClassInfoEnvelope(data.binding, data.availableInfo, selection, null);
 }
 
 function isDescriptorSelected(ids: string[], descriptor: ClassInfoItemDescriptor) {
@@ -390,6 +389,7 @@ const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data,
 
 const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
   const { getClassInfoCatalogByBinding } = useStudioClassCatalog();
+  const { beginExpressionDrag, updateExpressionDrag, endExpressionDrag } = useStudioUi();
   const resolvedCatalog = useMemo(
     () => getClassInfoCatalogByBinding(data.binding) ?? data.availableInfo,
     [data.availableInfo, data.binding, getClassInfoCatalogByBinding],
@@ -479,30 +479,45 @@ const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ dat
           <div className="grid grid-cols-1 gap-2">
             {descriptors.map((descriptor, index) => {
               const isSelected = isDescriptorSelected(selectedIds, descriptor);
-              const staticAddress = bucket === 'statics'
-                ? descriptor.detail?.split(' @ ')[1]?.trim() ?? ''
-                : '';
-              const canDragStaticAddress = bucket === 'statics' && staticAddress.length > 0;
+              const canDragStaticAddress = bucket === 'statics' && Boolean(data.binding);
               return (
                 <div
                   key={`${descriptor.id}-${index}`}
-                  draggable={canDragStaticAddress}
-                  style={canDragStaticAddress ? { WebkitUserDrag: 'element', WebkitAppRegion: 'no-drag' } as any : { WebkitAppRegion: 'no-drag' } as any}
-                  onDragStart={(e) => {
-                    if (canDragStaticAddress && data.binding) {
-                      e.stopPropagation();
-                      writeExpressionDragData(
-                        e.dataTransfer,
-                        createDragPayload(
-                          createStaticExpressionSource(
-                            data.binding.classStableId,
-                            descriptor.id as StableId,
-                            `${data.binding.name}.${descriptor.label}`,
-                          ),
-                          'class-static-panel',
-                        ),
-                      );
+                  style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as any}
+                  onMouseDown={(event) => {
+                    if (!canDragStaticAddress || !data.binding || event.button !== 0) {
+                      return;
                     }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const payload = createDragPayload(
+                      createStaticExpressionSource(
+                        data.binding.classStableId,
+                        descriptor.id as StableId,
+                        `${data.binding.name}.${descriptor.label}`,
+                      ),
+                      'class-static-panel',
+                    );
+
+                    beginExpressionDrag(payload, { x: event.clientX, y: event.clientY });
+
+                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                      updateExpressionDrag({ x: moveEvent.clientX, y: moveEvent.clientY });
+                    };
+
+                    const handleMouseUp = () => {
+                      window.removeEventListener('mousemove', handleMouseMove);
+                      window.removeEventListener('mouseup', handleMouseUp);
+
+                      requestAnimationFrame(() => {
+                        endExpressionDrag();
+                      });
+                    };
+
+                    window.addEventListener('mousemove', handleMouseMove);
+                    window.addEventListener('mouseup', handleMouseUp, { once: true });
                   }}
                   onClick={() => handleToggle(bucket === 'members' ? 'member' : bucket === 'statics' ? 'static' : 'function', descriptor.id)}
                   className={`group relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer overflow-hidden
@@ -511,7 +526,7 @@ const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ dat
                       ? `${tone.accentBg} ${tone.accentBorder} ${tone.shadow} scale-[1.01]` 
                       : 'bg-slate-800/30 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 opacity-80 hover:opacity-100'}
                   `}
-                  title={canDragStaticAddress ? `Drag address ${staticAddress}` : undefined}
+                  title={canDragStaticAddress ? `Drag static reference ${data.binding?.name}.${descriptor.label}` : undefined}
                 >
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>{descriptor.label}</span>
@@ -650,7 +665,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
 
       return [];
     },
-    execute: ({ documentState }) => {
+    execute: ({ documentState, resolvedBindings }) => {
       const classDocumentState = parseClassNodeDocumentState(documentState);
       const availableInfo = (documentState.availableInfo as ClassInfoCatalog | undefined) ?? createEmptyCatalog();
       return {
@@ -660,6 +675,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
             fromClassBindingReference(classDocumentState.classBinding),
             availableInfo,
             reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo),
+            (resolvedBindings.instanceSource as import('../../core/studio/types').WorkflowJsonValue | undefined) ?? null,
           ),
         },
       };
@@ -671,6 +687,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
         data.binding,
         data.availableInfo,
         reconcileClassInfoSelection(data.infoSelection, data.availableInfo),
+        null,
       ),
     };
   },

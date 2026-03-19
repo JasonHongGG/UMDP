@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { GraphDocument } from '../../domain/studio/contracts';
+import type { ExpressionReferenceDragPayload, GraphDocument } from '../../domain/studio/contracts';
+import type { StableId } from '../../domain/contracts/shared-identity';
 import {
   type ClassInfoCatalog,
   hasSameClassInfoSelection,
@@ -40,6 +41,11 @@ export interface StudioUiState {
   editingNodeId: string | null;
   openEditModal: (nodeId: string) => void;
   closeEditModal: () => void;
+  activeExpressionDrag: ExpressionReferenceDragPayload | null;
+  expressionDragPosition: { x: number; y: number } | null;
+  beginExpressionDrag: (payload: ExpressionReferenceDragPayload, position: { x: number; y: number }) => void;
+  updateExpressionDrag: (position: { x: number; y: number }) => void;
+  endExpressionDrag: () => void;
 }
 
 export interface StudioRuntimeState {
@@ -62,6 +68,8 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
   const [addModalPosition, setAddModalPosition] = useState<{ x: number; y: number } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [activeExpressionDrag, setActiveExpressionDrag] = useState<ExpressionReferenceDragPayload | null>(null);
+  const [expressionDragPosition, setExpressionDragPosition] = useState<{ x: number; y: number } | null>(null);
   const portElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const startConnection = useCallback((sourceNodeId: string, sourcePortId: string, sourcePortType: PortType, sourceHandleType: PortHandleType, startPos: { x: number; y: number }) => {
@@ -153,6 +161,20 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
     setIsEditModalOpen(false);
   }, []);
 
+  const beginExpressionDrag = useCallback((payload: ExpressionReferenceDragPayload, position: { x: number; y: number }) => {
+    setActiveExpressionDrag(payload);
+    setExpressionDragPosition(position);
+  }, []);
+
+  const updateExpressionDrag = useCallback((position: { x: number; y: number }) => {
+    setExpressionDragPosition(position);
+  }, []);
+
+  const endExpressionDrag = useCallback(() => {
+    setActiveExpressionDrag(null);
+    setExpressionDragPosition(null);
+  }, []);
+
   return useMemo(() => ({
     transform,
     setTransform,
@@ -173,13 +195,23 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
     editingNodeId,
     openEditModal,
     closeEditModal,
+    activeExpressionDrag,
+    expressionDragPosition,
+    beginExpressionDrag,
+    updateExpressionDrag,
+    endExpressionDrag,
   }), [
+    activeExpressionDrag,
     addModalPosition,
+    beginExpressionDrag,
     cancelConnection,
     canvasElement,
     closeAddModal,
     closeEditModal,
     draftConnection,
+    editingNodeId,
+    endExpressionDrag,
+    expressionDragPosition,
     editingNodeId,
     finishConnection,
     getPortElement,
@@ -191,11 +223,12 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
     registerPortElement,
     startConnection,
     transform,
+    updateExpressionDrag,
     updateConnectionTarget,
   ]);
 }
 
-function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[]): StudioRuntimeState {
+function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[], classCatalog: StudioClassCatalogState): StudioRuntimeState {
   const [nodeStates, setNodeStates] = useState<Record<string, NodeExecutionState>>({});
   const [nodeSnapshots, setNodeSnapshots] = useState<Record<string, NodeExecutionSnapshot>>({});
   const executionCleanupRef = useRef<(() => void) | null>(null);
@@ -219,6 +252,7 @@ function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edg
       startNodeId,
       nodes,
       edges,
+      resolveStaticFieldAddress: classCatalog.resolveStaticFieldAddress,
       onReset: () => {
         setNodeStates({});
         setNodeSnapshots({});
@@ -230,7 +264,7 @@ function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edg
         setNodeSnapshots((previous) => ({ ...previous, [snapshot.nodeId]: snapshot }));
       },
     });
-  }, [document.id, edges, nodes]);
+  }, [classCatalog, document.id, edges, nodes]);
 
   return useMemo(() => ({
     nodeStates,
@@ -243,6 +277,8 @@ export interface StudioClassCatalogState {
   classes: StudioClassCatalogEntry[];
   createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => PendingClassNodeRequest | null;
   getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
+  resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => string | null;
+  ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   openInspectorForBinding?: (binding: ClassBinding) => void;
 }
 
@@ -295,7 +331,22 @@ export function StudioProvider({ children, classCatalog }: { children: React.Rea
   const graphStore = useStudioGraphStore();
   const { nodes, edges, document, connectPorts } = graphStore;
   const uiValue = useStudioUiState({ nodes, edges, connectPorts });
-  const runtimeValue = useStudioRuntimeState(document, nodes, edges);
+  const runtimeValue = useStudioRuntimeState(document, nodes, edges, classCatalog);
+
+  useEffect(() => {
+    for (const node of nodes) {
+      if (node.type !== 'class-ref') {
+        continue;
+      }
+
+      const data = node.data as Partial<{ binding: ClassBinding | null }>;
+      if (!data.binding) {
+        continue;
+      }
+
+      classCatalog.ensureRuntimeOverlayLoaded(data.binding.classStableId);
+    }
+  }, [classCatalog, nodes]);
 
   useEffect(() => {
     for (const node of nodes) {

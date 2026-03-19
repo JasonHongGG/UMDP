@@ -1,5 +1,6 @@
 import type { StableId } from '../contracts/shared-identity';
 import type { ClassDescriptor, ImageDescriptor, RuntimeClassOverlayDescriptor } from './contracts';
+import { formatHexAddress } from '../../core/addressFormat';
 
 export type AnalysisImageInfo = ImageDescriptor;
 
@@ -66,7 +67,7 @@ export interface ClassReferenceResult {
 
 function mapFieldInfo(field: ClassDescriptor['fields'][number] | RuntimeClassOverlayDescriptor['fields'][number]): AnalysisFieldInfo {
   return {
-    offset: field.offset,
+    offset: formatHexAddress(field.offset),
     name: field.name,
     fieldType: field.fieldType,
   };
@@ -76,10 +77,10 @@ function mapStaticFieldInfo(
   field: ClassDescriptor['staticFields'][number] | RuntimeClassOverlayDescriptor['staticFields'][number],
 ): AnalysisStaticFieldInfo {
   return {
-    offset: field.offset,
+    offset: formatHexAddress(field.offset),
     name: field.name,
     fieldType: field.fieldType,
-    address: field.address,
+    address: formatHexAddress(field.address),
     value: field.value,
   };
 }

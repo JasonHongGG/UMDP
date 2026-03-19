@@ -12,6 +12,8 @@ import type { ExpressionSource, NodeExecutionContext, ValidationIssue } from '..
 
 const EMPTY_ISSUES: ValidationIssue[] = [];
 
+export type ResolveStaticFieldAddress = (classStableId: string, memberStableId: string) => string | null;
+
 export function getStudioNodeById(nodeId: string, nodes: StudioNode[]) {
   return nodes.find((node) => node.id === nodeId);
 }
@@ -188,6 +190,7 @@ function resolveLiteralValue(source: Extract<ExpressionSource, { kind: 'literal'
 export function resolveExpressionSource(
   source: ExpressionSource,
   snapshots: Record<string, NodeExecutionSnapshot>,
+  resolveStaticFieldAddress?: ResolveStaticFieldAddress,
 ) {
   if (source.kind === 'literal') {
     return resolveLiteralValue(source);
@@ -207,23 +210,19 @@ export function resolveExpressionSource(
     return getValueAtPath(payload, source.sourcePath);
   }
 
-  return {
-    classStableId: source.classStableId,
-    memberStableId: source.memberStableId,
-    displayText: source.displayText,
-    expression: source.expression,
-  };
+  return resolveStaticFieldAddress?.(source.classStableId, source.memberStableId) ?? null;
 }
 
 function resolveBindingValue(
   binding: ExpressionSource | ExpressionSource[],
   snapshots: Record<string, NodeExecutionSnapshot>,
+  resolveStaticFieldAddress?: ResolveStaticFieldAddress,
 ) {
   if (Array.isArray(binding)) {
-    return binding.map((entry) => resolveExpressionSource(entry, snapshots));
+    return binding.map((entry) => resolveExpressionSource(entry, snapshots, resolveStaticFieldAddress));
   }
 
-  return resolveExpressionSource(binding, snapshots);
+  return resolveExpressionSource(binding, snapshots, resolveStaticFieldAddress);
 }
 
 export function createNodeExecutionContext(
@@ -233,6 +232,7 @@ export function createNodeExecutionContext(
   edges: StudioEdge[],
   snapshots: Record<string, NodeExecutionSnapshot>,
   definition?: StudioNodeDefinition,
+  resolveStaticFieldAddress?: ResolveStaticFieldAddress,
 ): NodeExecutionContext | null {
   const node = getStudioNodeById(nodeId, nodes);
   if (!node) {
@@ -249,7 +249,7 @@ export function createNodeExecutionContext(
     parameters: runtimeState.parameters,
     bindings: runtimeState.bindings,
     resolvedBindings: Object.fromEntries(
-      Object.entries(runtimeState.bindings).map(([key, value]) => [key, resolveBindingValue(value, snapshots)]),
+      Object.entries(runtimeState.bindings).map(([key, value]) => [key, resolveBindingValue(value, snapshots, resolveStaticFieldAddress)]),
     ),
     documentState: runtimeState.documentState,
     inputBindings: getIncomingInputBindings(nodeId, nodes, edges),

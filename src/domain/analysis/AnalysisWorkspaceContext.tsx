@@ -18,6 +18,7 @@ import {
   type StudioClassCatalogEntry,
 } from '../studio/editor';
 import type { StableId } from '../contracts/shared-identity';
+import { formatHexAddress } from '../../core/addressFormat';
 import type {
   AnalysisClassInfo,
   AnalysisClassSummary,
@@ -59,8 +60,10 @@ interface AnalysisWorkspaceContextValue {
   images: AnalysisImageInfo[];
   classesByImage: Record<string, AnalysisClassSummary[]>;
   classDetailsByStableId: Record<string, AnalysisClassInfo>;
+  staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
   studioClassCatalogEntries: StudioClassCatalogEntry[];
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
+  ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   classLookupMap: Map<string, ClassLookupEntry>;
   selectedImageStableId: StableId | null;
   setSelectedImageStableId: (id: StableId | null) => void;
@@ -323,6 +326,22 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     );
   }, [analysisSnapshot, runtimeOverlays]);
 
+  const staticFieldAddressByClassAndMember = useMemo(() => {
+    if (!analysisSnapshot) {
+      return {} as Record<string, Record<string, string | null>>;
+    }
+
+    return Object.fromEntries(
+      Object.values(analysisSnapshot.classes).map((descriptor) => {
+        const staticFields = runtimeOverlays[descriptor.stableId]?.staticFields ?? descriptor.staticFields;
+        return [
+          descriptor.stableId,
+          Object.fromEntries(staticFields.map((field) => [field.stableId, formatHexAddress(field.address)])),
+        ];
+      }),
+    );
+  }, [analysisSnapshot, runtimeOverlays]);
+
   const filteredImages = useMemo(() => {
     if (!images.length) {
       return [];
@@ -373,42 +392,49 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     }
   }, [images, selectedImageStableId]);
 
-  useEffect(() => {
-    if (!processSession || !activeTab || !analysisSnapshot) {
+  const ensureRuntimeOverlayLoaded = useCallback((classStableId: StableId) => {
+    if (!processSession || !analysisSnapshot) {
       return;
     }
 
-    const cacheKey = activeTab.classStableId;
-    if (runtimeOverlays[cacheKey] || fetchingRuntimeRef.current.has(cacheKey)) {
+    if (runtimeOverlays[classStableId] || fetchingRuntimeRef.current.has(classStableId)) {
       return;
     }
 
-    const descriptor = analysisSnapshot.classes[activeTab.classStableId];
+    const descriptor = analysisSnapshot.classes[classStableId];
     if (!descriptor) {
       return;
     }
 
-    fetchingRuntimeRef.current.add(cacheKey);
-    setLoadingRuntimeByKey((current) => ({ ...current, [cacheKey]: true }));
+    fetchingRuntimeRef.current.add(classStableId);
+    setLoadingRuntimeByKey((current) => ({ ...current, [classStableId]: true }));
 
     invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', {
-      classStableId: cacheKey,
+      classStableId,
     })
       .then((snapshot) => {
         setRuntimeOverlays((current) => ({
           ...current,
-          [cacheKey]: snapshot.classes[cacheKey],
+          [classStableId]: snapshot.classes[classStableId],
         }));
-        setRuntimeFieldErrorByKey((current) => ({ ...current, [cacheKey]: null }));
+        setRuntimeFieldErrorByKey((current) => ({ ...current, [classStableId]: null }));
       })
       .catch((error) => {
-        setRuntimeFieldErrorByKey((current) => ({ ...current, [cacheKey]: String(error) }));
+        setRuntimeFieldErrorByKey((current) => ({ ...current, [classStableId]: String(error) }));
       })
       .finally(() => {
-        fetchingRuntimeRef.current.delete(cacheKey);
-        setLoadingRuntimeByKey((current) => ({ ...current, [cacheKey]: false }));
+        fetchingRuntimeRef.current.delete(classStableId);
+        setLoadingRuntimeByKey((current) => ({ ...current, [classStableId]: false }));
       });
-  }, [activeTab, analysisSnapshot, processSession, runtimeOverlays]);
+  }, [analysisSnapshot, processSession, runtimeOverlays]);
+
+  useEffect(() => {
+    if (!activeTab) {
+      return;
+    }
+
+    ensureRuntimeOverlayLoaded(activeTab.classStableId);
+  }, [activeTab, ensureRuntimeOverlayLoaded]);
 
   const activeCacheKey = activeTab ? activeTab.classStableId : '';
   const studioClassDetailsByStableId = useMemo(() => {
@@ -723,8 +749,10 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     images,
     classesByImage,
     classDetailsByStableId,
+    staticFieldAddressByClassAndMember,
     studioClassCatalogEntries,
     classInfoCatalogByStableId,
+    ensureRuntimeOverlayLoaded,
     classLookupMap,
     selectedImageStableId,
     setSelectedImageStableId,
@@ -826,6 +854,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     referenceTargetError,
     referenceTargetInput,
     runtimeOverlays,
+    staticFieldAddressByClassAndMember,
     selectedClass,
     selectedImage,
     selectedImageStableId,

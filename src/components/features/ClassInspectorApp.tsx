@@ -3,6 +3,7 @@ import { Hexagon, Layers3, ChevronRight, LoaderCircle, Waypoints, Plus } from 'l
 import type { AnalysisClassInfo, AnalysisFieldInfo, AnalysisStaticFieldInfo } from '../../domain/analysis/view-models';
 import type { ClassBinding } from '../../domain/studio/editor';
 import type { InspectorTab } from '../../domain/analysis/AnalysisWorkspaceContext';
+import { formatHexAddress } from '../../core/addressFormat';
 
 interface ClassInspectorAppProps {
   classInfo: AnalysisClassInfo;
@@ -94,7 +95,7 @@ export default function ClassInspectorApp({
             data={runtimeStaticFields.map((f, index) => [
               <TypeLink key={`stype-${index}`} typeName={f.fieldType} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
               <span key={`sname-${index}`} className="text-slate-200">{f.name}</span>,
-              <span key={`saddr-${index}`} className="text-cyan-400 font-mono text-[10px] whitespace-nowrap">{f.address ?? '?'}</span>,
+              <span key={`saddr-${index}`} className="text-cyan-400 font-mono text-[10px] whitespace-nowrap">{formatHexAddress(f.address) ?? '?'}</span>,
               <span key={`sval-${index}`} className="text-yellow-400 font-mono text-[10px] break-all">{f.value ?? '?'}</span>
             ])}
           />
@@ -104,7 +105,7 @@ export default function ClassInspectorApp({
           <Table
             headers={['Offset', 'Type', 'Name']}
             data={runtimeFields.map((f, index) => [
-              <span key={`offset-${index}`} className="text-cyan-400">0x{f.offset?.toUpperCase() ?? '?'}</span>,
+              <span key={`offset-${index}`} className="text-cyan-400">{formatHexAddress(f.offset) ?? '?'}</span>,
               <TypeLink key={`type-${index}`} typeName={f.fieldType} lookupMap={classLookupMap} onNavigate={navigateToType} className="text-yellow-400" />,
               <span key={`name-${index}`} className="text-slate-200">{f.name}</span>
             ])}
