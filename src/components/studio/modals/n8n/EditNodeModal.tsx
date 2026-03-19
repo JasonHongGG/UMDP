@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
-import { useStudioClassCatalog, useStudioGraph, useStudioUi, useStudioRuntime } from '../../../../core/studio/StudioContext';
+import { useStudioGraph, useStudioUi, useStudioRuntime } from '../../../../core/studio/StudioContext';
 import { BaseNodeData, IPort, NodeExecutionSnapshot, StudioNode } from '../../../../core/studio/types';
 import { getNodePortsByDirection, getStudioNodePort, globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
-import { createDragPayload, createInputExpressionSource } from '../../../../core/studio/expressionUtils';
+import { beginPointerExpressionDrag } from '../../../../core/studio/drag/expressionPointerDrag';
+import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
+import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
 import { createClassInfoEnvelope } from '../../../../core/studio/contracts';
-import { resolveExpressionSource } from '../../../../core/studio/runtimeGraph';
 import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoCatalog, type ClassInfoSelection } from '../../../../domain/studio/editor';
 import type { ExpressionSource } from '../../../../domain/studio/contracts';
+import { useStudioRuntimeData } from '../../../../core/studio/runtimeData';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
 
 // --- Helper for Draggable JSON Tree ---
@@ -18,29 +20,24 @@ interface JsonTreeProps {
   sourceNode: StudioNode;
   sourcePortId: string;
 }
-
-const DRAG_PREVIEW_X_OFFSET = 4;
-
 const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0, sourceNode, sourcePortId }) => {
   const [isExpanded, setIsExpanded] = useState(depth < 2);
-  const { beginExpressionDrag, updateExpressionDrag, endExpressionDrag } = useStudioUi();
+  const expressionDrag = useExpressionDrag();
   
   const isObject = data !== null && typeof data === 'object' && !Array.isArray(data);
   const isArray = Array.isArray(data);
   const isPrimitive = !isObject && !isArray;
 
-  const beginCustomDrag = (clientX: number, clientY: number) => {
+  const buildDragPayload = () => {
     const pathSegments = path ? path.split('.') : [];
     const displayText = pathSegments.length > 0
       ? `${sourceNode.data.nodeName || sourceNode.id}.${sourcePortId}.${pathSegments.join('.')}`
       : `${sourceNode.data.nodeName || sourceNode.id}.${sourcePortId}`;
 
-    const payload = createDragPayload(
+    return createExpressionReferenceDragPayload(
       createInputExpressionSource(sourceNode.id, sourcePortId, pathSegments, displayText),
       'input-panel',
     );
-
-    beginExpressionDrag(payload, { x: clientX, y: clientY });
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -51,34 +48,7 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
     if ((event.target as HTMLElement | null)?.closest('button')) {
       return;
     }
-
-    event.preventDefault();
-
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let dragStarted = true;
-
-    beginCustomDrag(startX, startY);
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (dragStarted) {
-        updateExpressionDrag({ x: moveEvent.clientX, y: moveEvent.clientY });
-      }
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-
-      if (dragStarted) {
-        requestAnimationFrame(() => {
-          endExpressionDrag();
-        });
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp, { once: true });
+    beginPointerExpressionDrag(event, buildDragPayload(), expressionDrag);
   };
   const getPrimitiveIcon = (val: any) => {
     if (typeof val === 'string') return <AlignLeft size={10} className="text-amber-400" />;
@@ -149,18 +119,10 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 
 export function EditNodeModal() {
   const { nodes, edges, updateNodeData } = useStudioGraph();
-  const { resolveStaticFieldAddress } = useStudioClassCatalog();
-  const {
-    isEditModalOpen,
-    closeEditModal,
-    editingNodeId,
-    activeExpressionDrag,
-    expressionDragPosition,
-    beginExpressionDrag,
-    updateExpressionDrag,
-    endExpressionDrag,
-  } = useStudioUi();
+  const runtimeData = useStudioRuntimeData();
+  const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
   const { nodeSnapshots } = useStudioRuntime();
+  const expressionDrag = useExpressionDrag();
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftNodeName, setDraftNodeName] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -249,7 +211,7 @@ export function EditNodeModal() {
     const availableInfo = classData.availableInfo ?? { members: [], statics: [], functions: [] };
     const infoSelection = classData.infoSelection ?? { members: [], statics: [], functions: [] };
     const resolvedInstanceAddress = classData.instanceSource
-      ? resolveExpressionSource(classData.instanceSource, previewSnapshots, resolveStaticFieldAddress)
+      ? runtimeData.resolveExpressionSource(classData.instanceSource, previewSnapshots)
       : null;
 
     return {
@@ -260,7 +222,7 @@ export function EditNodeModal() {
         resolvedInstanceAddress ?? null,
       ),
     };
-  }, [node, nodeDef, nodeSnapshots, previewSnapshots, resolveStaticFieldAddress, simulatedOutputPreview]);
+  }, [node, nodeDef, nodeSnapshots, previewSnapshots, runtimeData, simulatedOutputPreview]);
 
   const EditComponent = nodeDef?.EditComponent;
   const EditFooterComponent = nodeDef?.EditFooterComponent;
@@ -426,13 +388,9 @@ export function EditNodeModal() {
                                   return;
                                 }
 
-                                event.preventDefault();
-
-                                const startX = event.clientX;
-                                const startY = event.clientY;
-                                let dragStarted = true;
-
-                                const payload = createDragPayload(
+                                beginPointerExpressionDrag(
+                                  event,
+                                  createExpressionReferenceDragPayload(
                                   createInputExpressionSource(
                                     d.node.id,
                                     d.port.id,
@@ -440,29 +398,9 @@ export function EditNodeModal() {
                                     `${d.node.data.nodeName || d.node.id}.${d.port.id}`,
                                   ),
                                   'input-panel',
+                                  ),
+                                  expressionDrag,
                                 );
-
-                                beginExpressionDrag(payload, { x: startX, y: startY });
-
-                                const handleMouseMove = (moveEvent: MouseEvent) => {
-                                  if (dragStarted) {
-                                    updateExpressionDrag({ x: moveEvent.clientX, y: moveEvent.clientY });
-                                  }
-                                };
-
-                                const handleMouseUp = () => {
-                                  window.removeEventListener('mousemove', handleMouseMove);
-                                  window.removeEventListener('mouseup', handleMouseUp);
-
-                                  if (dragStarted) {
-                                    requestAnimationFrame(() => {
-                                      endExpressionDrag();
-                                    });
-                                  }
-                                };
-
-                                window.addEventListener('mousemove', handleMouseMove);
-                                window.addEventListener('mouseup', handleMouseUp, { once: true });
                               }}
                               className="p-2.5 border-b border-slate-700/60 bg-slate-800/60 hover:bg-slate-800 flex items-center justify-between cursor-grab active:cursor-grabbing transition-colors"
                               title="Drag to reference entire object"
@@ -592,19 +530,6 @@ export function EditNodeModal() {
           </div>
 
         </div>
-
-        {activeExpressionDrag && expressionDragPosition ? (
-          <div
-            className="pointer-events-none fixed z-[120] rounded-lg border border-cyan-400/40 bg-[#06131d]/92 px-3 py-2 text-xs text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.18)]"
-            style={{
-              left: expressionDragPosition.x + DRAG_PREVIEW_X_OFFSET,
-              top: expressionDragPosition.y,
-              transform: 'translateY(-50%)',
-            }}
-          >
-            {activeExpressionDrag.source.displayText}
-          </div>
-        ) : null}
       </div>
     </div>
   );

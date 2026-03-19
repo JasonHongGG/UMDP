@@ -1,15 +1,16 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Layers3, Search, X } from 'lucide-react';
 import { createEmptyClassInfoSelection, filterStudioClassCatalog } from '../../../domain/studio/editor';
-import { useStudioClassCatalog, useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
 import { globalNodeRegistry } from '../../../core/studio/NodeRegistry';
+import { useStudioRuntimeData } from '../../../core/studio/runtimeData';
 
 type ModalMode = 'nodes' | 'class-picker';
 
 export function AddNodeModal() {
   const { addNode } = useStudioGraph();
   const { isAddModalOpen, closeAddModal, addModalPosition, transform } = useStudioUi();
-  const { classes, createNodeRequestFromBinding } = useStudioClassCatalog();
+  const { classes, createNodeRequestFromBinding } = useStudioRuntimeData();
   const [searchQuery, setSearchQuery] = useState('');
   const [mode, setMode] = useState<ModalMode>('nodes');
   const inputRef = useRef<HTMLInputElement>(null);

@@ -28,17 +28,12 @@ function AppContent() {
     processSession,
     attachError,
     images,
-    classesByImage,
-    staticFieldAddressByClassAndMember,
-    ensureRuntimeOverlayLoaded,
     classLookupMap,
     selectedImageStableId,
     setSelectedImageStableId,
     loadingImages,
     activePage,
     setActivePage,
-    pendingClassNode,
-    clearPendingClassNode,
     imageSearch,
     setImageSearch,
     classSearch,
@@ -80,8 +75,6 @@ function AppContent() {
     handleReferenceResultClick,
     setReferenceTargetFromClass,
     handleAddClassToStudio,
-    handleOpenInspectorForBinding,
-    classInfoCatalogByStableId,
     pendingScrollImageStableId,
     pendingScrollClassStableId,
     clearPendingScrollTarget,
@@ -255,16 +248,7 @@ function AppContent() {
         </div>
       </div>
       ) : (
-        <StudioPage
-          pendingClassNode={pendingClassNode}
-          images={images}
-          classesByImage={classesByImage}
-          classInfoCatalogByStableId={classInfoCatalogByStableId}
-          staticFieldAddressByClassAndMember={staticFieldAddressByClassAndMember}
-          ensureRuntimeOverlayLoaded={ensureRuntimeOverlayLoaded}
-          onOpenInspectorForBinding={handleOpenInspectorForBinding}
-          onPendingClassNodeHandled={clearPendingClassNode}
-        />
+        <StudioPage />
       )}
 
       <div className="h-7 border-t border-[#1c2838] bg-[#05080c] flex items-center px-4 justify-between text-[10px] text-slate-500 shrink-0 select-none z-20 relative">

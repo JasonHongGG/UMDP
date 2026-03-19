@@ -4,7 +4,7 @@ import { BaseNodeData, INodeComponentProps, INodeDefinition, IPort, ParameterVal
 import { createJsonPort, createParameterDefinitionsEnvelope, PARAMETER_DEFINITIONS_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { Port } from '../../components/studio/canvas/Port';
-import { createLiteralExpressionSource, getExpressionSourceDisplayValue } from '../../core/studio/expressionUtils';
+import { createLiteralExpressionSource, getExpressionSourceDisplayValue } from '../../core/studio/expression';
 import { parseParameterNodeDocumentState, type ExpressionSource, type ParameterNodeDocumentState } from '../../domain/studio/contracts';
 import { createStableId } from '../../domain/contracts/shared-identity';
 

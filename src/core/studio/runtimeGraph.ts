@@ -6,9 +6,9 @@ import {
   StudioNode,
   StudioNodeDefinition,
 } from './types';
-import { createInputExpressionSource } from './expressionUtils';
+import { createInputExpressionSource, resolveExpressionBindingValue } from './expression';
 import { getStudioNodePort, getStudioNodePorts } from './NodeRegistry';
-import type { ExpressionSource, NodeExecutionContext, ValidationIssue } from '../../domain/studio/contracts';
+import type { NodeExecutionContext, ValidationIssue } from '../../domain/studio/contracts';
 
 const EMPTY_ISSUES: ValidationIssue[] = [];
 
@@ -141,90 +141,6 @@ function getNodeRuntimeState(node: StudioNode, definition?: StudioNodeDefinition
   };
 }
 
-function getValueAtPath(value: unknown, path: string[]) {
-  return path.reduce<unknown>((current, segment) => {
-    if (current === null || current === undefined) {
-      return undefined;
-    }
-
-    if (Array.isArray(current)) {
-      const index = Number(segment);
-      return Number.isInteger(index) ? current[index] : undefined;
-    }
-
-    if (typeof current === 'object') {
-      return (current as Record<string, unknown>)[segment];
-    }
-
-    return undefined;
-  }, value);
-}
-
-function resolveLiteralValue(source: Extract<ExpressionSource, { kind: 'literal' }>) {
-  if (source.valueType === 'number') {
-    const parsed = Number(source.raw);
-    return Number.isNaN(parsed) ? source.raw : parsed;
-  }
-
-  if (source.valueType === 'boolean') {
-    if (source.raw === 'true') {
-      return true;
-    }
-
-    if (source.raw === 'false') {
-      return false;
-    }
-  }
-
-  if (source.valueType === 'json') {
-    try {
-      return JSON.parse(source.raw);
-    } catch {
-      return source.raw;
-    }
-  }
-
-  return source.raw;
-}
-
-export function resolveExpressionSource(
-  source: ExpressionSource,
-  snapshots: Record<string, NodeExecutionSnapshot>,
-  resolveStaticFieldAddress?: ResolveStaticFieldAddress,
-) {
-  if (source.kind === 'literal') {
-    return resolveLiteralValue(source);
-  }
-
-  if (source.kind === 'input-expression') {
-    const sourceNodeId = source.sourceNodeId;
-    if (!sourceNodeId) {
-      return undefined;
-    }
-
-    const payload = snapshots[sourceNodeId]?.outputs[source.bindingSlot]?.payload;
-    if (payload === undefined) {
-      return undefined;
-    }
-
-    return getValueAtPath(payload, source.sourcePath);
-  }
-
-  return resolveStaticFieldAddress?.(source.classStableId, source.memberStableId) ?? null;
-}
-
-function resolveBindingValue(
-  binding: ExpressionSource | ExpressionSource[],
-  snapshots: Record<string, NodeExecutionSnapshot>,
-  resolveStaticFieldAddress?: ResolveStaticFieldAddress,
-) {
-  if (Array.isArray(binding)) {
-    return binding.map((entry) => resolveExpressionSource(entry, snapshots, resolveStaticFieldAddress));
-  }
-
-  return resolveExpressionSource(binding, snapshots, resolveStaticFieldAddress);
-}
-
 export function createNodeExecutionContext(
   documentId: string,
   nodeId: string,
@@ -249,7 +165,10 @@ export function createNodeExecutionContext(
     parameters: runtimeState.parameters,
     bindings: runtimeState.bindings,
     resolvedBindings: Object.fromEntries(
-      Object.entries(runtimeState.bindings).map(([key, value]) => [key, resolveBindingValue(value, snapshots, resolveStaticFieldAddress)]),
+      Object.entries(runtimeState.bindings).map(([key, value]) => [key, resolveExpressionBindingValue(value, {
+        snapshots,
+        resolveStaticFieldAddress,
+      })]),
     ),
     documentState: runtimeState.documentState,
     inputBindings: getIncomingInputBindings(nodeId, nodes, edges),

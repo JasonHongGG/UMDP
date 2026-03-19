@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
-import { createNodeExecutionContext, getIncomingJsonInputs, getOutgoingFlowEdges, resolveExpressionSource, validateNodeExecution } from './runtimeGraph';
+import { resolveExpressionSource as resolveStudioExpressionSource } from './expression';
+import { createNodeExecutionContext, getIncomingJsonInputs, getOutgoingFlowEdges, validateNodeExecution } from './runtimeGraph';
 import { StudioNodeDefinition } from './types';
 import type { StudioEdge } from './types';
 import type { StableId } from '../../domain/contracts/shared-identity';
@@ -183,12 +184,15 @@ describe('runtimeGraph helpers', () => {
       displayText: 'PlayerMgr.Instance',
     };
 
-    expect(resolveExpressionSource(source, {}, (classStableId, memberStableId) => {
-      if (classStableId === 'class-1' && memberStableId === 'field-1') {
-        return '0x12345678';
-      }
+    expect(resolveStudioExpressionSource(source, {
+      snapshots: {},
+      resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => {
+        if (classStableId === 'class-1' && memberStableId === 'field-1') {
+          return '0x12345678';
+        }
 
-      return null;
+        return null;
+      },
     })).toBe('0x12345678');
   });
 });

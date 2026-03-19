@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createStudioRuntimeDataState, type StudioRuntimeDataState } from '../../core/studio/runtimeData';
 import type {
   AnalysisSnapshot,
   ProcessInfo,
@@ -63,6 +64,7 @@ interface AnalysisWorkspaceContextValue {
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
   studioClassCatalogEntries: StudioClassCatalogEntry[];
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
+  studioRuntimeData: StudioRuntimeDataState;
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   classLookupMap: Map<string, ClassLookupEntry>;
   selectedImageStableId: StableId | null;
@@ -727,6 +729,20 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     setActivePage('inspector');
   }, [openTabForClass]);
 
+  const studioRuntimeData = useMemo(() => createStudioRuntimeDataState({
+    classes: studioClassCatalogEntries,
+    classInfoCatalogByStableId,
+    staticFieldAddressByClassAndMember,
+    ensureRuntimeOverlayLoaded,
+    openInspectorForBinding: handleOpenInspectorForBinding,
+  }), [
+    classInfoCatalogByStableId,
+    ensureRuntimeOverlayLoaded,
+    handleOpenInspectorForBinding,
+    staticFieldAddressByClassAndMember,
+    studioClassCatalogEntries,
+  ]);
+
   const setGlobalSearchOpen = useCallback((open: boolean) => {
     setIsGlobalSearchOpen(open);
     if (open) {
@@ -752,6 +768,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     staticFieldAddressByClassAndMember,
     studioClassCatalogEntries,
     classInfoCatalogByStableId,
+    studioRuntimeData,
     ensureRuntimeOverlayLoaded,
     classLookupMap,
     selectedImageStableId,
@@ -855,6 +872,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     referenceTargetInput,
     runtimeOverlays,
     staticFieldAddressByClassAndMember,
+    studioRuntimeData,
     selectedClass,
     selectedImage,
     selectedImageStableId,

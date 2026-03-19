@@ -1,20 +1,14 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { initializeStudioNodeRegistry } from '../../core/studio/NodeRegistry';
-import {
-  buildStudioClassCatalog,
-  createEmptyClassInfoSelection,
-  createPendingClassNodeRequest,
-  type ClassBinding,
-  type ClassInfoCatalog,
-  type PendingClassNodeRequest,
-} from '../../domain/studio/editor';
+import { createEmptyClassInfoSelection } from '../../domain/studio/editor';
 import { StudioProvider, useStudioGraph, useStudioUi } from '../../core/studio/StudioContext';
 import { CanvasCore } from '../studio/canvas/CanvasCore';
 import { StudioModalLayer } from '../studio/StudioModalLayer';
 import { StudioToolbar } from '../studio/StudioToolbar';
 import { studioNodeCatalog } from '../../nodes';
-import type { AnalysisClassSummary, AnalysisImageInfo } from '../../domain/analysis/view-models';
-import type { StableId } from '../../domain/contracts/shared-identity';
+import { useAnalysisWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
+
+type PendingClassNode = ReturnType<typeof useAnalysisWorkspace>['pendingClassNode'];
 
 initializeStudioNodeRegistry(studioNodeCatalog);
 
@@ -32,65 +26,14 @@ function getViewportCenterPosition(
   };
 }
 
-interface StudioPageProps {
-  pendingClassNode?: PendingClassNodeRequest | null;
-  images: AnalysisImageInfo[];
-  classesByImage: Record<string, AnalysisClassSummary[]>;
-  classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
-  staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
-  ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
-  onOpenInspectorForBinding?: (binding: ClassBinding) => void;
-  onPendingClassNodeHandled?: () => void;
-}
-
-export function StudioPage({
-  pendingClassNode,
-  images,
-  classesByImage,
-  classInfoCatalogByStableId,
-  staticFieldAddressByClassAndMember,
-  ensureRuntimeOverlayLoaded,
-  onOpenInspectorForBinding,
-  onPendingClassNodeHandled,
-}: StudioPageProps) {
-  const classCatalog = useMemo(() => {
-    const classes = buildStudioClassCatalog(images, classesByImage);
-    return {
-      classes,
-      createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => {
-        const catalog = classInfoCatalogByStableId[binding.classStableId];
-        if (!catalog) {
-          return null;
-        }
-
-        return createPendingClassNodeRequest(binding, catalog, suggestedPosition);
-      },
-      getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => {
-        if (!binding) {
-          return null;
-        }
-
-        return classInfoCatalogByStableId[binding.classStableId] ?? null;
-      },
-      resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => {
-        return staticFieldAddressByClassAndMember[classStableId]?.[memberStableId] ?? null;
-      },
-      ensureRuntimeOverlayLoaded,
-      openInspectorForBinding: onOpenInspectorForBinding,
-    };
-  }, [classInfoCatalogByStableId, classesByImage, ensureRuntimeOverlayLoaded, images, onOpenInspectorForBinding, staticFieldAddressByClassAndMember]);
+export function StudioPage() {
+  const { studioRuntimeData, pendingClassNode, clearPendingClassNode } = useAnalysisWorkspace();
 
   return (
-    <StudioProvider classCatalog={classCatalog}>
+    <StudioProvider runtimeData={studioRuntimeData}>
       <StudioPageContent
         pendingClassNode={pendingClassNode}
-        images={images}
-        classesByImage={classesByImage}
-        classInfoCatalogByStableId={classInfoCatalogByStableId}
-        staticFieldAddressByClassAndMember={staticFieldAddressByClassAndMember}
-        ensureRuntimeOverlayLoaded={ensureRuntimeOverlayLoaded}
-        onOpenInspectorForBinding={onOpenInspectorForBinding}
-        onPendingClassNodeHandled={onPendingClassNodeHandled}
+        onPendingClassNodeHandled={clearPendingClassNode}
       />
     </StudioProvider>
   );
@@ -98,12 +41,11 @@ export function StudioPage({
 
 function StudioPageContent({
   pendingClassNode,
-  images,
-  classesByImage,
-  classInfoCatalogByStableId,
-  onOpenInspectorForBinding,
   onPendingClassNodeHandled,
-}: StudioPageProps) {
+}: {
+  pendingClassNode: PendingClassNode;
+  onPendingClassNodeHandled?: () => void;
+}) {
   const { addNode, undo, redo, saveWorkflow } = useStudioGraph();
   const { canvasElement, transform } = useStudioUi();
   const handledPendingRequestIdsRef = useRef<Set<string>>(new Set());

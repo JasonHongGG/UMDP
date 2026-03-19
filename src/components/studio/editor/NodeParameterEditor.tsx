@@ -1,7 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { createLiteralExpressionSource, getExpressionSourceDisplayValue, readExpressionDragData } from '../../../core/studio/expressionUtils';
-import { useStudioUi } from '../../../core/studio/StudioContext';
+import {
+  createLiteralExpressionSource,
+  getExpressionPresentation,
+  getExpressionSourceDisplayValue,
+  readExpressionDragData,
+} from '../../../core/studio/expression';
+import { useExpressionDrag } from '../../../core/studio/drag/ExpressionDragContext';
 import type { ExpressionSource, ParameterDefinition } from '../../../domain/studio/contracts';
 import type { BaseNodeData, INodeEditProps, StudioNodeDefinition } from '../../../core/studio/types';
 
@@ -113,7 +118,8 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
   const expressionValue = (value ?? null) as ExpressionSource | null;
-  const { activeExpressionDrag, endExpressionDrag } = useStudioUi();
+  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const presentation = getExpressionPresentation(expressionValue);
 
   return (
     <div
@@ -156,6 +162,14 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
         }
       }}
     >
+      {presentation ? (
+        <div className="flex items-center gap-2 border-b border-slate-800/80 px-3 py-2">
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wider ${presentation.badgeClassName}`}>
+            {presentation.badgeText}
+          </span>
+          <span className="text-[11px] text-slate-400">{presentation.helperText}</span>
+        </div>
+      ) : null}
       {definition.ui?.multiline ? (
         <textarea
           value={getExpressionSourceDisplayValue(expressionValue)}
