@@ -25,6 +25,7 @@ export type {
   ConnectionChannel,
   ClassNodeDocumentState,
   ConnectionDefinition,
+  DisplayNodeDocumentState,
   NodeExecutionContext,
   NodeExecutionContract,
   NodeExecutionResult,
@@ -46,11 +47,14 @@ export type {
 } from './execution';
 export type {
   CallFunctionClassInfoQueryState,
+  DisplayNodePayloadSummary,
+  DisplayNodeQueryState,
   NodeQueryIssue,
 } from './query';
 export {
   parseClassNodeDocumentState,
   parseCallFunctionNodeDocumentState,
+  parseDisplayNodeDocumentState,
   parseParameterNodeDocumentState,
   parseTriggerNodeDocumentState,
 } from './nodes';

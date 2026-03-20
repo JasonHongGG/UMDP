@@ -276,4 +276,96 @@ describe('studio full flow integration', () => {
       },
     });
   });
+
+  it('routes call-function results into a display node runtime snapshot', async () => {
+    vi.useFakeTimers();
+    invokeMock.mockResolvedValueOnce({
+      classStableId: CLASS_ID,
+      methodStableId: METHOD_ID,
+      methodName: 'Move',
+      methodSignature: 'System.Void (System.Single x)',
+      returnType: 'System.Void',
+      success: true,
+      failureKind: 'none',
+      error: null,
+      exception: null,
+      result: null,
+    });
+
+    const nodes: StudioNode[] = [
+      { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
+      {
+        id: 'class-1',
+        type: 'class-ref',
+        position: { x: 180, y: 0 },
+        data: {
+          binding: BINDING,
+          instanceSource: createLiteralExpressionSource('0x1234', 'string'),
+          infoSelection: { members: [], statics: [], functions: [METHOD_ID] },
+        },
+      },
+      {
+        id: 'call-1',
+        type: 'call-function',
+        position: { x: 360, y: 0 },
+        data: {
+          selectedMethodStableId: METHOD_ID,
+          arguments: [{ id: ARGUMENT_ID, name: 'x', source: createLiteralExpressionSource('1.5', 'number') }],
+        },
+      },
+      {
+        id: 'display-1',
+        type: 'display',
+        position: { x: 540, y: 0 },
+        data: {
+          expandedByDefault: false,
+          truncateAt: 180,
+          showSchema: true,
+          showMeta: true,
+        },
+      },
+    ];
+
+    const snapshots: Record<string, NodeExecutionSnapshot> = {};
+
+    executeStudioFlow({
+      documentId: 'doc-1',
+      startNodeId: 'trigger-1',
+      nodes,
+      edges: [
+        { id: 'edge-trigger-class', channel: 'control', sourceNodeId: 'trigger-1', sourcePortId: 'flow-out', targetNodeId: 'class-1', targetPortId: 'flow-in' },
+        { id: 'edge-class-call-flow', channel: 'control', sourceNodeId: 'class-1', sourcePortId: 'flow-out', targetNodeId: 'call-1', targetPortId: 'flow-in' },
+        { id: 'edge-class-call-data', channel: 'data', sourceNodeId: 'class-1', sourcePortId: 'info-out', targetNodeId: 'call-1', targetPortId: 'class-info-in' },
+        { id: 'edge-call-display-flow', channel: 'control', sourceNodeId: 'call-1', sourcePortId: 'flow-out', targetNodeId: 'display-1', targetPortId: 'flow-in' },
+        { id: 'edge-call-display-data', channel: 'data', sourceNodeId: 'call-1', sourcePortId: 'result-out', targetNodeId: 'display-1', targetPortId: 'payload-in' },
+      ],
+      resolveStaticFieldAddress: () => null,
+      getClassInfoCatalogByBinding: (binding) => (binding?.classStableId === CLASS_ID ? CATALOG : null),
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: (snapshot) => {
+        snapshots[snapshot.nodeId] = snapshot;
+      },
+      stepDelayMs: 25,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(snapshots['display-1']).toMatchObject({
+      status: 'success',
+      originKind: 'runtime',
+      phase: 'execute',
+      inputs: {
+        'payload-in': [{
+          payload: {
+            success: true,
+            method: {
+              name: 'Move',
+            },
+          },
+        }],
+      },
+      outputs: {},
+    });
+  });
 });

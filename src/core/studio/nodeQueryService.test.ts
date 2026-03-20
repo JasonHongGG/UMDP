@@ -277,4 +277,107 @@ describe('nodeQueryService', () => {
     expect(inputStates[1]?.sources).toHaveLength(1);
     expect(inputStates[1]?.sources[0]?.edge.id).toBe('edge-class-call');
   });
+
+  it('builds display node preview state from an upstream materialized envelope', () => {
+    const context = createContext();
+    context.nodes.push({
+      id: 'display-1',
+      type: 'display',
+      position: { x: 480, y: 0 },
+      data: {
+        expandedByDefault: false,
+        truncateAt: 180,
+        showSchema: true,
+        showMeta: true,
+      },
+    });
+    context.edges.push({
+      id: 'edge-call-display',
+      channel: 'data',
+      sourceNodeId: 'call-1',
+      sourcePortId: 'result-out',
+      targetNodeId: 'display-1',
+      targetPortId: 'payload-in',
+    });
+
+    const queryState = getNodeQueryState<any>('display-1', context);
+
+    expect(queryState).toMatchObject({
+      kind: 'resolved',
+      sourceKind: 'preview',
+      sourceNodeId: 'call-1',
+      sourcePortId: 'result-out',
+      envelope: {
+        payload: {
+          method: {
+            name: 'Move',
+          },
+          success: false,
+        },
+      },
+      summary: {
+        valueKind: 'object',
+      },
+    });
+  });
+
+  it('prefers runtime snapshots over preview output for downstream display consumers', () => {
+    const context = createContext();
+    context.nodes.push({
+      id: 'display-1',
+      type: 'display',
+      position: { x: 480, y: 0 },
+      data: {
+        expandedByDefault: false,
+        truncateAt: 180,
+        showSchema: true,
+        showMeta: true,
+      },
+    });
+    context.edges.push({
+      id: 'edge-call-display',
+      channel: 'data',
+      sourceNodeId: 'call-1',
+      sourcePortId: 'result-out',
+      targetNodeId: 'display-1',
+      targetPortId: 'payload-in',
+    });
+    context.nodeSnapshots['display-1'] = {
+      nodeId: 'display-1',
+      status: 'success',
+      originKind: 'runtime',
+      phase: 'execute',
+      inputs: {
+        'payload-in': [{
+          kind: 'json',
+          schema: { id: 'studio.call-function.result', version: 1 },
+          payload: {
+            success: true,
+            failureKind: 'none',
+            error: null,
+            exception: null,
+            method: { name: 'Move' },
+            instanceAddress: '0x1234',
+            arguments: [],
+            result: null,
+          },
+        }],
+      },
+      outputs: {},
+      timing: {},
+    };
+
+    const snapshot = getNodeQuerySnapshot('display-1', context);
+
+    expect(snapshot).toMatchObject({
+      originKind: 'runtime',
+      inputs: {
+        'payload-in': [{
+          payload: {
+            success: true,
+          },
+        }],
+      },
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { WORKFLOW_SCHEMA_IDS } from '../../domain/studio/contracts';
 import { getStudioNodePort } from './NodeRegistry';
 import { getConnectionChannelForPortType, IPort, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
 
@@ -41,6 +42,10 @@ export function arePortDataTypesCompatible(source: IPort, target: IPort) {
   const targetDataType = target.dataType ?? target.schema?.id;
 
   if (!sourceDataType || !targetDataType) {
+    return true;
+  }
+
+  if (sourceDataType === WORKFLOW_SCHEMA_IDS.genericJson || targetDataType === WORKFLOW_SCHEMA_IDS.genericJson) {
     return true;
   }
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { validateConnection } from './connectionPolicy';
-import { GENERIC_JSON_SCHEMA, INSTANCE_REFERENCE_SCHEMA } from './contracts';
+import { CALL_FUNCTION_RESULT_SCHEMA, GENERIC_JSON_SCHEMA, INSTANCE_REFERENCE_SCHEMA } from './contracts';
 
 function registerConnectionTestNodes() {
   initializeStudioNodeRegistry([
@@ -102,12 +102,43 @@ describe('connectionPolicy', () => {
     expect(wrongDirection.reason).toBe('Port types are incompatible.');
   });
 
-  it('rejects incompatible data schemas even when both ports are json', () => {
-    registerConnectionTestNodes();
+  it('rejects incompatible specific data schemas even when both ports are json', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'result-source',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Result Source',
+          description: 'Produces a call result envelope',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'result-out', displayName: 'Result', direction: 'output', channel: 'data', cardinality: 'single', dataType: CALL_FUNCTION_RESULT_SCHEMA.id }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+      {
+        manifest: {
+          type: 'class-ref',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Class Ref',
+          description: 'Expects an instance reference',
+          category: 'Test',
+          inputs: [{ key: 'instance-in', displayName: 'Instance In', direction: 'input', channel: 'data', cardinality: 'single', dataType: INSTANCE_REFERENCE_SCHEMA.id }],
+          outputs: [],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
 
     const wrongSchema = validateConnection({
-      nodeId: 'trigger-1',
-      portId: 'json-out',
+      nodeId: 'result-source-1',
+      portId: 'result-out',
       portType: 'json',
       handleType: 'source',
     }, {
@@ -115,7 +146,10 @@ describe('connectionPolicy', () => {
       portId: 'instance-in',
       portType: 'json',
       handleType: 'target',
-    }, nodes, []);
+    }, [
+      { id: 'result-source-1', type: 'result-source', position: { x: 0, y: 0 }, data: {} },
+      { id: 'class-1', type: 'class-ref', position: { x: 120, y: 0 }, data: {} },
+    ], []);
 
     expect(wrongSchema.valid).toBe(false);
     expect(wrongSchema.reason).toBe('Port schemas or connection semantics are incompatible.');
@@ -204,6 +238,61 @@ describe('connectionPolicy', () => {
       targetNodeId: 'target-many-1',
       targetPortId: 'json-in',
     }]);
+
+    expect(result).toEqual({
+      valid: true,
+      replaceEdgeIds: [],
+    });
+  });
+
+  it('allows specific schema outputs to connect into generic json display inputs', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'result-source',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Result Source',
+          description: 'Produces a specific call result schema',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'result-out', displayName: 'Result', direction: 'output', channel: 'data', cardinality: 'single', dataType: CALL_FUNCTION_RESULT_SCHEMA.id }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+      {
+        manifest: {
+          type: 'display',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Display',
+          description: 'Generic display input',
+          category: 'Test',
+          inputs: [{ key: 'payload-in', displayName: 'Payload In', direction: 'input', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+          outputs: [],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
+
+    const result = validateConnection({
+      nodeId: 'result-source-1',
+      portId: 'result-out',
+      portType: 'json',
+      handleType: 'source',
+    }, {
+      nodeId: 'display-1',
+      portId: 'payload-in',
+      portType: 'json',
+      handleType: 'target',
+    }, [
+      { id: 'result-source-1', type: 'result-source', position: { x: 0, y: 0 }, data: {} },
+      { id: 'display-1', type: 'display', position: { x: 120, y: 0 }, data: {} },
+    ], []);
 
     expect(result).toEqual({
       valid: true,

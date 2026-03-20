@@ -144,6 +144,13 @@ export interface ParameterNodeDocumentState {
   symbols: ParameterSymbolDefinition[];
 }
 
+export interface DisplayNodeDocumentState {
+  expandedByDefault: boolean;
+  truncateAt: number;
+  showSchema: boolean;
+  showMeta: boolean;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
 }
@@ -231,5 +238,18 @@ export function parseCallFunctionNodeDocumentState(value: unknown): CallFunction
       ? documentState.selectedMethodStableId as StableId
       : null,
     arguments: argumentsList,
+  };
+}
+
+export function parseDisplayNodeDocumentState(value: unknown): DisplayNodeDocumentState {
+  const documentState = isRecord(value) ? value : {};
+
+  return {
+    expandedByDefault: typeof documentState.expandedByDefault === 'boolean' ? documentState.expandedByDefault : false,
+    truncateAt: typeof documentState.truncateAt === 'number' && Number.isFinite(documentState.truncateAt)
+      ? Math.max(80, Math.min(800, Math.round(documentState.truncateAt)))
+      : 180,
+    showSchema: typeof documentState.showSchema === 'boolean' ? documentState.showSchema : true,
+    showMeta: typeof documentState.showMeta === 'boolean' ? documentState.showMeta : true,
   };
 }
