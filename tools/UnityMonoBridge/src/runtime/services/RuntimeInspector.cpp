@@ -9,7 +9,8 @@ RuntimeInspector::RuntimeInspector(std::size_t pid)
       assembly_service_(context_.api()),
       class_service_(context_.api()),
       field_enumeration_service_(context_.api()),
-    field_value_reader_(context_.api())
+            field_value_reader_(context_.api()),
+            method_invocation_service_(context_.api(), context_.memory())
 {
 }
 
@@ -51,6 +52,13 @@ RuntimeClassOverlayResponse RuntimeInspector::InspectClass(const BridgeRequest& 
     }
 
     return response;
+}
+
+RuntimeMethodInvokeResponse RuntimeInspector::InvokeClassMethod(const BridgeRequest& request) const
+{
+    const Address image = assembly_service_.ResolveImage(request.image_name);
+    const Address klass = class_service_.ResolveClass(image, request.class_namespace, request.class_name);
+    return method_invocation_service_.InvokeClassMethod(klass, request);
 }
 
 } // namespace bridge::runtime

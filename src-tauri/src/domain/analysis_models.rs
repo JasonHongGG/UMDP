@@ -147,6 +147,55 @@ pub struct RuntimeInstanceFieldSnapshot {
     pub fields: Vec<RuntimeResolvedFieldDescriptor>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RuntimeInvokeArgumentKind {
+    Null,
+    Boolean,
+    Number,
+    String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMethodInvokeArgument {
+    pub name: String,
+    pub type_name: String,
+    pub value_kind: RuntimeInvokeArgumentKind,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMethodInvokeRequest {
+    pub class_stable_id: StableId,
+    pub method_stable_id: StableId,
+    pub instance_address: Option<String>,
+    pub arguments: Vec<RuntimeMethodInvokeArgument>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMethodInvokeValue {
+    pub kind: String,
+    pub value: Option<String>,
+    pub object_address: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMethodInvokeResult {
+    pub class_stable_id: StableId,
+    pub method_stable_id: StableId,
+    pub method_name: String,
+    pub method_signature: String,
+    pub return_type: String,
+    pub success: bool,
+    pub error: Option<String>,
+    pub exception: Option<String>,
+    pub result: Option<RuntimeMethodInvokeValue>,
+}
+
 fn normalize_segment(segment: &str) -> String {
     segment.trim().replace(['|', '\\'], "_")
 }

@@ -106,6 +106,17 @@ std::string Memory::ReadUtf8(Address address, std::size_t max_length) const
     return result;
 }
 
+std::u16string Memory::ReadUtf16(Address address, std::size_t char_count) const
+{
+    if (address == 0 || char_count == 0) {
+        return {};
+    }
+
+    std::u16string result(char_count, u'\0');
+    Read(address, result.data(), char_count * sizeof(char16_t));
+    return result;
+}
+
 void Memory::Execute(Address entry_point) const
 {
     HANDLE thread = CreateRemoteThread(

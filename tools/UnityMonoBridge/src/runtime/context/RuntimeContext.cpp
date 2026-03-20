@@ -28,4 +28,9 @@ const RuntimeApi& RuntimeContext::api() const
     return *api_;
 }
 
+const win32::Memory& RuntimeContext::memory() const
+{
+    return memory_;
+}
+
 } // namespace bridge::runtime

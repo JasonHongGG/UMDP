@@ -154,6 +154,28 @@ export interface ClassInfoPayload {
   functions: ClassInfoFunctionPayload[];
 }
 
+export interface CallFunctionArgumentPayload {
+  name: string;
+  typeName: string;
+  value: WorkflowJsonValue;
+}
+
+export interface CallFunctionResultValuePayload {
+  kind: string;
+  value: WorkflowJsonValue;
+  objectAddress: string | null;
+}
+
+export interface CallFunctionResultPayload {
+  method: ClassInfoFunctionPayload | null;
+  instanceAddress: WorkflowJsonValue;
+  arguments: CallFunctionArgumentPayload[];
+  success: boolean;
+  error: string | null;
+  exception: string | null;
+  result: CallFunctionResultValuePayload | null;
+}
+
 export interface StudioNodeRuntimeState {
   displayName?: string;
   parameters: Record<string, unknown>;
@@ -210,6 +232,7 @@ export interface DragExpressionPayloadRecord {
 export const WORKFLOW_SCHEMA_IDS = {
   genericJson: 'studio.json.generic',
   classInfo: 'studio.class.info',
+  callFunctionResult: 'studio.call-function.result',
   instanceReference: 'studio.instance.reference',
   parameterDefinitions: 'studio.params.definition',
 } as const;

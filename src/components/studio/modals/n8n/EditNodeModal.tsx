@@ -6,11 +6,12 @@ import { getNodePortsByDirection, getStudioNodePort, globalNodeRegistry } from '
 import { beginPointerExpressionDrag } from '../../../../core/studio/drag/expressionPointerDrag';
 import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
-import { createClassInfoEnvelope } from '../../../../core/studio/contracts';
+import { createCallFunctionResultEnvelope, createClassInfoEnvelope } from '../../../../core/studio/contracts';
 import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoCatalog, type ClassInfoSelection } from '../../../../domain/studio/editor';
 import type { ExpressionSource } from '../../../../domain/studio/contracts';
 import { useStudioRuntimeData } from '../../../../core/studio/runtimeData';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
+import { findSelectedFunction, getClassInfoPayloadFromValue, type CallFunctionNodeData } from '../../../../nodes/CallFunctionNode/callFunctionNodeModel';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -239,7 +240,41 @@ export function EditNodeModal() {
     }
 
     if (node.type !== 'class-ref') {
-      return simulatedOutputPreview;
+      if (node.type !== 'call-function') {
+        return simulatedOutputPreview;
+      }
+
+      const classInfoEdge = edges.find((edge) => edge.targetNodeId === node.id && edge.targetPortId === 'class-info-in' && edge.channel === 'data');
+      if (!classInfoEdge) {
+        return simulatedOutputPreview;
+      }
+
+      const classInfoPayload = getClassInfoPayloadFromValue(previewSnapshots[classInfoEdge.sourceNodeId]?.outputs[classInfoEdge.sourcePortId]?.payload);
+      if (!classInfoPayload) {
+        return simulatedOutputPreview;
+      }
+
+      const callFunctionData = node.data as CallFunctionNodeData;
+      const method = findSelectedFunction(classInfoPayload, callFunctionData.selectedMethodStableId);
+      if (!method) {
+        return simulatedOutputPreview;
+      }
+
+      return {
+        'result-out': createCallFunctionResultEnvelope({
+          method,
+          instanceAddress: classInfoPayload.instanceAddress,
+          arguments: callFunctionData.arguments.map((entry) => ({
+            name: entry.name,
+            typeName: method.parameters.find((parameter) => parameter.name === entry.name)?.typeName ?? 'System.Object',
+            value: runtimeData.resolveExpressionSource(entry.source, previewSnapshots) ?? null,
+          })),
+          success: false,
+          error: null,
+          exception: null,
+          result: null,
+        }),
+      };
     }
 
     const resolvedMemberValues = classNodePreviewState?.binding
@@ -255,7 +290,7 @@ export function EditNodeModal() {
         resolvedMemberValues,
       ),
     };
-  }, [classNodePreviewState, node, nodeDef, nodeSnapshots, runtimeData, simulatedOutputPreview]);
+  }, [classNodePreviewState, edges, node, nodeDef, nodeSnapshots, previewSnapshots, runtimeData, simulatedOutputPreview]);
 
   const EditComponent = nodeDef?.EditComponent;
   const EditFooterComponent = nodeDef?.EditFooterComponent;

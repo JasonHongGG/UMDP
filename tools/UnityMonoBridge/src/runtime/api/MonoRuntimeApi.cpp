@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <array>
+#include <sstream>
 #include <stdexcept>
 
 #include "shared/StringUtils.h"
@@ -15,10 +16,29 @@ namespace {
 constexpr int kFieldAttributeStatic = 0x0010;
 constexpr int kFieldAttributeLiteral = 0x0040;
 constexpr int kFieldAttributeHasFieldRva = 0x0100;
+constexpr int kMethodAttributeStatic = 0x0010;
 
 bool ShouldSkipField(const std::string& field_name)
 {
     return field_name.empty();
+}
+
+std::vector<std::string> SplitParameterTypes(std::string value)
+{
+    std::vector<std::string> parts;
+    std::stringstream stream(std::move(value));
+    std::string item;
+    while (std::getline(stream, item, ',')) {
+        const auto start = item.find_first_not_of(' ');
+        if (start == std::string::npos) {
+            continue;
+        }
+
+        const auto end = item.find_last_not_of(' ');
+        parts.push_back(item.substr(start, end - start + 1));
+    }
+
+    return parts;
 }
 
 } // namespace
@@ -39,11 +59,25 @@ MonoRuntimeApi::MonoRuntimeApi(const win32::Process& process, const win32::Memor
             "mono_class_vtable",
             "mono_vtable_get_static_field_data",
             "mono_class_get_fields",
+            "mono_class_get_methods",
             "mono_field_get_name",
             "mono_field_get_flags",
             "mono_field_get_type",
             "mono_type_get_name",
             "mono_field_get_offset",
+            "mono_method_get_name",
+            "mono_method_get_flags",
+            "mono_method_signature",
+            "mono_signature_get_desc",
+            "mono_signature_get_param_count",
+            "mono_method_get_param_names",
+            "mono_signature_get_return_type",
+            "mono_runtime_invoke",
+            "mono_string_new",
+            "mono_string_length",
+            "mono_string_chars",
+            "mono_object_unbox",
+            "mono_object_to_string",
         },
         { "mono_class_from_name_case" });
 }
@@ -164,6 +198,81 @@ std::vector<FieldRecord> MonoRuntimeApi::EnumerateFields(Address class_handle) c
     return fields;
 }
 
+std::vector<MethodRecord> MonoRuntimeApi::EnumerateMethods(Address class_handle) const
+{
+    std::vector<MethodRecord> methods;
+    win32::RemoteAllocation iterator(memory(), sizeof(Address), PAGE_READWRITE);
+    const Address zero = 0;
+    memory().Write(iterator.address(), zero);
+
+    while (true) {
+        const Address method_handle = Invoke("mono_class_get_methods", { class_handle, iterator.address() });
+        if (method_handle == 0) {
+            break;
+        }
+
+        const auto method_name = memory().ReadUtf8(Invoke("mono_method_get_name", { method_handle }));
+        if (method_name.empty()) {
+            continue;
+        }
+
+        const int flags = InvokeInt("mono_method_get_flags", { method_handle, 0 });
+        const Address signature_handle = Invoke("mono_method_signature", { method_handle });
+        const auto parameter_desc = InvokeString("mono_signature_get_desc", { signature_handle, 1 });
+        const auto parameter_types = SplitParameterTypes(parameter_desc);
+        const int parameter_count = InvokeInt("mono_signature_get_param_count", { signature_handle });
+
+        std::vector<Address> name_ptrs(static_cast<std::size_t>(parameter_count), 0);
+        if (parameter_count > 0) {
+            win32::RemoteAllocation names_block(memory(), name_ptrs.size() * sizeof(Address), PAGE_READWRITE);
+            memory().Write(names_block.address(), name_ptrs.data(), name_ptrs.size() * sizeof(Address));
+            Invoke("mono_method_get_param_names", { method_handle, names_block.address() });
+            memory().Read(names_block.address(), name_ptrs.data(), name_ptrs.size() * sizeof(Address));
+        }
+
+        const Address return_type_handle = Invoke("mono_signature_get_return_type", { signature_handle });
+        const auto return_type = InvokeString("mono_type_get_name", { return_type_handle });
+
+        MethodRecord method;
+        method.handle = method_handle;
+        method.name = method_name;
+        method.return_type = return_type;
+        method.is_static = (flags & kMethodAttributeStatic) != 0;
+        method.parameters.reserve(static_cast<std::size_t>(parameter_count));
+
+        std::ostringstream signature;
+        signature << return_type << " (";
+        for (int index = 0; index < parameter_count; ++index) {
+            if (index > 0) {
+                signature << ", ";
+            }
+
+            const auto parameter_name = index < static_cast<int>(name_ptrs.size()) && name_ptrs[static_cast<std::size_t>(index)] != 0
+                ? memory().ReadUtf8(name_ptrs[static_cast<std::size_t>(index)])
+                : std::string();
+            const auto parameter_type = index < static_cast<int>(parameter_types.size())
+                ? parameter_types[static_cast<std::size_t>(index)]
+                : std::string("System.Object");
+
+            method.parameters.push_back(MethodParameterRecord {
+                static_cast<std::size_t>(index),
+                parameter_name,
+                parameter_type,
+            });
+
+            signature << parameter_type;
+            if (!parameter_name.empty()) {
+                signature << ' ' << parameter_name;
+            }
+        }
+        signature << ')';
+        method.signature = signature.str();
+        methods.push_back(std::move(method));
+    }
+
+    return methods;
+}
+
 bool MonoRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const
 {
     if (!field.static_address.has_value()) {
@@ -182,6 +291,53 @@ bool MonoRuntimeApi::TryReadInstanceFieldBytes(Address instance_address, const F
 
     memory().Read(instance_address + static_cast<Address>(field.offset), buffer, size);
     return true;
+}
+
+Address MonoRuntimeApi::InvokeMethod(Address method_handle, Address instance_address, Address parameters_address, Address exception_address) const
+{
+    return Invoke("mono_runtime_invoke", { method_handle, instance_address, parameters_address, exception_address });
+}
+
+Address MonoRuntimeApi::CreateManagedString(const std::string& value) const
+{
+    win32::RemoteUtf8String remote_value(memory(), value);
+    return Invoke("mono_string_new", { root_domain(), remote_value.address() });
+}
+
+std::optional<std::string> MonoRuntimeApi::ReadManagedString(Address string_object) const
+{
+    if (string_object == 0) {
+        return std::nullopt;
+    }
+
+    const auto length = static_cast<std::size_t>(InvokeInt("mono_string_length", { string_object }));
+    const Address chars = Invoke("mono_string_chars", { string_object });
+    return shared::Utf16ToUtf8(memory().ReadUtf16(chars, length));
+}
+
+bool MonoRuntimeApi::TryReadUnboxedValue(Address object_address, void* buffer, std::size_t size) const
+{
+    if (object_address == 0) {
+        return false;
+    }
+
+    const Address raw_value = Invoke("mono_object_unbox", { object_address });
+    if (raw_value == 0) {
+        return false;
+    }
+
+    memory().Read(raw_value, buffer, size);
+    return true;
+}
+
+std::optional<std::string> MonoRuntimeApi::DescribeException(Address exception_object) const
+{
+    if (exception_object == 0) {
+        return std::nullopt;
+    }
+
+    const Address string_object = Invoke("mono_object_to_string", { exception_object, 0 });
+    return ReadManagedString(string_object);
 }
 
 Address MonoRuntimeApi::ResolveStaticFieldAddress(Address class_handle, int field_offset) const

@@ -101,3 +101,37 @@ export interface RuntimeInstanceFieldSnapshot {
   instanceAddress: string;
   fields: RuntimeResolvedFieldDescriptor[];
 }
+
+export type RuntimeInvokeArgumentKind = 'null' | 'boolean' | 'number' | 'string';
+
+export interface RuntimeMethodInvokeArgument {
+  name: string;
+  typeName: string;
+  valueKind: RuntimeInvokeArgumentKind;
+  value: string | null;
+}
+
+export interface RuntimeMethodInvokeRequest {
+  classStableId: StableId;
+  methodStableId: StableId;
+  instanceAddress: string | null;
+  arguments: RuntimeMethodInvokeArgument[];
+}
+
+export interface RuntimeMethodInvokeValue {
+  kind: string;
+  value: string | null;
+  objectAddress: string | null;
+}
+
+export interface RuntimeMethodInvokeResult {
+  classStableId: StableId;
+  methodStableId: StableId;
+  methodName: string;
+  methodSignature: string;
+  returnType: string;
+  success: boolean;
+  error: string | null;
+  exception: string | null;
+  result: RuntimeMethodInvokeValue | null;
+}

@@ -12,6 +12,7 @@ public:
 class RuntimeBridge {
 public:
     RuntimeClassOverlayResponse Execute(const BridgeRequest& request) const;
+    RuntimeMethodInvokeResponse ExecuteInvoke(const BridgeRequest& request) const;
 };
 
 } // namespace bridge

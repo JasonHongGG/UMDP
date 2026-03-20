@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 
+#include <sstream>
 #include <stdexcept>
 
 #include "shared/StringUtils.h"
@@ -14,10 +15,16 @@ namespace {
 constexpr int kFieldAttributeStatic = 0x0010;
 constexpr int kFieldAttributeLiteral = 0x0040;
 constexpr int kFieldAttributeHasFieldRva = 0x0100;
+constexpr int kMethodAttributeStatic = 0x0010;
 
 bool ShouldSkipField(const std::string& field_name)
 {
     return field_name.empty() || field_name.front() == '<';
+}
+
+bool ShouldSkipMethod(const std::string& method_name)
+{
+    return method_name.empty();
 }
 
 } // namespace
@@ -36,12 +43,25 @@ Il2CppRuntimeApi::Il2CppRuntimeApi(const win32::Process& process, const win32::M
             "il2cpp_class_from_name",
             "il2cpp_class_get_parent",
             "il2cpp_class_get_fields",
+            "il2cpp_class_get_methods",
             "il2cpp_field_get_name",
             "il2cpp_field_get_flags",
             "il2cpp_field_get_type",
             "il2cpp_type_get_name",
             "il2cpp_field_get_offset",
             "il2cpp_field_static_get_value",
+            "il2cpp_method_get_name",
+            "il2cpp_method_get_flags",
+            "il2cpp_method_get_param_count",
+            "il2cpp_method_get_param_name",
+            "il2cpp_method_get_param",
+            "il2cpp_method_get_return_type",
+            "il2cpp_runtime_invoke",
+            "il2cpp_string_new",
+            "il2cpp_string_length",
+            "il2cpp_string_chars",
+            "il2cpp_object_unbox",
+            "il2cpp_object_to_string",
         });
 }
 
@@ -137,6 +157,66 @@ std::vector<FieldRecord> Il2CppRuntimeApi::EnumerateFields(Address class_handle)
     return fields;
 }
 
+std::vector<MethodRecord> Il2CppRuntimeApi::EnumerateMethods(Address class_handle) const
+{
+    std::vector<MethodRecord> methods;
+    win32::RemoteAllocation iterator(memory(), sizeof(Address), PAGE_READWRITE);
+    const Address zero = 0;
+    memory().Write(iterator.address(), zero);
+
+    while (true) {
+        const Address method_handle = Invoke("il2cpp_class_get_methods", { class_handle, iterator.address() });
+        if (method_handle == 0) {
+            break;
+        }
+
+        const auto method_name = memory().ReadUtf8(Invoke("il2cpp_method_get_name", { method_handle }));
+        if (ShouldSkipMethod(method_name)) {
+            continue;
+        }
+
+        const int flags = InvokeInt("il2cpp_method_get_flags", { method_handle, 0 });
+        const int parameter_count = InvokeInt("il2cpp_method_get_param_count", { method_handle });
+        const Address return_type_handle = Invoke("il2cpp_method_get_return_type", { method_handle });
+        const auto return_type = InvokeString("il2cpp_type_get_name", { return_type_handle });
+
+        MethodRecord method;
+        method.handle = method_handle;
+        method.name = method_name;
+        method.return_type = return_type;
+        method.is_static = (flags & kMethodAttributeStatic) != 0;
+        method.parameters.reserve(static_cast<std::size_t>(parameter_count));
+
+        std::ostringstream signature;
+        signature << return_type << " (";
+        for (int index = 0; index < parameter_count; ++index) {
+            if (index > 0) {
+                signature << ", ";
+            }
+
+            const auto parameter_name = memory().ReadUtf8(Invoke("il2cpp_method_get_param_name", { method_handle, static_cast<Address>(index) }));
+            const Address parameter_type_handle = Invoke("il2cpp_method_get_param", { method_handle, static_cast<Address>(index) });
+            const auto parameter_type = InvokeString("il2cpp_type_get_name", { parameter_type_handle });
+
+            method.parameters.push_back(MethodParameterRecord {
+                static_cast<std::size_t>(index),
+                parameter_name,
+                parameter_type,
+            });
+
+            signature << parameter_type;
+            if (!parameter_name.empty()) {
+                signature << ' ' << parameter_name;
+            }
+        }
+        signature << ')';
+        method.signature = signature.str();
+        methods.push_back(std::move(method));
+    }
+
+    return methods;
+}
+
 bool Il2CppRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const
 {
     if (field.handle == 0) {
@@ -159,6 +239,53 @@ bool Il2CppRuntimeApi::TryReadInstanceFieldBytes(Address instance_address, const
 
     memory().Read(instance_address + static_cast<Address>(field.offset), buffer, size);
     return true;
+}
+
+Address Il2CppRuntimeApi::InvokeMethod(Address method_handle, Address instance_address, Address parameters_address, Address exception_address) const
+{
+    return Invoke("il2cpp_runtime_invoke", { method_handle, instance_address, parameters_address, exception_address });
+}
+
+Address Il2CppRuntimeApi::CreateManagedString(const std::string& value) const
+{
+    win32::RemoteUtf8String remote_value(memory(), value);
+    return Invoke("il2cpp_string_new", { remote_value.address() });
+}
+
+std::optional<std::string> Il2CppRuntimeApi::ReadManagedString(Address string_object) const
+{
+    if (string_object == 0) {
+        return std::nullopt;
+    }
+
+    const auto length = static_cast<std::size_t>(InvokeInt("il2cpp_string_length", { string_object }));
+    const Address chars = Invoke("il2cpp_string_chars", { string_object });
+    return shared::Utf16ToUtf8(memory().ReadUtf16(chars, length));
+}
+
+bool Il2CppRuntimeApi::TryReadUnboxedValue(Address object_address, void* buffer, std::size_t size) const
+{
+    if (object_address == 0) {
+        return false;
+    }
+
+    const Address raw_value = Invoke("il2cpp_object_unbox", { object_address });
+    if (raw_value == 0) {
+        return false;
+    }
+
+    memory().Read(raw_value, buffer, size);
+    return true;
+}
+
+std::optional<std::string> Il2CppRuntimeApi::DescribeException(Address exception_object) const
+{
+    if (exception_object == 0) {
+        return std::nullopt;
+    }
+
+    const Address string_object = Invoke("il2cpp_object_to_string", { exception_object, 0 });
+    return ReadManagedString(string_object);
 }
 
 } // namespace bridge::runtime

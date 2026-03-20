@@ -16,6 +16,7 @@ public:
     RuntimeContext& operator=(const RuntimeContext&) = delete;
 
     const RuntimeApi& api() const;
+    const win32::Memory& memory() const;
 
 private:
     win32::Process process_;

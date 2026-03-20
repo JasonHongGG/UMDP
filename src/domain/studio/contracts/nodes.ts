@@ -127,6 +127,17 @@ export interface ParameterSymbolDefinition {
   valueSource: ExpressionSource;
 }
 
+export interface CallFunctionArgumentBinding {
+  stableId: StableId;
+  name: string;
+  valueSource: ExpressionSource;
+}
+
+export interface CallFunctionNodeDocumentState {
+  selectedMethodStableId: StableId | null;
+  arguments: CallFunctionArgumentBinding[];
+}
+
 export interface ParameterNodeDocumentState {
   symbols: ParameterSymbolDefinition[];
 }
@@ -198,4 +209,25 @@ export function parseParameterNodeDocumentState(value: unknown): ParameterNodeDo
     : [];
 
   return { symbols };
+}
+
+function isCallFunctionArgumentBinding(value: unknown): value is CallFunctionArgumentBinding {
+  return isRecord(value)
+    && typeof value.stableId === 'string'
+    && typeof value.name === 'string'
+    && isExpressionSourceLike(value.valueSource);
+}
+
+export function parseCallFunctionNodeDocumentState(value: unknown): CallFunctionNodeDocumentState {
+  const documentState = isRecord(value) ? value : {};
+  const argumentsList = Array.isArray(documentState.arguments)
+    ? documentState.arguments.flatMap((entry) => isCallFunctionArgumentBinding(entry) ? [entry] : [])
+    : [];
+
+  return {
+    selectedMethodStableId: typeof documentState.selectedMethodStableId === 'string'
+      ? documentState.selectedMethodStableId as StableId
+      : null,
+    arguments: argumentsList,
+  };
 }

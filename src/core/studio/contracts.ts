@@ -1,4 +1,5 @@
 import {
+  CallFunctionResultPayload,
   ClassInfoFieldPayload,
   ClassInfoFunctionPayload,
   ConnectionDirection,
@@ -42,11 +43,18 @@ export const CLASS_INFO_SCHEMA: JsonSchemaReference = {
   title: 'Class Info Envelope',
 };
 
+export const CALL_FUNCTION_RESULT_SCHEMA: JsonSchemaReference = {
+  id: WORKFLOW_SCHEMA_IDS.callFunctionResult,
+  version: 1,
+  title: 'Call Function Result Envelope',
+};
+
 const KNOWN_JSON_SCHEMAS: Record<string, JsonSchemaReference> = {
   [GENERIC_JSON_SCHEMA.id]: GENERIC_JSON_SCHEMA,
   [INSTANCE_REFERENCE_SCHEMA.id]: INSTANCE_REFERENCE_SCHEMA,
   [PARAMETER_DEFINITIONS_SCHEMA.id]: PARAMETER_DEFINITIONS_SCHEMA,
   [CLASS_INFO_SCHEMA.id]: CLASS_INFO_SCHEMA,
+  [CALL_FUNCTION_RESULT_SCHEMA.id]: CALL_FUNCTION_RESULT_SCHEMA,
 };
 
 export function resolveJsonSchemaReference(dataType?: string): JsonSchemaReference {
@@ -186,5 +194,11 @@ export function createClassInfoEnvelope(
 export function createParameterDefinitionsEnvelope(parameters: ParameterDefinitionPayload): WorkflowJsonEnvelope<ParameterDefinitionPayload> {
   return createEnvelope(PARAMETER_DEFINITIONS_SCHEMA, parameters, {
     source: 'parameters-node',
+  });
+}
+
+export function createCallFunctionResultEnvelope(payload: CallFunctionResultPayload): WorkflowJsonEnvelope<CallFunctionResultPayload> {
+  return createEnvelope(CALL_FUNCTION_RESULT_SCHEMA, payload, {
+    source: 'call-function-node',
   });
 }

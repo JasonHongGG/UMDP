@@ -6,6 +6,7 @@
 #include "runtime/services/ClassService.h"
 #include "runtime/services/FieldEnumerationService.h"
 #include "runtime/services/FieldValueReader.h"
+#include "runtime/services/MethodInvocationService.h"
 
 namespace bridge::runtime {
 
@@ -14,6 +15,7 @@ public:
     explicit RuntimeInspector(std::size_t pid);
 
     RuntimeClassOverlayResponse InspectClass(const BridgeRequest& request) const;
+    RuntimeMethodInvokeResponse InvokeClassMethod(const BridgeRequest& request) const;
 
 private:
     RuntimeContext context_;
@@ -21,6 +23,7 @@ private:
     ClassService class_service_;
     FieldEnumerationService field_enumeration_service_;
     FieldValueReader field_value_reader_;
+    MethodInvocationService method_invocation_service_;
 };
 
 } // namespace bridge::runtime

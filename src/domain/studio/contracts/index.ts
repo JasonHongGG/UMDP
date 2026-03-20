@@ -19,6 +19,8 @@ export {
 } from './expression';
 export type {
   ClassBindingReference,
+  CallFunctionArgumentBinding,
+  CallFunctionNodeDocumentState,
   ClassExportSelection,
   ConnectionChannel,
   ClassNodeDocumentState,
@@ -35,6 +37,7 @@ export type {
 } from './nodes';
 export {
   parseClassNodeDocumentState,
+  parseCallFunctionNodeDocumentState,
   parseParameterNodeDocumentState,
   parseTriggerNodeDocumentState,
 } from './nodes';

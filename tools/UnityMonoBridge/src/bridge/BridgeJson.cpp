@@ -69,6 +69,17 @@ void WriteFieldRows(std::ostringstream& output, const std::vector<bridge::FieldR
     }
 }
 
+void WriteInvokeValue(std::ostringstream& output, const bridge::InvokeValue& value)
+{
+    output << '{'
+           << "\"kind\":\"" << JsonEscape(value.kind) << "\",";
+    output << "\"value\":";
+    WriteOptionalString(output, value.value);
+    output << ",\"object_address\":";
+    WriteOptionalString(output, value.object_address);
+    output << '}';
+}
+
 } // namespace
 
 namespace bridge {
@@ -81,6 +92,29 @@ std::string SerializeResponse(const RuntimeClassOverlayResponse& response)
     output << "],\"fields\":[";
     WriteFieldRows(output, response.fields, false);
     output << "]}";
+    return output.str();
+}
+
+std::string SerializeResponse(const RuntimeMethodInvokeResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"success\":" << (response.success ? "true" : "false") << ','
+           << "\"method_name\":\"" << JsonEscape(response.method_name) << "\"," 
+           << "\"method_signature\":\"" << JsonEscape(response.method_signature) << "\"," 
+           << "\"return_type\":\"" << JsonEscape(response.return_type) << "\",";
+    output << "\"error\":";
+    WriteOptionalString(output, response.error);
+    output << ",\"exception\":";
+    WriteOptionalString(output, response.exception);
+    output << ",\"result\":";
+    if (response.result.has_value()) {
+        WriteInvokeValue(output, *response.result);
+    }
+    else {
+        output << "null";
+    }
+    output << '}';
     return output.str();
 }
 
