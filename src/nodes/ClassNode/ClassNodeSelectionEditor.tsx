@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Box, Check, CheckCheck, Code, User, XSquare } from 'lucide-react';
 import type { INodeEditProps } from '../../core/studio/types';
 import { useStudioRuntimeData } from '../../core/studio/runtimeData';
@@ -53,9 +53,109 @@ function createSectionTone(bucket: SelectionBucketKey) {
   };
 }
 
+function MethodTag({ tag }: { tag: string }) {
+  const tone = METHOD_TAG_STYLES[tag] ?? 'border-slate-600/70 bg-slate-900/80 text-slate-300';
+
+  return (
+    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold tracking-widest ${tone}`}>
+      {tag}
+    </span>
+  );
+}
+
+const METHOD_TAG_STYLES: Record<string, string> = {
+  CTOR: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300',
+  STATIC: 'border-sky-500/50 bg-sky-500/10 text-sky-300',
+  GETTER: 'border-lime-500/50 bg-lime-500/10 text-lime-300',
+  SETTER: 'border-teal-500/50 bg-teal-500/10 text-teal-300',
+  EVENT_ADD: 'border-pink-500/50 bg-pink-500/10 text-pink-300',
+  EVENT_REMOVE: 'border-rose-500/50 bg-rose-500/10 text-rose-300',
+  VIRTUAL: 'border-violet-500/50 bg-violet-500/10 text-violet-300',
+  OVERRIDE: 'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-300',
+  ABSTRACT: 'border-amber-500/50 bg-amber-500/10 text-amber-300',
+  EXTERN: 'border-rose-500/50 bg-rose-500/10 text-rose-300',
+  GENERIC: 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300',
+  OPERATOR: 'border-orange-500/50 bg-orange-500/10 text-orange-300',
+  INSTANCE: 'border-slate-500/50 bg-slate-500/10 text-slate-300',
+};
+
+function resolveDisplayOffset(offset: string | null | undefined) {
+  if (offset === null || offset === undefined) {
+    return null;
+  }
+
+  const trimmed = offset.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.startsWith('+') ? trimmed : `+${trimmed}`;
+}
+
+function renderDescriptorTitleRow(bucket: SelectionBucketKey, descriptor: SelectionDescriptor, isSelected: boolean) {
+  if (bucket === 'functions') {
+    const methodDescriptor = descriptor as ClassInfoCatalog['functions'][number];
+    const tags = Array.isArray(methodDescriptor.tags) ? methodDescriptor.tags : [];
+
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>
+          {descriptor.label}
+        </span>
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {tags.map((tag: string) => (
+              <MethodTag key={`${methodDescriptor.id}-${tag}`} tag={tag} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (bucket === 'members') {
+    const fieldDescriptor = descriptor as ClassInfoCatalog['members'][number];
+    const displayOffset = resolveDisplayOffset(fieldDescriptor.offset);
+
+    return (
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="w-16 shrink-0 text-[11px] font-semibold tracking-wide text-cyan-300/90 text-left">
+          {displayOffset ?? '?'}
+        </span>
+        <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>
+          {descriptor.label}
+        </span>
+      </div>
+    );
+  }
+
+  if (bucket === 'statics') {
+    return (
+      <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>
+        {descriptor.label}
+      </span>
+    );
+  }
+
+  return (
+    <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>
+      {descriptor.label}
+    </span>
+  );
+}
+
 export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
   const runtimeData = useStudioRuntimeData();
   const drag = useExpressionDrag();
+
+  useEffect(() => {
+    if (!data.binding) {
+      return;
+    }
+
+    runtimeData.ensureRuntimeOverlayLoaded(data.binding.classStableId);
+  }, [data.binding, runtimeData]);
+
   const resolvedCatalog = useMemo(
     () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? createEmptyCatalog(),
     [data.binding, runtimeData],
@@ -177,7 +277,7 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
                   title={canDragStaticAddress ? `Drag static reference ${data.binding?.name}.${descriptor.label}` : undefined}
                 >
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <span className={`text-sm font-semibold truncate transition-colors ${isSelected ? 'text-slate-100' : 'text-slate-300 group-hover:text-slate-200'}`}>{descriptor.label}</span>
+                    {renderDescriptorTitleRow(bucket, descriptor, isSelected)}
                     {descriptor.detail ? <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">{descriptor.detail}</span> : null}
                   </div>
 

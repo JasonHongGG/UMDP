@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { AlertCircle, Box } from 'lucide-react';
 import { Port } from '../../components/studio/canvas/Port';
 import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
@@ -13,6 +13,14 @@ export const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ 
   const { edges } = useStudioGraph();
   const { nodeStates } = useStudioRuntime();
   const runtimeData = useStudioRuntimeData();
+
+  useEffect(() => {
+    if (!data.binding) {
+      return;
+    }
+
+    runtimeData.ensureRuntimeOverlayLoaded(data.binding.classStableId);
+  }, [data.binding, runtimeData]);
 
   const resolvedCatalog = useMemo(
     () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? createEmptyCatalog(),
