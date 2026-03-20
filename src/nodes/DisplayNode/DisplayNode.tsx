@@ -19,6 +19,12 @@ const DISPLAY_INPUTS: IPort[] = [
   }),
 ];
 
+const DISPLAY_OUTPUTS: IPort[] = [
+  createFlowPort('flow-out', 'Flow Out', 'Passes control to downstream runtime nodes after the payload has been observed.', {
+    cardinality: 'multiple',
+  }),
+];
+
 function createQueryIssue(code: string, message: string, severity: NodeQueryIssue['severity'] = 'info'): NodeQueryIssue {
   return {
     severity,
@@ -103,7 +109,14 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
       dataType: port.dataType,
       required: port.required,
     })),
-    outputs: [],
+    outputs: DISPLAY_OUTPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'output',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+    })),
     parameters: [
       {
         name: 'expandedByDefault',
@@ -148,7 +161,6 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
         },
       },
     ],
-    isOutputNode: true,
   },
   icon: Eye,
   createInitialData: createDisplayNodeData,

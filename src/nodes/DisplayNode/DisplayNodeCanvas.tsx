@@ -123,7 +123,7 @@ function renderJsonValue(value: WorkflowJsonValue, truncateAt: number, depth = 0
   return <span className="text-slate-200">{text}</span>;
 }
 
-export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> = ({ id, data, inputs }) => {
+export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> = ({ id, data, inputs, outputs }) => {
   const { nodeSnapshots } = useStudioRuntime();
   const query = useStudioQuery();
   const [isExpanded, setIsExpanded] = useState(Boolean(data.expandedByDefault));
@@ -156,6 +156,10 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
       <div className={`relative z-10 w-72 rounded-2xl border bg-[#111827]/95 backdrop-blur-md shadow-xl transition-colors cursor-grab active:cursor-grabbing ${stateClass}`}>
         <div className="absolute left-0 top-5 flex flex-col gap-2 -translate-x-[calc(50%+1px)] z-20">
           {inputs.map((port) => <Port key={port.id} nodeId={id} port={port} type="target" />)}
+        </div>
+
+        <div className="absolute right-0 top-5 flex flex-col gap-2 translate-x-[calc(50%+1px)] z-20">
+          {outputs.map((port) => <Port key={port.id} nodeId={id} port={port} type="source" />)}
         </div>
 
         <div className="px-4 py-3 border-b border-slate-800 flex items-start justify-between gap-3">

@@ -277,7 +277,7 @@ describe('studio full flow integration', () => {
     });
   });
 
-  it('routes call-function results into a display node runtime snapshot', async () => {
+  it('routes call-function results into a display node runtime snapshot and continues downstream flow', async () => {
     vi.useFakeTimers();
     invokeMock.mockResolvedValueOnce({
       classStableId: CLASS_ID,
@@ -324,6 +324,16 @@ describe('studio full flow integration', () => {
           showMeta: true,
         },
       },
+      {
+        id: 'class-2',
+        type: 'class-ref',
+        position: { x: 720, y: 0 },
+        data: {
+          binding: WORLD_DATA_BINDING,
+          instanceSource: null,
+          infoSelection: { members: [], statics: [], functions: [WORLD_DATA_METHOD_ID] },
+        },
+      },
     ];
 
     const snapshots: Record<string, NodeExecutionSnapshot> = {};
@@ -338,9 +348,17 @@ describe('studio full flow integration', () => {
         { id: 'edge-class-call-data', channel: 'data', sourceNodeId: 'class-1', sourcePortId: 'info-out', targetNodeId: 'call-1', targetPortId: 'class-info-in' },
         { id: 'edge-call-display-flow', channel: 'control', sourceNodeId: 'call-1', sourcePortId: 'flow-out', targetNodeId: 'display-1', targetPortId: 'flow-in' },
         { id: 'edge-call-display-data', channel: 'data', sourceNodeId: 'call-1', sourcePortId: 'result-out', targetNodeId: 'display-1', targetPortId: 'payload-in' },
+        { id: 'edge-display-class-flow', channel: 'control', sourceNodeId: 'display-1', sourcePortId: 'flow-out', targetNodeId: 'class-2', targetPortId: 'flow-in' },
+        { id: 'edge-call-class-instance', channel: 'data', sourceNodeId: 'call-1', sourcePortId: 'instance-ref-out', targetNodeId: 'class-2', targetPortId: 'instance-in' },
       ],
       resolveStaticFieldAddress: () => null,
-      getClassInfoCatalogByBinding: (binding) => (binding?.classStableId === CLASS_ID ? CATALOG : null),
+      getClassInfoCatalogByBinding: (binding) => {
+        if (binding?.classStableId === CLASS_ID) {
+          return CATALOG;
+        }
+
+        return binding?.classStableId === WORLD_DATA_CLASS_ID ? WORLD_DATA_CATALOG : null;
+      },
       onReset: vi.fn(),
       onNodeStateChange: vi.fn(),
       onNodeSnapshot: (snapshot) => {
@@ -366,6 +384,18 @@ describe('studio full flow integration', () => {
         }],
       },
       outputs: {},
+    });
+    expect(snapshots['class-2']).toMatchObject({
+      status: 'success',
+      outputs: {
+        'info-out': {
+          payload: {
+            basic: {
+              className: 'WorldData',
+            },
+          },
+        },
+      },
     });
   });
 });

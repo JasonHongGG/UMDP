@@ -245,6 +245,97 @@ describe('connectionPolicy', () => {
     });
   });
 
+  it('does not replace outbound edges when the source flow port allows multiple connections', () => {
+    registerConnectionTestNodes();
+
+    const result = validateConnection({
+      nodeId: 'trigger-1',
+      portId: 'flow-out',
+      portType: 'flow',
+      handleType: 'source',
+    }, {
+      nodeId: 'class-1',
+      portId: 'flow-in',
+      portType: 'flow',
+      handleType: 'target',
+    }, nodes, [{
+      id: 'edge-existing',
+      channel: 'control',
+      sourceNodeId: 'trigger-1',
+      sourcePortId: 'flow-out',
+      targetNodeId: 'other-class-1',
+      targetPortId: 'flow-in',
+    }]);
+
+    expect(result).toEqual({
+      valid: true,
+      replaceEdgeIds: [],
+    });
+  });
+
+  it('does not replace outbound edges when the source data port allows multiple connections', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'source-many',
+          typeVersion: 1,
+          family: 'data',
+          displayName: 'Source Many',
+          description: 'Test source',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'json-out', displayName: 'Json Out', direction: 'output', channel: 'data', cardinality: 'multiple', dataType: GENERIC_JSON_SCHEMA.id }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+      {
+        manifest: {
+          type: 'target-single',
+          typeVersion: 1,
+          family: 'data',
+          displayName: 'Target Single',
+          description: 'Test target',
+          category: 'Test',
+          inputs: [{ key: 'json-in', displayName: 'Json In', direction: 'input', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+          outputs: [],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
+
+    const result = validateConnection({
+      nodeId: 'source-many-1',
+      portId: 'json-out',
+      portType: 'json',
+      handleType: 'source',
+    }, {
+      nodeId: 'target-single-2',
+      portId: 'json-in',
+      portType: 'json',
+      handleType: 'target',
+    }, [
+      { id: 'source-many-1', type: 'source-many', position: { x: 0, y: 0 }, data: {} },
+      { id: 'target-single-1', type: 'target-single', position: { x: 120, y: 0 }, data: {} },
+      { id: 'target-single-2', type: 'target-single', position: { x: 240, y: 0 }, data: {} },
+    ], [{
+      id: 'edge-existing',
+      channel: 'data',
+      sourceNodeId: 'source-many-1',
+      sourcePortId: 'json-out',
+      targetNodeId: 'target-single-1',
+      targetPortId: 'json-in',
+    }]);
+
+    expect(result).toEqual({
+      valid: true,
+      replaceEdgeIds: [],
+    });
+  });
+
   it('allows specific schema outputs to connect into generic json display inputs', () => {
     initializeStudioNodeRegistry([
       {

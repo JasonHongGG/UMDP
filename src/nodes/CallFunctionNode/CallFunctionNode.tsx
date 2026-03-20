@@ -38,9 +38,9 @@ const CALL_FUNCTION_INPUTS: IPort[] = [
 ];
 
 const CALL_FUNCTION_OUTPUTS: IPort[] = [
-  createFlowPort('flow-out', 'Flow Out'),
-  createJsonPort('result-out', 'Result', CALL_FUNCTION_RESULT_SCHEMA, 'Method invocation result wrapped in a studio JSON envelope.'),
-  createJsonPort('instance-ref-out', 'Instance Ref', INSTANCE_REFERENCE_SCHEMA, 'Projected instance reference from an object return value.'),
+  createFlowPort('flow-out', 'Flow Out', undefined, { cardinality: 'multiple' }),
+  createJsonPort('result-out', 'Result', CALL_FUNCTION_RESULT_SCHEMA, 'Method invocation result wrapped in a studio JSON envelope.', { cardinality: 'multiple' }),
+  createJsonPort('instance-ref-out', 'Instance Ref', INSTANCE_REFERENCE_SCHEMA, 'Projected instance reference from an object return value.', { cardinality: 'multiple' }),
 ];
 
 function createValidationError(message: string, target?: string): ValidationIssue {

@@ -37,6 +37,7 @@ const CLASS_INFO_OUTPUT: IPort = createJsonPort(
   'Info',
   CLASS_INFO_SCHEMA,
   'Selected class metadata wrapped in the studio JSON envelope.',
+  { cardinality: 'multiple' },
 );
 
 const CLASS_NODE_INPUTS: IPort[] = [
@@ -50,7 +51,7 @@ const CLASS_NODE_INPUTS: IPort[] = [
 ];
 
 const CLASS_NODE_OUTPUTS: IPort[] = [
-  createFlowPort('flow-out', 'Flow Out'),
+  createFlowPort('flow-out', 'Flow Out', undefined, { cardinality: 'multiple' }),
   CLASS_INFO_OUTPUT,
 ];
 
