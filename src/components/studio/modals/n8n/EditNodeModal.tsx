@@ -7,11 +7,12 @@ import { beginPointerExpressionDrag } from '../../../../core/studio/drag/express
 import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
 import { createCallFunctionResultEnvelope, createClassInfoEnvelope } from '../../../../core/studio/contracts';
-import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoCatalog, type ClassInfoSelection } from '../../../../domain/studio/editor';
+import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoSelection } from '../../../../domain/studio/editor';
 import type { ExpressionSource } from '../../../../domain/studio/contracts';
 import { useStudioRuntimeData } from '../../../../core/studio/runtimeData';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
 import { findSelectedFunction, getClassInfoPayloadFromValue, type CallFunctionNodeData } from '../../../../nodes/CallFunctionNode/callFunctionNodeModel';
+import { createEmptyCatalog } from '../../../../nodes/ClassNode/classNodeModel';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -164,6 +165,27 @@ export function EditNodeModal() {
     }
   }, [node, nodeDef]);
 
+  const createClassNodePreviewState = (nodeData: BaseNodeData, snapshots: Record<string, NodeExecutionSnapshot>) => {
+    const classData = nodeData as BaseNodeData & {
+      binding?: ClassBinding | null;
+      instanceSource?: ExpressionSource | null;
+      infoSelection?: ClassInfoSelection;
+    };
+
+    const availableInfo = runtimeData.getClassInfoCatalogByBinding(classData.binding) ?? createEmptyCatalog();
+    const infoSelection = classData.infoSelection ?? { members: [], statics: [], functions: [] };
+    const resolvedInstanceAddress = classData.instanceSource
+      ? runtimeData.resolveExpressionSource(classData.instanceSource, snapshots)
+      : null;
+
+    return {
+      binding: classData.binding ?? null,
+      availableInfo,
+      selection: reconcileClassInfoSelection(infoSelection, availableInfo),
+      resolvedInstanceAddress,
+    };
+  };
+
   const previewSnapshots = useMemo<Record<string, NodeExecutionSnapshot>>(() => {
     return nodes.reduce<Record<string, NodeExecutionSnapshot>>((acc, candidateNode) => {
       const snapshot = nodeSnapshots[candidateNode.id];
@@ -173,7 +195,17 @@ export function EditNodeModal() {
       }
 
       const candidateNodeDef = globalNodeRegistry.get(candidateNode.type);
-      const previewOutputs = candidateNodeDef?.getExecutionPreview?.(candidateNode.data);
+      const classPreviewState = createClassNodePreviewState(candidateNode.data, { ...nodeSnapshots, ...acc });
+      const previewOutputs = candidateNode.type === 'class-ref'
+        ? {
+          'info-out': createClassInfoEnvelope(
+            classPreviewState.binding,
+            classPreviewState.availableInfo,
+            classPreviewState.selection,
+            classPreviewState.resolvedInstanceAddress ?? null,
+          ),
+        }
+        : candidateNodeDef?.getExecutionPreview?.(candidateNode.data);
       if (!previewOutputs) {
         return acc;
       }
@@ -193,25 +225,7 @@ export function EditNodeModal() {
       return null;
     }
 
-    const classData = node.data as BaseNodeData & {
-      binding?: ClassBinding | null;
-      instanceSource?: ExpressionSource | null;
-      availableInfo?: ClassInfoCatalog;
-      infoSelection?: ClassInfoSelection;
-    };
-
-    const availableInfo = classData.availableInfo ?? { members: [], statics: [], functions: [] };
-    const infoSelection = classData.infoSelection ?? { members: [], statics: [], functions: [] };
-    const resolvedInstanceAddress = classData.instanceSource
-      ? runtimeData.resolveExpressionSource(classData.instanceSource, previewSnapshots)
-      : null;
-
-    return {
-      binding: classData.binding ?? null,
-      availableInfo,
-      selection: reconcileClassInfoSelection(infoSelection, availableInfo),
-      resolvedInstanceAddress,
-    };
+    return createClassNodePreviewState(node.data, previewSnapshots);
   }, [node, previewSnapshots, runtimeData]);
 
   useEffect(() => {
@@ -443,7 +457,19 @@ export function EditNodeModal() {
                     incomingData.map((d, i) => {
                       // Attempt to construct tree data from preview or previous snapshots
                       const sourceNodeDef = globalNodeRegistry.get(d.node!.type);
-                      const staticPreview = sourceNodeDef?.getExecutionPreview ? sourceNodeDef.getExecutionPreview(d.node!.data) : null;
+                      const classPreviewState = d.node?.type === 'class-ref'
+                        ? createClassNodePreviewState(d.node.data, previewSnapshots)
+                        : null;
+                      const staticPreview = d.node?.type === 'class-ref'
+                        ? {
+                          'info-out': createClassInfoEnvelope(
+                            classPreviewState?.binding ?? null,
+                            classPreviewState?.availableInfo ?? createEmptyCatalog(),
+                            classPreviewState?.selection ?? { members: [], statics: [], functions: [] },
+                            classPreviewState?.resolvedInstanceAddress ?? null,
+                          ),
+                        }
+                        : (sourceNodeDef?.getExecutionPreview ? sourceNodeDef.getExecutionPreview(d.node!.data) : null);
                       const snapshot = nodeSnapshots[d.node!.id];
                       
                       const resolvedPayload = snapshot?.outputs[d.port!.id]?.payload || staticPreview?.[d.port!.id]?.payload || { _notice: 'No payload preview available. Connect and execute to view structural data.' };

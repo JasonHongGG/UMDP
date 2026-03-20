@@ -138,11 +138,13 @@ function createFieldPayload(
 }
 
 function createFunctionPayload(binding: ClassBinding, item: ClassInfoCatalog['functions'][number]): ClassInfoFunctionPayload {
+  const parameters = Array.isArray(item.parameters) ? item.parameters : [];
+
   return {
     name: item.name,
     signature: item.signature,
     returnType: item.returnType,
-    parameters: item.parameters.map((parameter) => ({
+    parameters: parameters.map((parameter) => ({
       position: parameter.position,
       name: parameter.name,
       typeName: parameter.typeName,

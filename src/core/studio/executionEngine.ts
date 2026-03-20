@@ -9,6 +9,7 @@ import {
 } from './runtimeGraph';
 import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
 import type { NodeExecutionContext, NodeExecutionResult as DomainNodeExecutionResult, ValidationIssue } from '../../domain/studio/contracts';
+import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
 
 interface ExecuteStudioFlowOptions {
   documentId?: string;
@@ -16,6 +17,7 @@ interface ExecuteStudioFlowOptions {
   nodes: StudioNode[];
   edges: StudioEdge[];
   resolveStaticFieldAddress?: (classStableId: string, memberStableId: string) => string | null;
+  getClassInfoCatalogByBinding?: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
   onReset: () => void;
   onNodeStateChange: (nodeId: string, state: NodeExecutionState) => void;
   onNodeSnapshot: (snapshot: NodeExecutionSnapshot) => void;
@@ -28,6 +30,7 @@ export function executeStudioFlow({
   nodes,
   edges,
   resolveStaticFieldAddress,
+  getClassInfoCatalogByBinding,
   onReset,
   onNodeStateChange,
   onNodeSnapshot,
@@ -80,7 +83,7 @@ export function executeStudioFlow({
     });
 
     const definition = globalNodeRegistry.get(node.type);
-    const context = createNodeExecutionContext(documentId, nodeId, nodes, edges, snapshots, definition, resolveStaticFieldAddress);
+    const context = createNodeExecutionContext(documentId, nodeId, nodes, edges, snapshots, definition, resolveStaticFieldAddress, getClassInfoCatalogByBinding);
     if (!context) {
       return null;
     }

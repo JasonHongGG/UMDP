@@ -74,7 +74,6 @@ function StudioPageContent({
 
     addNode('class-ref', pendingClassNode.suggestedPosition ?? viewportCenterPosition!, {
       binding: pendingClassNode.binding,
-      availableInfo: pendingClassNode.availableInfo,
       infoSelection: createEmptyClassInfoSelection(),
     });
 

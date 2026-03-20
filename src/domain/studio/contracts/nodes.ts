@@ -1,5 +1,6 @@
 import type { StableId } from '../../contracts/shared-identity';
 import type { ExpressionSource } from './expression';
+import type { ClassBinding, ClassInfoCatalog } from '../editor';
 
 export type NodeFamily = 'control' | 'runtime' | 'data';
 export type ExpressionSupportMode = 'disabled' | 'optional' | 'required';
@@ -84,6 +85,7 @@ export interface NodeExecutionContext {
   inputBindings: Record<string, ExpressionSource[]>;
   resolvedInputs: Record<string, unknown[]>;
   controlInputs: string[];
+  getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
 }
 
 export interface NodeExecutionResult {

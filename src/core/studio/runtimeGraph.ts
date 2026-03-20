@@ -9,10 +9,12 @@ import {
 import { createInputExpressionSource, resolveExpressionBindingValue } from './expression';
 import { getStudioNodePort, getStudioNodePorts } from './NodeRegistry';
 import type { NodeExecutionContext, ValidationIssue } from '../../domain/studio/contracts';
+import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
 
 const EMPTY_ISSUES: ValidationIssue[] = [];
 
 export type ResolveStaticFieldAddress = (classStableId: string, memberStableId: string) => string | null;
+export type GetClassInfoCatalogByBinding = (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
 
 export function getStudioNodeById(nodeId: string, nodes: StudioNode[]) {
   return nodes.find((node) => node.id === nodeId);
@@ -149,6 +151,7 @@ export function createNodeExecutionContext(
   snapshots: Record<string, NodeExecutionSnapshot>,
   definition?: StudioNodeDefinition,
   resolveStaticFieldAddress?: ResolveStaticFieldAddress,
+  getClassInfoCatalogByBinding?: GetClassInfoCatalogByBinding,
 ): NodeExecutionContext | null {
   const node = getStudioNodeById(nodeId, nodes);
   if (!node) {
@@ -176,6 +179,7 @@ export function createNodeExecutionContext(
       Object.entries(incoming).map(([key, envelopes]) => [key, envelopes.map((envelope) => envelope.payload)]),
     ),
     controlInputs: getIncomingControlNodeIds(nodeId, edges),
+    getClassInfoCatalogByBinding: (binding) => getClassInfoCatalogByBinding?.(binding) ?? null,
   };
 }
 

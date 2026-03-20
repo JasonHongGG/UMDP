@@ -79,7 +79,6 @@ export function AddNodeModal() {
 
     addNode('class-ref', addModalPosition, {
       binding: request.binding,
-      availableInfo: request.availableInfo,
       infoSelection: createEmptyClassInfoSelection(),
     });
     closeAddModal();

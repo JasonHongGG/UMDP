@@ -58,12 +58,94 @@ export interface ClassInfoSelection {
 export interface PendingClassNodeRequest {
   requestId: string;
   binding: ClassBinding;
-  availableInfo: ClassInfoCatalog;
   suggestedPosition?: { x: number; y: number };
 }
 
 export interface StudioClassCatalogEntry extends ClassBinding {
   searchText: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function normalizeClassInfoFieldDescriptor(value: unknown): ClassInfoFieldDescriptor | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== 'string'
+    || typeof value.label !== 'string'
+    || typeof value.name !== 'string'
+    || typeof value.legacyFieldName !== 'string'
+    || typeof value.typeName !== 'string'
+    || (value.offset !== null && typeof value.offset !== 'string')
+    || (value.address !== null && typeof value.address !== 'string')
+    || (value.value !== null && typeof value.value !== 'string')
+    || typeof value.isStatic !== 'boolean'
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id as StableId,
+    label: value.label,
+    name: value.name,
+    legacyFieldName: value.legacyFieldName,
+    typeName: value.typeName,
+    offset: value.offset,
+    address: value.address,
+    value: value.value,
+    isStatic: value.isStatic,
+    detail: typeof value.detail === 'string' ? value.detail : undefined,
+  };
+}
+
+function normalizeClassInfoMethodParameterDescriptor(value: unknown): ClassInfoMethodParameterDescriptor | null {
+  if (!isRecord(value) || typeof value.position !== 'number' || typeof value.name !== 'string' || typeof value.typeName !== 'string') {
+    return null;
+  }
+
+  return {
+    position: value.position,
+    name: value.name,
+    typeName: value.typeName,
+  };
+}
+
+function normalizeClassInfoMethodDescriptor(value: unknown): ClassInfoMethodDescriptor | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id !== 'string'
+    || typeof value.label !== 'string'
+    || typeof value.name !== 'string'
+    || typeof value.signature !== 'string'
+    || typeof value.returnType !== 'string'
+    || typeof value.isStatic !== 'boolean'
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id as StableId,
+    label: value.label,
+    name: value.name,
+    signature: value.signature,
+    returnType: value.returnType,
+    parameters: Array.isArray(value.parameters)
+      ? value.parameters.flatMap((parameter) => {
+        const normalized = normalizeClassInfoMethodParameterDescriptor(parameter);
+        return normalized ? [normalized] : [];
+      })
+      : [],
+    isStatic: value.isStatic,
+    tags: Array.isArray(value.tags) ? value.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+    detail: typeof value.detail === 'string' ? value.detail : undefined,
+  };
 }
 
 export function createEmptyClassInfoSelection(): ClassInfoSelection {
@@ -74,6 +156,31 @@ export function createEmptyClassInfoSelection(): ClassInfoSelection {
   };
 }
 
+export function normalizeClassInfoCatalog(value: unknown): ClassInfoCatalog {
+  const catalog = isRecord(value) ? value : {};
+
+  return {
+    members: Array.isArray(catalog.members)
+      ? catalog.members.flatMap((entry) => {
+        const normalized = normalizeClassInfoFieldDescriptor(entry);
+        return normalized ? [normalized] : [];
+      })
+      : [],
+    statics: Array.isArray(catalog.statics)
+      ? catalog.statics.flatMap((entry) => {
+        const normalized = normalizeClassInfoFieldDescriptor(entry);
+        return normalized ? [normalized] : [];
+      })
+      : [],
+    functions: Array.isArray(catalog.functions)
+      ? catalog.functions.flatMap((entry) => {
+        const normalized = normalizeClassInfoMethodDescriptor(entry);
+        return normalized ? [normalized] : [];
+      })
+      : [],
+  };
+}
+
 export function createClassInfoCatalogFromClassDescriptor(
   classInfo: ClassDescriptor,
   runtimeOverlay?: RuntimeClassOverlayDescriptor,
@@ -81,7 +188,7 @@ export function createClassInfoCatalogFromClassDescriptor(
   const fields = runtimeOverlay?.fields ?? classInfo.fields;
   const staticFields = runtimeOverlay?.staticFields ?? classInfo.staticFields;
 
-  return {
+  return normalizeClassInfoCatalog({
     members: fields.map((field) => ({
       id: field.stableId,
       label: field.name,
@@ -121,7 +228,7 @@ export function createClassInfoCatalogFromClassDescriptor(
       tags: method.tags,
       detail: method.signature,
     })),
-  };
+  });
 }
 
 export function createClassInfoCatalogSignature(catalog: ClassInfoCatalog) {
@@ -198,13 +305,11 @@ export function filterStudioClassCatalog(entries: StudioClassCatalogEntry[], que
 
 export function createPendingClassNodeRequest(
   binding: ClassBinding,
-  availableInfo: ClassInfoCatalog,
   suggestedPosition?: { x: number; y: number },
 ): PendingClassNodeRequest {
   return {
     requestId: `${binding.imageStableId}::${binding.classStableId}::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
     binding,
-    availableInfo,
     suggestedPosition,
   };
 }

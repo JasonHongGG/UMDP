@@ -8,7 +8,7 @@ import { createExpressionReferenceDragPayload, createStaticExpressionSource } fr
 import { reconcileClassInfoSelection, type ClassInfoCatalog } from '../../domain/studio/editor';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import type { ClassNodeData } from './classNodeModel';
-import { toggleSelectionEntry } from './classNodeModel';
+import { createEmptyCatalog, toggleSelectionEntry } from './classNodeModel';
 
 type SelectionBucketKey = 'members' | 'statics' | 'functions';
 type SelectionDescriptor = ClassInfoCatalog[SelectionBucketKey][number];
@@ -57,8 +57,8 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
   const runtimeData = useStudioRuntimeData();
   const drag = useExpressionDrag();
   const resolvedCatalog = useMemo(
-    () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? data.availableInfo,
-    [data.availableInfo, data.binding, runtimeData],
+    () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? createEmptyCatalog(),
+    [data.binding, runtimeData],
   );
   const resolvedSelection = useMemo(
     () => reconcileClassInfoSelection(data.infoSelection, resolvedCatalog),
@@ -72,7 +72,6 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
         ...resolvedSelection,
         [listKey]: toggleSelectionEntry(resolvedSelection[listKey], itemId),
       },
-      availableInfo: resolvedCatalog,
     });
   };
 
@@ -82,7 +81,6 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
         ...resolvedSelection,
         [bucket]: ids,
       },
-      availableInfo: resolvedCatalog,
     });
   };
 

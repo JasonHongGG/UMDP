@@ -149,4 +149,42 @@ describe('studio contracts', () => {
       functions: [],
     });
   });
+
+  it('tolerates malformed persisted functions without parameter arrays', () => {
+    const envelope = createClassInfoEnvelope(
+      {
+        imageStableId: IMAGE_A,
+        classStableId: CLASS_PLAYER,
+        fullName: 'Gameplay.PlayerController',
+        name: 'PlayerController',
+        namespace: 'Gameplay',
+        imageName: 'Assembly-CSharp.dll',
+      },
+      {
+        members: [],
+        statics: [],
+        functions: [{
+          id: METHOD_MOVE,
+          label: 'Move',
+          name: 'Move',
+          signature: 'System.Void ()',
+          returnType: 'System.Void',
+          isStatic: false,
+          tags: [],
+        } as unknown as never],
+      },
+      {
+        members: [],
+        statics: [],
+        functions: [METHOD_MOVE],
+      },
+    );
+
+    expect(envelope.payload).toMatchObject({
+      functions: [{
+        name: 'Move',
+        parameters: [],
+      }],
+    });
+  });
 });

@@ -7,7 +7,7 @@ import type { INodeComponentProps, IPort } from '../../core/studio/types';
 import { hasExpressionSourceValue } from '../../core/studio/expression';
 import { reconcileClassInfoSelection } from '../../domain/studio/editor';
 import type { ClassNodeData } from './classNodeModel';
-import { hasResolvedExecutionValue } from './classNodeModel';
+import { createEmptyCatalog, hasResolvedExecutionValue } from './classNodeModel';
 
 export const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, data, inputs, outputs }) => {
   const { edges } = useStudioGraph();
@@ -15,8 +15,8 @@ export const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ 
   const runtimeData = useStudioRuntimeData();
 
   const resolvedCatalog = useMemo(
-    () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? data.availableInfo,
-    [data.availableInfo, data.binding, runtimeData],
+    () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? createEmptyCatalog(),
+    [data.binding, runtimeData],
   );
   const resolvedSelection = useMemo(
     () => reconcileClassInfoSelection(data.infoSelection, resolvedCatalog),

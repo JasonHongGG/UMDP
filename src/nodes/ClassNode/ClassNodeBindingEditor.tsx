@@ -109,10 +109,14 @@ export const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = (
       return;
     }
 
+    const catalog = runtimeData.getClassInfoCatalogByBinding(request.binding);
+    if (!catalog) {
+      return;
+    }
+
     updateData({
       binding: request.binding,
-      availableInfo: request.availableInfo,
-      infoSelection: reconcileClassInfoSelection(data.infoSelection, request.availableInfo),
+      infoSelection: reconcileClassInfoSelection(data.infoSelection, catalog),
     });
     setIsBindingPickerOpen(false);
   };
@@ -232,4 +236,4 @@ export const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = (
       </div>
     </div>
   );
-};
+};

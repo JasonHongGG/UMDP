@@ -779,7 +779,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
       return;
     }
 
-    setPendingClassNode(createPendingClassNodeRequest(binding, availableInfo));
+    setPendingClassNode(createPendingClassNodeRequest(binding));
     setIsReferenceOpen(false);
     setIsGlobalSearchOpen(false);
     setActivePage('studio');

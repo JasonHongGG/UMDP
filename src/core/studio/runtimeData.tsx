@@ -51,7 +51,7 @@ export function createStudioRuntimeDataState({
         return null;
       }
 
-      return createPendingClassNodeRequest(binding, catalog, suggestedPosition);
+      return createPendingClassNodeRequest(binding, suggestedPosition);
     },
     getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => {
       if (!binding) {

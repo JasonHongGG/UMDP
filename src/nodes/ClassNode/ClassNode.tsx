@@ -20,8 +20,6 @@ import { ClassNodeSelectionEditor } from './ClassNodeSelectionEditor';
 import {
   createClassNodeData,
   createClassNodeDocumentState,
-  createEmptyCatalog,
-  createInfoPreview,
   fromClassBindingReference,
   fromClassExportSelection,
   hasResolvedExecutionValue,
@@ -93,7 +91,6 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       bindings,
       documentState: {
         ...createClassNodeDocumentState(data),
-        availableInfo: data.availableInfo,
       },
     };
   },
@@ -109,7 +106,6 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       bindings,
       documentState: {
         ...createClassNodeDocumentState(node.data),
-        availableInfo: node.data.availableInfo,
       },
     };
   },
@@ -129,10 +125,23 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
 
       return [];
     },
-    execute: async ({ documentState, resolvedBindings }) => {
+    execute: async ({ documentState, resolvedBindings, getClassInfoCatalogByBinding }) => {
       const classDocumentState = parseClassNodeDocumentState(documentState);
-      const availableInfo = (documentState.availableInfo as ClassNodeData['availableInfo'] | undefined) ?? createEmptyCatalog();
       const binding = fromClassBindingReference(classDocumentState.classBinding);
+      const availableInfo = getClassInfoCatalogByBinding(binding);
+      if (!availableInfo) {
+        return {
+          state: 'error',
+          issues: [{
+            severity: 'error',
+            code: 'class.catalog.unavailable',
+            message: 'Canonical class catalog is unavailable for this binding. Re-run analysis or rebind the class node.',
+            target: 'binding',
+          }],
+          outputs: {},
+        };
+      }
+
       const selection = reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo);
       const resolvedInstanceAddress = (resolvedBindings.instanceSource as import('../../core/studio/types').WorkflowJsonValue | undefined) ?? null;
       const normalizedInstanceAddress = typeof resolvedInstanceAddress === 'string' ? formatHexAddress(resolvedInstanceAddress) : null;
@@ -171,9 +180,6 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       };
     },
   },
-  getExecutionPreview: (data) => ({
-    'info-out': createInfoPreview(data),
-  }),
   CanvasComponent: ClassNodeCanvas,
   EditComponent: ClassNodeBindingEditor,
   EditFooterComponent: ClassNodeSelectionEditor,

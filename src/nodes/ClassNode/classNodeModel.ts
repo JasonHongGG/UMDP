@@ -7,10 +7,8 @@ import {
   type ClassNodeDocumentState,
   type ExpressionSource,
 } from '../../domain/studio/contracts';
-import { createClassInfoEnvelope } from '../../core/studio/contracts';
 import {
   createEmptyClassInfoSelection,
-  reconcileClassInfoSelection,
   type ClassBinding,
   type ClassInfoCatalog,
   type ClassInfoSelection,
@@ -19,7 +17,6 @@ import {
 export interface ClassNodeData extends BaseNodeData {
   binding: ClassBinding | null;
   instanceSource: ExpressionSource | null;
-  availableInfo: ClassInfoCatalog;
   infoSelection: ClassInfoSelection;
 }
 
@@ -35,7 +32,6 @@ export function createClassNodeData(): ClassNodeData {
   return {
     binding: null,
     instanceSource: null,
-    availableInfo: createEmptyCatalog(),
     infoSelection: createEmptyClassInfoSelection(),
   };
 }
@@ -116,14 +112,8 @@ export function parseClassNodeDataFromDocumentState(baseData: BaseNodeData, inst
     nodeName: instance.displayName,
     binding: fromClassBindingReference(documentState.classBinding),
     instanceSource: (instance.bindings.instanceSource as ExpressionSource | undefined) ?? null,
-    availableInfo: (instance.documentState.availableInfo as ClassNodeData['availableInfo']) ?? createEmptyCatalog(),
     infoSelection: fromClassExportSelection(documentState.exportSelection),
   };
-}
-
-export function createInfoPreview(data: ClassNodeData) {
-  const selection = reconcileClassInfoSelection(data.infoSelection, data.availableInfo);
-  return createClassInfoEnvelope(data.binding, data.availableInfo, selection, null);
 }
 
 export function toggleSelectionEntry(selection: StableId[], itemId: StableId) {

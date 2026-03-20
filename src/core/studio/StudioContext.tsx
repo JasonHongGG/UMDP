@@ -219,6 +219,7 @@ function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edg
       nodes,
       edges,
       resolveStaticFieldAddress: runtimeData.resolveStaticFieldAddress,
+      getClassInfoCatalogByBinding: runtimeData.getClassInfoCatalogByBinding,
       onReset: () => {
         setNodeStates({});
         setNodeSnapshots({});

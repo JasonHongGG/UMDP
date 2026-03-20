@@ -12,6 +12,7 @@ import {
   createPendingClassNodeRequest,
   createEmptyClassInfoSelection,
   filterStudioClassCatalog,
+  normalizeClassInfoCatalog,
   reconcileClassInfoSelection,
 } from './editor';
 
@@ -151,7 +152,7 @@ describe('studio editor catalog', () => {
     expect(catalog.statics[1]?.address).toBe('0x1000');
   });
 
-  it('creates a pending class node request from a concrete binding and canonical info catalog', () => {
+  it('creates a pending class node request from a concrete binding', () => {
     const request = createPendingClassNodeRequest(
       {
         imageStableId: IMAGE_A,
@@ -161,17 +162,51 @@ describe('studio editor catalog', () => {
         namespace: 'Gameplay',
         imageName: 'Assembly-CSharp.dll',
       },
-      createClassInfoCatalogFromClassDescriptor(sampleClassDescriptor),
       { x: 320, y: 240 },
     );
 
-  expect(request.requestId).toContain(`${IMAGE_A}::${CLASS_PLAYER}::`);
+    expect(request.requestId).toContain(`${IMAGE_A}::${CLASS_PLAYER}::`);
     expect(request.suggestedPosition).toEqual({ x: 320, y: 240 });
-    expect(request.availableInfo.members.map((item) => item.id)).toEqual([FIELD_HEALTH, FIELD_SPEED]);
-    expect(request.availableInfo.functions[0]?.returnType).toBe('System.Void');
-    expect(request.availableInfo.functions[0]?.parameters).toEqual([
-      { position: 0, name: 'x', typeName: 'System.Single' },
-      { position: 1, name: 'y', typeName: 'System.Single' },
-    ]);
+    expect(request.binding).toEqual({
+      imageStableId: IMAGE_A,
+      classStableId: CLASS_PLAYER,
+      fullName: 'Gameplay.PlayerController',
+      name: 'PlayerController',
+      namespace: 'Gameplay',
+      imageName: 'Assembly-CSharp.dll',
+    });
+  });
+
+  it('normalizes malformed class info catalogs from persisted data', () => {
+    const catalog = normalizeClassInfoCatalog({
+      members: [
+        { id: FIELD_HEALTH, label: 'health', name: 'health', legacyFieldName: 'health', typeName: 'System.Int32', offset: '0x10', address: null, value: null, isStatic: false },
+        { id: 123 },
+      ],
+      statics: 'invalid',
+      functions: [{
+        id: METHOD_MOVE,
+        label: 'Move',
+        name: 'Move',
+        signature: 'System.Void ()',
+        returnType: 'System.Void',
+        isStatic: false,
+        tags: ['public', 42],
+      }],
+    });
+
+    expect(catalog.members).toHaveLength(1);
+    expect(catalog.statics).toEqual([]);
+    expect(catalog.functions).toEqual([{
+      id: METHOD_MOVE,
+      label: 'Move',
+      name: 'Move',
+      signature: 'System.Void ()',
+      returnType: 'System.Void',
+      parameters: [],
+      isStatic: false,
+      tags: ['public'],
+      detail: undefined,
+    }]);
   });
 });
