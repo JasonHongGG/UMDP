@@ -1,15 +1,16 @@
-import { getStudioNodePorts, globalNodeRegistry } from './NodeRegistry';
 import {
-  createNodeExecutionContext,
-  getIncomingEdges,
   getOutgoingFlowEdges,
-  getStudioNodeById,
-  getIncomingJsonInputs,
-  validateNodeExecution,
 } from './runtimeGraph';
 import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
-import type { NodeExecutionContext, NodeExecutionResult as DomainNodeExecutionResult, ValidationIssue } from '../../domain/studio/contracts';
+import type { ValidationIssue } from '../../domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
+import {
+  createExecutionTiming,
+  executePreparedNode,
+  prepareNodeExecution,
+  canMaterializePassiveJsonNode,
+  type GraphInterpreterEnvironment,
+} from './graphInterpreter';
 
 interface ExecuteStudioFlowOptions {
   documentId?: string;
@@ -38,6 +39,7 @@ export function executeStudioFlow({
 }: ExecuteStudioFlowOptions) {
   const timers: Array<ReturnType<typeof setTimeout>> = [];
   const snapshots: Record<string, NodeExecutionSnapshot> = {};
+  const runId = `run-${Date.now()}`;
 
   const getPrimaryIssueMessage = (issues: ValidationIssue[] | undefined, fallback: string) => {
     const issue = issues?.find((entry) => entry.severity === 'error') ?? issues?.[0];
@@ -54,50 +56,14 @@ export function executeStudioFlow({
     onNodeSnapshot(snapshot);
   };
 
-  const createTiming = (startedAt?: number, completedAt?: number) => ({
-    startedAt,
-    completedAt,
-    durationMs: startedAt !== undefined && completedAt !== undefined ? completedAt - startedAt : undefined,
-  });
-
-  const canMaterializePassiveJsonNode = (node: StudioNode) => {
-    const hasFlowInputs = getStudioNodePorts(node, 'input').some((port) => port.type === 'flow');
-    const hasJsonOutputs = getStudioNodePorts(node, 'output').some((port) => port.type === 'json');
-
-    return !hasFlowInputs && hasJsonOutputs;
-  };
-
-  const createExecutionContext = async (nodeId: string, resolving = new Set<string>()): Promise<{ context: NodeExecutionContext; inputs: NodeExecutionSnapshot['inputs'] } | null> => {
-    const node = getStudioNodeById(nodeId, nodes);
-    if (!node) {
-      return null;
-    }
-
-    for (const edge of getIncomingEdges(nodeId, edges)) {
-      if (edge.channel !== 'data') {
-        continue;
-      }
-
-      const sourceNode = getStudioNodeById(edge.sourceNodeId, nodes);
-      if (!sourceNode || snapshots[sourceNode.id]?.outputs[edge.sourcePortId]) {
-        continue;
-      }
-
-      if (canMaterializePassiveJsonNode(sourceNode)) {
-        await materializePassiveJsonNode(sourceNode.id, resolving);
-      }
-    }
-
-    const definition = globalNodeRegistry.get(node.type);
-    const context = createNodeExecutionContext(documentId, nodeId, nodes, edges, snapshots, definition, resolveStaticFieldAddress, getClassInfoCatalogByBinding);
-    if (!context) {
-      return null;
-    }
-
-    return {
-      context,
-      inputs: getIncomingJsonInputs(nodeId, nodes, edges, snapshots),
-    };
+  const environment: GraphInterpreterEnvironment = {
+    documentId,
+    nodes,
+    edges,
+    snapshots,
+    runId,
+    resolveStaticFieldAddress,
+    getClassInfoCatalogByBinding,
   };
 
   const materializePassiveJsonNode = async (nodeId: string, resolving = new Set<string>()) => {
@@ -105,55 +71,24 @@ export function executeStudioFlow({
       return;
     }
 
-    const node = getStudioNodeById(nodeId, nodes);
+    const node = nodes.find((entry) => entry.id === nodeId);
     if (!node || !canMaterializePassiveJsonNode(node)) {
       return;
     }
 
-    const definition = globalNodeRegistry.get(node.type);
-    if (!definition) {
-      return;
-    }
-
     resolving.add(nodeId);
-    const executionContext = await createExecutionContext(nodeId, resolving);
-    const startedAt = Date.now();
-
-    if (!executionContext) {
-      resolving.delete(nodeId);
-      return;
-    }
-
-    const validationIssues = validateNodeExecution(executionContext.context, definition);
-    const blockingIssues = validationIssues.filter((issue) => issue.severity === 'error');
-    if (blockingIssues.length > 0) {
-      publishSnapshot({
-        nodeId,
-        status: 'error',
-        source: 'materialized',
-        inputs: executionContext.inputs,
-        outputs: {},
-        issues: validationIssues,
-        errorMessage: getPrimaryIssueMessage(validationIssues, 'Node validation failed.'),
-        timing: createTiming(startedAt, Date.now()),
-      });
-      resolving.delete(nodeId);
-      return;
-    }
-
-    const result = definition.executionContract?.execute(executionContext.context) ?? { state: 'success', outputs: {} };
-    const resolvedResult = result instanceof Promise ? await result : result;
-
-    publishSnapshot({
-      nodeId,
-      status: resolvedResult.state,
-      source: 'runtime',
-      inputs: executionContext.inputs,
-      outputs: (resolvedResult.outputs as NodeExecutionSnapshot['outputs']) ?? {},
-      issues: resolvedResult.issues,
-      errorMessage: resolvedResult.state === 'error' ? getPrimaryIssueMessage(resolvedResult.issues, 'Node execution failed.') : undefined,
-      timing: createTiming(startedAt, Date.now()),
+    const prepared = await prepareNodeExecution(nodeId, environment, {
+      resolvePassiveDependencies: true,
+      materializeNode: materializePassiveJsonNode,
+      resolving,
     });
+
+    if (!prepared) {
+      resolving.delete(nodeId);
+      return;
+    }
+
+    publishSnapshot(await executePreparedNode(prepared, 'runtime', { runId: environment.runId }));
 
     resolving.delete(nodeId);
   };
@@ -161,114 +96,65 @@ export function executeStudioFlow({
   const runNode = (nodeId: string, delay: number) => {
     schedule(() => {
       void (async () => {
-        const executionContext = await createExecutionContext(nodeId);
+        const prepared = await prepareNodeExecution(nodeId, environment, {
+          resolvePassiveDependencies: true,
+          materializeNode: materializePassiveJsonNode,
+        });
         const startedAt = Date.now();
-        const incoming = executionContext?.inputs ?? {};
+        const incoming = prepared?.inputs ?? {};
 
         onNodeStateChange(nodeId, 'running');
         publishSnapshot({
           nodeId,
           status: 'running',
-          source: 'runtime',
+          originKind: 'runtime',
+          phase: 'running',
+          runId,
           inputs: incoming,
           outputs: {},
-          timing: createTiming(startedAt),
+          timing: createExecutionTiming(startedAt),
         });
 
         schedule(() => {
           void (async () => {
-            if (!executionContext) {
+            if (!prepared) {
               onNodeStateChange(nodeId, 'error');
               publishSnapshot({
                 nodeId,
                 status: 'error',
-                source: 'runtime',
+                originKind: 'runtime',
+                phase: 'execute',
+                runId,
                 inputs: incoming,
                 outputs: {},
                 errorMessage: 'Node not found.',
-                timing: createTiming(startedAt, Date.now()),
+                timing: createExecutionTiming(startedAt, Date.now()),
               });
               return;
             }
-
-            const definition = globalNodeRegistry.get(executionContext.context.nodeType);
-            if (!definition) {
-              onNodeStateChange(nodeId, 'error');
-              publishSnapshot({
-                nodeId,
-                status: 'error',
-                source: 'runtime',
-                inputs: incoming,
-                outputs: {},
-                errorMessage: `Node definition not registered for type ${executionContext.context.nodeType}.`,
-                timing: createTiming(startedAt, Date.now()),
-              });
-              return;
-            }
-
-            const validationIssues = validateNodeExecution(executionContext.context, definition);
-            const blockingIssues = validationIssues.filter((issue) => issue.severity === 'error');
-            if (blockingIssues.length > 0) {
-              onNodeStateChange(nodeId, 'error');
-              publishSnapshot({
-                nodeId,
-                status: 'error',
-                source: 'runtime',
-                inputs: incoming,
-                outputs: {},
-                issues: validationIssues,
-                errorMessage: getPrimaryIssueMessage(validationIssues, 'Node validation failed.'),
-                timing: createTiming(startedAt, Date.now()),
-              });
-              return;
-            }
-
-            const finalizeResult = (result: DomainNodeExecutionResult) => {
-              if (result.state === 'error') {
-                onNodeStateChange(nodeId, 'error');
-                publishSnapshot({
-                  nodeId,
-                  status: 'error',
-                  source: 'runtime',
-                  inputs: incoming,
-                  outputs: (result.outputs as NodeExecutionSnapshot['outputs']) ?? {},
-                  issues: result.issues,
-                  errorMessage: getPrimaryIssueMessage(result.issues, 'Node execution failed.'),
-                  timing: createTiming(startedAt, Date.now()),
-                });
-                return;
-              }
-
-              onNodeStateChange(nodeId, 'success');
-              publishSnapshot({
-                nodeId,
-                status: 'success',
-                source: 'runtime',
-                inputs: incoming,
-                outputs: (result.outputs as NodeExecutionSnapshot['outputs']) ?? {},
-                issues: result.issues,
-                timing: createTiming(startedAt, Date.now()),
-              });
-
-              getOutgoingFlowEdges(nodeId, nodes, edges).forEach((edge) => {
-                runNode(edge.targetNodeId, 0);
-              });
-            };
 
             try {
-              const result = definition.executionContract?.execute(executionContext.context) ?? { state: 'success', outputs: {} };
-              const resolvedResult = result instanceof Promise ? await result : result;
-              finalizeResult(resolvedResult);
+              const snapshot = await executePreparedNode(prepared, 'runtime', { runId, phase: 'execute' });
+              onNodeStateChange(nodeId, snapshot.status === 'success' ? 'success' : 'error');
+              publishSnapshot(snapshot);
+
+              if (snapshot.status === 'success') {
+                getOutgoingFlowEdges(nodeId, nodes, edges).forEach((edge) => {
+                  runNode(edge.targetNodeId, 0);
+                });
+              }
             } catch (error) {
               onNodeStateChange(nodeId, 'error');
               publishSnapshot({
                 nodeId,
                 status: 'error',
-                source: 'runtime',
+                originKind: 'runtime',
+                phase: 'execute',
+                runId,
                 inputs: incoming,
                 outputs: {},
                 errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
-                timing: createTiming(startedAt, Date.now()),
+                timing: createExecutionTiming(startedAt, Date.now()),
               });
             }
           })();
@@ -279,11 +165,13 @@ export function executeStudioFlow({
         publishSnapshot({
           nodeId,
           status: 'error',
-          source: 'runtime',
+          originKind: 'runtime',
+          phase: 'execute',
+          runId,
           inputs: {},
           outputs: {},
           errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
-          timing: createTiming(startedAt, Date.now()),
+          timing: createExecutionTiming(startedAt, Date.now()),
         });
       });
     }, delay);

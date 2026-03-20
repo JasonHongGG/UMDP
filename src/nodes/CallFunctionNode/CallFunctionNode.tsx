@@ -9,10 +9,12 @@ import {
   INSTANCE_REFERENCE_SCHEMA,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
+import type { INodeDefinition, IPort, NodeExecutionOutputMap, StudioNodeRuntimeState } from '../../core/studio/types';
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from '../../domain/analysis/contracts';
-import { parseCallFunctionNodeDocumentState, type ValidationIssue, type WorkflowJsonValue } from '../../domain/studio/contracts';
+import { parseCallFunctionNodeDocumentState, type CallFunctionClassInfoQueryState, type ValidationIssue, type WorkflowJsonValue } from '../../domain/studio/contracts';
 import type { StableId } from '../../domain/contracts/shared-identity';
+import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
+import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { CallFunctionNodeCanvas } from './CallFunctionNodeCanvas';
 import { CallFunctionNodeEditor } from './CallFunctionNodeEditor';
 import {
@@ -74,6 +76,122 @@ function createFailureOutput(
   };
 }
 
+function buildCallFunctionQuerySnapshot(
+  node: import('../../core/studio/types').StudioNode<CallFunctionNodeData>,
+  context: StudioNodeQueryContext,
+  dependencySnapshots: Record<string, import('../../core/studio/types').NodeExecutionSnapshot>,
+): NodeExecutionOutputMap | null {
+  const incomingEdge = context.edges.find(
+    (edge) => edge.targetNodeId === node.id && edge.targetPortId === 'class-info-in' && edge.channel === 'data',
+  );
+  const classInfoPayload = incomingEdge
+    ? getClassInfoPayloadFromValue(dependencySnapshots[incomingEdge.sourceNodeId]?.outputs[incomingEdge.sourcePortId]?.payload)
+    : null;
+
+  if (!classInfoPayload) {
+    return null;
+  }
+
+  const method = findSelectedFunction(classInfoPayload, node.data.selectedMethodStableId);
+  if (!method) {
+    return null;
+  }
+
+  const resultPayload = {
+    method,
+    instanceAddress: classInfoPayload.instanceAddress,
+    arguments: node.data.arguments.map((entry) => ({
+      name: entry.name,
+      typeName: method.parameters.find((parameter) => parameter.name === entry.name)?.typeName ?? 'System.Object',
+      value: context.runtimeData.expressions.resolveSource(entry.source, dependencySnapshots) ?? null,
+    })),
+    success: false,
+    failureKind: 'none' as const,
+    error: null,
+    exception: null,
+    result: null,
+  };
+
+  return {
+    'result-out': createCallFunctionResultEnvelope(resultPayload),
+    'instance-ref-out': createCallFunctionInstanceReferenceEnvelope(resultPayload),
+  };
+}
+
+function buildCallFunctionClassInfoQueryState(
+  node: import('../../core/studio/types').StudioNode<CallFunctionNodeData>,
+  context: StudioNodeQueryContext,
+): CallFunctionClassInfoQueryState {
+  const incomingDataEdges = context.edges.filter((edge) => edge.targetNodeId === node.id && edge.channel === 'data');
+  const boundEdge = incomingDataEdges.find((edge) => edge.targetPortId === 'class-info-in');
+
+  if (!boundEdge) {
+    if (incomingDataEdges.length > 0) {
+      return {
+        kind: 'port-mismatch',
+        payload: null,
+        methods: [],
+        issues: [{
+          severity: 'warning',
+          code: 'query.call-function.port-mismatch',
+          message: 'Incoming data is connected, but not to the required Class Info input port.',
+          targetPortId: 'class-info-in',
+        }],
+      };
+    }
+
+    return {
+      kind: 'missing-edge',
+      payload: null,
+      methods: [],
+      issues: [{
+        severity: 'info',
+        code: 'query.call-function.missing-edge',
+        message: 'Connect a Class Info input first.',
+        targetPortId: 'class-info-in',
+      }],
+    };
+  }
+
+  const payload = getClassInfoPayloadFromValue(
+    materializeNodeQuerySnapshot(boundEdge.sourceNodeId, context, new Set<string>())?.outputs[boundEdge.sourcePortId]?.payload,
+  );
+  if (!payload) {
+    return {
+      kind: 'invalid-payload',
+      payload: null,
+      methods: [],
+      issues: [{
+        severity: 'error',
+        code: 'query.call-function.invalid-payload',
+        message: 'The upstream connection does not currently resolve to a valid Class Info payload.',
+        targetPortId: 'class-info-in',
+      }],
+    };
+  }
+
+  if (payload.functions.length === 0) {
+    return {
+      kind: 'no-functions',
+      payload,
+      methods: [],
+      issues: [{
+        severity: 'warning',
+        code: 'query.call-function.no-functions',
+        message: 'The upstream Class node does not export any functions.',
+        targetPortId: 'class-info-in',
+      }],
+    };
+  }
+
+  return {
+    kind: 'resolved',
+    payload,
+    methods: payload.functions,
+    issues: [],
+  };
+}
+
 const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
   manifest: {
     type: 'call-function',
@@ -118,6 +236,8 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
     bindings: Object.fromEntries(node.data.arguments.map((entry) => [entry.id, entry.source])),
     documentState: toCallFunctionDocumentState(node.data) as unknown as Record<string, unknown>,
   } satisfies StudioNodeRuntimeState),
+  buildQueryOutputs: buildCallFunctionQuerySnapshot,
+  buildQueryState: buildCallFunctionClassInfoQueryState,
   executionContract: {
     validate: ({ documentState, resolvedInputs }) => {
       const parsedState = parseCallFunctionNodeDocumentState(documentState);
@@ -236,7 +356,6 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       }
     },
   },
-  getExecutionPreview: () => undefined,
   CanvasComponent: CallFunctionNodeCanvas,
   EditComponent: CallFunctionNodeEditor,
 };

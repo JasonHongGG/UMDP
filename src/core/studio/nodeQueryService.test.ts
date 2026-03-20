@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createInputExpressionSource, createLiteralExpressionSource, resolveExpressionSource } from './expression';
-import { getCallFunctionClassInfoQueryState, getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, type StudioNodeQueryContext } from './nodeQueryService';
+import { getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, getNodeQuerySnapshot, getNodeQueryState, type StudioNodeQueryContext } from './nodeQueryService';
 import type { StudioRuntimeDataState } from './runtimeData';
 import type { StudioEdge, StudioNode } from './types';
 import {
@@ -11,6 +11,7 @@ import {
   type StableId,
 } from '../../domain/contracts/shared-identity';
 import type { ClassBinding, ClassInfoCatalog, StudioClassCatalogEntry } from '../../domain/studio/editor';
+import type { CallFunctionClassInfoQueryState } from '../../domain/studio/contracts';
 import { studioNodeCatalog } from '../../nodes';
 
 const IMAGE_ID = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
@@ -52,13 +53,17 @@ function createRuntimeData(): StudioRuntimeDataState {
 
   return {
     classes,
-    createNodeRequestFromBinding: () => null,
-    getClassInfoCatalogByBinding: (binding) => (binding?.classStableId === CLASS_ID ? CATALOG : null),
-    resolveStaticFieldAddress: () => null,
-    resolveClassMemberValues: () => undefined,
-    resolveExpressionSource: (source, snapshots) => resolveExpressionSource(source, { snapshots }),
-    ensureRuntimeOverlayLoaded: (_classStableId: StableId) => undefined,
-    ensureRuntimeInstanceFieldsLoaded: (_classStableId: StableId, _instanceAddress: string) => undefined,
+    classCatalog: {
+      createNodeRequest: () => null,
+      getByBinding: (binding) => (binding?.classStableId === CLASS_ID ? CATALOG : null),
+      resolveStaticFieldAddress: () => null,
+      resolveMemberValues: () => undefined,
+      ensureOverlayLoaded: (_classStableId: StableId) => undefined,
+      ensureInstanceFieldsLoaded: (_classStableId: StableId, _instanceAddress: string) => undefined,
+    },
+    expressions: {
+      resolveSource: (source, snapshots) => resolveExpressionSource(source, { snapshots }),
+    },
   };
 }
 
@@ -155,6 +160,18 @@ describe('nodeQueryService', () => {
     });
   });
 
+  it('assigns canonical materialized metadata to node-owned query snapshots', () => {
+    const snapshot = getNodeQuerySnapshot('call-1', createContext());
+
+    expect(snapshot).toMatchObject({
+      nodeId: 'call-1',
+      status: 'success',
+      originKind: 'materialized',
+      phase: 'materialize',
+    });
+    expect(typeof snapshot?.queryRevision).toBe('number');
+  });
+
   it('uses upstream instance references when materializing a downstream class node preview', () => {
     const context = createContext();
     context.nodes.push({
@@ -178,7 +195,8 @@ describe('nodeQueryService', () => {
     context.nodeSnapshots['call-1'] = {
       nodeId: 'call-1',
       status: 'success',
-      source: 'runtime',
+      originKind: 'runtime',
+      phase: 'execute',
       inputs: {},
       outputs: {
         'instance-ref-out': {
@@ -213,10 +231,10 @@ describe('nodeQueryService', () => {
       targetPortId: 'legacy-class-info',
     }];
 
-    const queryState = getCallFunctionClassInfoQueryState('call-1', context);
+    const queryState = getNodeQueryState<CallFunctionClassInfoQueryState>('call-1', context);
 
-    expect(queryState.payload).toBeNull();
-    expect(queryState.issues[0]).toMatchObject({
+    expect(queryState?.payload).toBeNull();
+    expect(queryState?.issues[0]).toMatchObject({
       code: 'query.call-function.port-mismatch',
       targetPortId: 'class-info-in',
     });

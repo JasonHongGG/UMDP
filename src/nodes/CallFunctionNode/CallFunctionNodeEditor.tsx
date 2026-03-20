@@ -9,7 +9,7 @@ import {
 import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { StableId } from '../../domain/contracts/shared-identity';
-import type { ExpressionSource } from '../../domain/studio/contracts';
+import type { CallFunctionClassInfoQueryState, ClassInfoFunctionPayload, ExpressionSource } from '../../domain/studio/contracts';
 import type { CallFunctionNodeData } from './callFunctionNodeModel';
 import {
   findSelectedFunction,
@@ -71,14 +71,24 @@ function ArgumentInput({
 
 export const CallFunctionNodeEditor: React.FC<INodeEditProps<CallFunctionNodeData>> = ({ nodeId, data, updateData }) => {
   const query = useStudioQuery();
-  const classInfoState = useMemo(() => query.getCallFunctionClassInfoQueryState(nodeId), [nodeId, query]);
-  const classInfoPayload = classInfoState.payload;
-  const availableMethods = classInfoState.methods;
+  const classInfoState = useMemo(
+    () => query.getNodeQueryState<CallFunctionClassInfoQueryState>(nodeId) ?? {
+      kind: 'missing-edge' as const,
+      payload: null,
+      methods: [],
+      issues: [],
+    },
+    [nodeId, query],
+  );
+  const classInfoPayload = classInfoState.kind === 'resolved' || classInfoState.kind === 'no-functions'
+    ? classInfoState.payload
+    : null;
+  const availableMethods = classInfoState.kind === 'resolved' ? classInfoState.methods : [];
   const selectedMethod = findSelectedFunction(classInfoPayload, data.selectedMethodStableId);
 
   useEffect(() => {
     if (!selectedMethod) {
-      if (data.arguments.length > 0 && data.selectedMethodStableId && !availableMethods.some((item) => item.runtimeRef.methodStableId === data.selectedMethodStableId)) {
+      if (data.arguments.length > 0 && data.selectedMethodStableId && !availableMethods.some((item: ClassInfoFunctionPayload) => item.runtimeRef.methodStableId === data.selectedMethodStableId)) {
         updateData({ selectedMethodStableId: null, arguments: [] });
       }
       return;
@@ -121,7 +131,7 @@ export const CallFunctionNodeEditor: React.FC<INodeEditProps<CallFunctionNodeDat
           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500"
         >
           <option value="">Select method</option>
-          {availableMethods.map((method) => (
+          {availableMethods.map((method: ClassInfoFunctionPayload) => (
             <option key={method.runtimeRef.methodStableId} value={method.runtimeRef.methodStableId}>
               {method.name} :: {method.signature}
             </option>

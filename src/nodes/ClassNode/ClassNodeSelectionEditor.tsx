@@ -153,11 +153,11 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
       return;
     }
 
-    runtimeData.ensureRuntimeOverlayLoaded(data.binding.classStableId);
+    runtimeData.classCatalog.ensureOverlayLoaded(data.binding.classStableId);
   }, [data.binding, runtimeData]);
 
   const resolvedCatalog = useMemo(
-    () => runtimeData.getClassInfoCatalogByBinding(data.binding) ?? createEmptyCatalog(),
+    () => runtimeData.classCatalog.getByBinding(data.binding) ?? createEmptyCatalog(),
     [data.binding, runtimeData],
   );
   const resolvedSelection = useMemo(

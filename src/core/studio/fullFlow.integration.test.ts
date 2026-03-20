@@ -151,7 +151,8 @@ describe('studio full flow integration', () => {
 
     expect(snapshots['call-1']).toMatchObject({
       status: 'success',
-      source: 'runtime',
+      originKind: 'runtime',
+      phase: 'execute',
       outputs: {
         'result-out': {
           payload: {

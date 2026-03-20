@@ -10,7 +10,7 @@ type ModalMode = 'nodes' | 'class-picker';
 export function AddNodeModal() {
   const { addNode } = useStudioGraph();
   const { isAddModalOpen, closeAddModal, addModalPosition, transform } = useStudioUi();
-  const { classes, createNodeRequestFromBinding } = useStudioRuntimeData();
+  const { classes, classCatalog } = useStudioRuntimeData();
   const [searchQuery, setSearchQuery] = useState('');
   const [mode, setMode] = useState<ModalMode>('nodes');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +72,7 @@ export function AddNodeModal() {
       return;
     }
 
-    const request = createNodeRequestFromBinding(binding, addModalPosition);
+    const request = classCatalog.createNodeRequest(binding, addModalPosition);
     if (!request) {
       return;
     }

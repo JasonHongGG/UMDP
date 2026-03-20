@@ -37,12 +37,17 @@ export type {
 } from './nodes';
 export type {
   NodeExecutionInputMap,
+  NodeExecutionOriginKind,
   NodeExecutionOutputMap,
+  NodeExecutionPhase,
   NodeExecutionSnapshot,
-  NodeExecutionSource,
   NodeExecutionStatus,
   NodeExecutionTiming,
 } from './execution';
+export type {
+  CallFunctionClassInfoQueryState,
+  NodeQueryIssue,
+} from './query';
 export {
   parseClassNodeDocumentState,
   parseCallFunctionNodeDocumentState,

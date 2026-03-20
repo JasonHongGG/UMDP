@@ -104,12 +104,12 @@ export const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = (
   }, [bindingSearchQuery, runtimeData.classes]);
 
   const handleBindClass = (classBinding: (typeof filteredBindings)[number]) => {
-    const request = runtimeData.createNodeRequestFromBinding(classBinding);
+    const request = runtimeData.classCatalog.createNodeRequest(classBinding);
     if (!request) {
       return;
     }
 
-    const catalog = runtimeData.getClassInfoCatalogByBinding(request.binding);
+    const catalog = runtimeData.classCatalog.getByBinding(request.binding);
     if (!catalog) {
       return;
     }

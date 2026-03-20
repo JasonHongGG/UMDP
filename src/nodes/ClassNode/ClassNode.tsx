@@ -11,17 +11,20 @@ import {
   type ResolvedMemberRuntimeValue,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
+import type { INodeDefinition, IPort, NodeExecutionOutputMap, StudioNodeRuntimeState } from '../../core/studio/types';
+import type { StudioNodeLifecycleContext } from '../../core/studio/nodeCapabilities';
 import type { RuntimeInstanceFieldSnapshot } from '../../domain/analysis/contracts';
 import type { ValidationIssue, WorkflowJsonValue } from '../../domain/studio/contracts';
 import { parseClassNodeDocumentState } from '../../domain/studio/contracts';
 import { reconcileClassInfoSelection } from '../../domain/studio/editor';
+import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { ClassNodeBindingEditor } from './ClassNodeBindingEditor';
 import { ClassNodeCanvas } from './ClassNodeCanvas';
 import { ClassNodeSelectionEditor } from './ClassNodeSelectionEditor';
 import {
   createClassNodeData,
   createClassNodeDocumentState,
+  createEmptyCatalog,
   fromClassBindingReference,
   fromClassExportSelection,
   hasResolvedExecutionValue,
@@ -63,6 +66,74 @@ function createResolvedMemberValueMap(
       },
     ]),
   );
+}
+
+function buildClassNodeQuerySnapshot(
+  node: import('../../core/studio/types').StudioNode<ClassNodeData>,
+  context: StudioNodeQueryContext,
+  dependencySnapshots: Record<string, import('../../core/studio/types').NodeExecutionSnapshot>,
+): NodeExecutionOutputMap | null {
+  const availableInfo = context.runtimeData.classCatalog.getByBinding(node.data.binding) ?? createEmptyCatalog();
+  const selection = reconcileClassInfoSelection(node.data.infoSelection, availableInfo);
+  const instanceInputEdge = context.edges.find(
+    (edge) => edge.targetNodeId === node.id && edge.targetPortId === 'instance-in' && edge.channel === 'data',
+  );
+  const connectedInstanceReference = instanceInputEdge
+    ? getInstanceReferencePayloadFromValue(dependencySnapshots[instanceInputEdge.sourceNodeId]?.outputs[instanceInputEdge.sourcePortId]?.payload)
+    : null;
+  const resolvedInstanceAddress = connectedInstanceReference?.address
+    ?? (node.data.instanceSource
+      ? context.runtimeData.expressions.resolveSource(node.data.instanceSource, dependencySnapshots)
+      : null);
+  const resolvedMemberValues = node.data.binding
+    ? context.runtimeData.classCatalog.resolveMemberValues(node.data.binding.classStableId, resolvedInstanceAddress ?? null)
+    : undefined;
+
+  return {
+    'info-out': createClassInfoEnvelope(
+      node.data.binding,
+      availableInfo,
+      selection,
+      resolvedInstanceAddress ?? null,
+      resolvedMemberValues,
+    ),
+  };
+}
+
+function observeClassNodeGraph(
+  node: import('../../core/studio/types').StudioNode<ClassNodeData>,
+  context: StudioNodeLifecycleContext,
+) {
+  if (!node.data.binding) {
+    return;
+  }
+
+  context.runtimeData.classCatalog.ensureOverlayLoaded(node.data.binding.classStableId);
+}
+
+function reconcileClassNodeData(
+  node: import('../../core/studio/types').StudioNode<ClassNodeData>,
+  context: StudioNodeLifecycleContext,
+): Partial<ClassNodeData> | null {
+  if (!node.data.binding) {
+    return null;
+  }
+
+  const resolvedCatalog = context.runtimeData.classCatalog.getByBinding(node.data.binding);
+  if (!resolvedCatalog) {
+    return null;
+  }
+
+  const reconciledSelection = reconcileClassInfoSelection(node.data.infoSelection, resolvedCatalog);
+  const selectionChanged =
+    reconciledSelection.members.length !== node.data.infoSelection.members.length
+    || reconciledSelection.statics.length !== node.data.infoSelection.statics.length
+    || reconciledSelection.functions.length !== node.data.infoSelection.functions.length
+    || reconciledSelection.members.some((item, index) => item !== node.data.infoSelection.members[index])
+    || reconciledSelection.statics.some((item, index) => item !== node.data.infoSelection.statics[index])
+    || reconciledSelection.functions.some((item, index) => item !== node.data.infoSelection.functions[index]);
+
+  return selectionChanged ? { infoSelection: reconciledSelection } : null;
 }
 
 const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
@@ -126,6 +197,9 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       },
     };
   },
+  observeGraphNode: observeClassNodeGraph,
+  reconcileData: reconcileClassNodeData,
+  buildQueryOutputs: buildClassNodeQuerySnapshot,
   executionContract: {
     validate: (context) => {
       const classDocumentState = parseClassNodeDocumentState(context.documentState);

@@ -6,16 +6,24 @@ import { resolveExpressionSource } from './expression';
 import type { ResolvedMemberRuntimeValue } from './contracts';
 import type { NodeExecutionSnapshot } from './types';
 
+export interface StudioRuntimeClassCatalogState {
+  createNodeRequest: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => PendingClassNodeRequest | null;
+  getByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
+  resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => string | null;
+  resolveMemberValues: (classStableId: string, instanceAddress: WorkflowJsonValue | null | undefined) => Record<string, ResolvedMemberRuntimeValue> | undefined;
+  ensureOverlayLoaded: (classStableId: StableId) => void;
+  ensureInstanceFieldsLoaded: (classStableId: StableId, instanceAddress: string) => void;
+  openInspector?: (binding: ClassBinding) => void;
+}
+
+export interface StudioRuntimeExpressionState {
+  resolveSource: (source: ExpressionSource, snapshots: Record<string, NodeExecutionSnapshot>) => WorkflowJsonValue | undefined;
+}
+
 export interface StudioRuntimeDataState {
   classes: StudioClassCatalogEntry[];
-  createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => PendingClassNodeRequest | null;
-  getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
-  resolveStaticFieldAddress: (classStableId: string, memberStableId: string) => string | null;
-  resolveClassMemberValues: (classStableId: string, instanceAddress: WorkflowJsonValue | null | undefined) => Record<string, ResolvedMemberRuntimeValue> | undefined;
-  resolveExpressionSource: (source: ExpressionSource, snapshots: Record<string, NodeExecutionSnapshot>) => WorkflowJsonValue | undefined;
-  ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
-  ensureRuntimeInstanceFieldsLoaded: (classStableId: StableId, instanceAddress: string) => void;
-  openInspectorForBinding?: (binding: ClassBinding) => void;
+  classCatalog: StudioRuntimeClassCatalogState;
+  expressions: StudioRuntimeExpressionState;
 }
 
 interface CreateStudioRuntimeDataStateOptions {
@@ -45,30 +53,34 @@ export function createStudioRuntimeDataState({
 
   return {
     classes,
-    createNodeRequestFromBinding: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => {
-      const catalog = classInfoCatalogByStableId[binding.classStableId];
-      if (!catalog) {
-        return null;
-      }
+    classCatalog: {
+      createNodeRequest: (binding: ClassBinding, suggestedPosition?: { x: number; y: number }) => {
+        const catalog = classInfoCatalogByStableId[binding.classStableId];
+        if (!catalog) {
+          return null;
+        }
 
-      return createPendingClassNodeRequest(binding, suggestedPosition);
-    },
-    getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => {
-      if (!binding) {
-        return null;
-      }
+        return createPendingClassNodeRequest(binding, suggestedPosition);
+      },
+      getByBinding: (binding: ClassBinding | null | undefined) => {
+        if (!binding) {
+          return null;
+        }
 
-      return classInfoCatalogByStableId[binding.classStableId] ?? null;
-    },
-    resolveStaticFieldAddress,
-    resolveClassMemberValues,
-    resolveExpressionSource: (source, snapshots) => resolveExpressionSource(source, {
-      snapshots,
+        return classInfoCatalogByStableId[binding.classStableId] ?? null;
+      },
       resolveStaticFieldAddress,
-    }) as WorkflowJsonValue | undefined,
-    ensureRuntimeOverlayLoaded,
-    ensureRuntimeInstanceFieldsLoaded,
-    openInspectorForBinding,
+      resolveMemberValues: resolveClassMemberValues,
+      ensureOverlayLoaded: ensureRuntimeOverlayLoaded,
+      ensureInstanceFieldsLoaded: ensureRuntimeInstanceFieldsLoaded,
+      openInspector: openInspectorForBinding,
+    },
+    expressions: {
+      resolveSource: (source, snapshots) => resolveExpressionSource(source, {
+        snapshots,
+        resolveStaticFieldAddress,
+      }) as WorkflowJsonValue | undefined,
+    },
   };
 }
 

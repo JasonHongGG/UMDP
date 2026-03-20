@@ -7,6 +7,7 @@ import { beginPointerExpressionDrag } from '../../../../core/studio/drag/express
 import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
+import type { CallFunctionClassInfoQueryState } from '../../../../domain/studio/contracts';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -134,20 +135,13 @@ export function EditNodeModal() {
       || nodeDef.manifest.displayName;
   }, [node, nodeDef]);
 
-  // Derived state for the left column
-  // Derived output previews
-  const simulatedOutputPreview = useMemo(() => {
-    if (!node || !nodeDef || !nodeDef.getExecutionPreview) return null;
-    try {
-      return nodeDef.getExecutionPreview(node.data);
-    } catch (err) {
-      console.warn('Failed to generate execution preview:', err);
-      return null;
-    }
-  }, [node, nodeDef]);
-
   const inputBindingStates = useMemo(() => node ? query.getNodeInputBindingStates(node.id) : [], [node, query]);
-  const callFunctionInputState = useMemo(() => node?.type === 'call-function' ? query.getCallFunctionClassInfoQueryState(node.id) : null, [node, query]);
+  const callFunctionInputState = useMemo(
+    () => node?.type === 'call-function'
+      ? query.getNodeQueryState<CallFunctionClassInfoQueryState>(node.id)
+      : null,
+    [node, query],
+  );
   const liveQuerySnapshot = useMemo(() => node ? query.getNodeSnapshot(node.id) : null, [node, query]);
 
   const liveOutputPreview = useMemo(() => {
@@ -155,8 +149,32 @@ export function EditNodeModal() {
       return null;
     }
 
-    return query.getNodeOutputPreview(node.id) ?? simulatedOutputPreview;
-  }, [node, query, simulatedOutputPreview]);
+    return query.getNodeOutputPreview(node.id);
+  }, [node, query]);
+
+  const snapshotOriginLabel = useMemo(() => {
+    if (!liveQuerySnapshot) {
+      return null;
+    }
+
+    return liveQuerySnapshot.originKind === 'runtime' ? 'runtime' : 'preview';
+  }, [liveQuerySnapshot]);
+
+  const snapshotPhaseLabel = useMemo(() => {
+    if (!liveQuerySnapshot) {
+      return null;
+    }
+
+    switch (liveQuerySnapshot.phase) {
+      case 'running':
+        return 'running';
+      case 'execute':
+        return 'executed';
+      case 'materialize':
+      default:
+        return 'materialized';
+    }
+  }, [liveQuerySnapshot]);
 
   const EditComponent = nodeDef?.EditComponent;
   const EditFooterComponent = nodeDef?.EditFooterComponent;
@@ -435,7 +453,10 @@ export function EditNodeModal() {
                 {liveQuerySnapshot ? (
                   <div className="ml-auto flex items-center gap-2">
                     <span className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900/80 px-1.5 py-0.5 rounded">
-                      {liveQuerySnapshot.source}
+                      {snapshotOriginLabel}
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900/80 px-1.5 py-0.5 rounded">
+                      {snapshotPhaseLabel}
                     </span>
                     <span className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900/80 px-1.5 py-0.5 rounded">
                       {liveQuerySnapshot.status}

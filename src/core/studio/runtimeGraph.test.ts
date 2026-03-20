@@ -118,7 +118,8 @@ describe('runtimeGraph helpers', () => {
       'source-1': {
         nodeId: 'source-1',
         status: 'success' as const,
-        source: 'runtime' as const,
+        originKind: 'runtime' as const,
+        phase: 'execute' as const,
         inputs: {},
         outputs: {
           'json-out': createEnvelope(GENERIC_JSON_SCHEMA, { ok: true }),

@@ -31,7 +31,6 @@ export type {
   NodeExecutionInputMap,
   NodeExecutionOutputMap,
   NodeExecutionSnapshot,
-  NodeExecutionSource,
   NodeExecutionStatus,
   NodeExecutionTiming,
   ParameterDefinitionPayload,
@@ -116,7 +115,23 @@ export interface INodeDefinition<T extends BaseNodeData = BaseNodeData> {
   dehydrateData?: (data: T, instance: import('../../domain/studio/contracts').NodeInstance) => StudioNodeRuntimeState;
   createRuntimeState?: (node: StudioNode<T>) => StudioNodeRuntimeState;
   executionContract?: NodeExecutionContract;
-  getExecutionPreview?: (data: T) => NodeExecutionOutputMap | undefined;
+  observeGraphNode?: (
+    node: StudioNode<T>,
+    context: import('./nodeCapabilities').StudioNodeLifecycleContext,
+  ) => void;
+  reconcileData?: (
+    node: StudioNode<T>,
+    context: import('./nodeCapabilities').StudioNodeLifecycleContext,
+  ) => Partial<T> | null;
+  buildQueryOutputs?: (
+    node: StudioNode<T>,
+    context: import('./queryTypes').StudioNodeQueryContext,
+    dependencySnapshots: Record<string, NodeExecutionSnapshot>,
+  ) => NodeExecutionOutputMap | null;
+  buildQueryState?: (
+    node: StudioNode<T>,
+    context: import('./queryTypes').StudioNodeQueryContext,
+  ) => unknown;
   resolveDisplayName?: (data: T) => string | undefined;
 
   CanvasComponent: React.ComponentType<INodeComponentProps<T>>;

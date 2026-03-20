@@ -1,24 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphDocument } from '../../domain/studio/contracts';
-import {
-  hasSameClassInfoSelection,
-  reconcileClassInfoSelection,
-  type ClassBinding,
-  type ClassInfoSelection,
-} from '../../domain/studio/editor';
 import { validateConnection } from './connectionPolicy';
 import { executeStudioFlow } from './executionEngine';
 import { ExpressionDragProvider } from './drag/ExpressionDragContext';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
+import { globalNodeRegistry } from './NodeRegistry';
 import {
-  getCallFunctionClassInfoQueryState,
   getNodeInputBindingStates,
   getNodeOutputPreview,
   getNodeQuerySnapshot,
-  type CallFunctionClassInfoQueryState,
+  getNodeQueryState,
   type InputPortBindingState,
-  type StudioNodeQueryContext,
 } from './nodeQueryService';
+import type { StudioNodeQueryContext } from './queryTypes';
 import { StudioRuntimeDataProvider, type StudioRuntimeDataState } from './runtimeData';
 import type { ConnectPortsOptions, DraftConnection, NodeExecutionOutputMap, NodeExecutionSnapshot, NodeExecutionState, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
 import { getConnectionChannelForPortType } from './types';
@@ -61,7 +55,7 @@ export interface StudioQueryState {
   getNodeSnapshot: (nodeId: string) => NodeExecutionSnapshot | null;
   getNodeOutputPreview: (nodeId: string) => NodeExecutionOutputMap | null;
   getNodeInputBindingStates: (nodeId: string) => InputPortBindingState[];
-  getCallFunctionClassInfoQueryState: (nodeId: string) => CallFunctionClassInfoQueryState;
+  getNodeQueryState: <T>(nodeId: string) => T | null;
 }
 
 interface UseStudioUiStateOptions {
@@ -236,8 +230,8 @@ function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edg
       startNodeId,
       nodes,
       edges,
-      resolveStaticFieldAddress: runtimeData.resolveStaticFieldAddress,
-      getClassInfoCatalogByBinding: runtimeData.getClassInfoCatalogByBinding,
+      resolveStaticFieldAddress: runtimeData.classCatalog.resolveStaticFieldAddress,
+      getClassInfoCatalogByBinding: runtimeData.classCatalog.getByBinding,
       onReset: () => {
         setNodeStates({});
         setNodeSnapshots({});
@@ -276,7 +270,7 @@ function useStudioQueryState(
     getNodeSnapshot: (nodeId: string) => getNodeQuerySnapshot(nodeId, context),
     getNodeOutputPreview: (nodeId: string) => getNodeOutputPreview(nodeId, context),
     getNodeInputBindingStates: (nodeId: string) => getNodeInputBindingStates(nodeId, context),
-    getCallFunctionClassInfoQueryState: (nodeId: string) => getCallFunctionClassInfoQueryState(nodeId, context),
+    getNodeQueryState: <T,>(nodeId: string) => getNodeQueryState<T>(nodeId, context),
   }), [context]);
 }
 
@@ -334,51 +328,26 @@ export function StudioProvider({ children, runtimeData }: { children: React.Reac
 
   useEffect(() => {
     for (const node of nodes) {
-      if (node.type !== 'class-ref') {
-        continue;
-      }
-
-      const data = node.data as Partial<{ binding: ClassBinding | null }>;
-      if (!data.binding) {
-        continue;
-      }
-
-      runtimeData.ensureRuntimeOverlayLoaded(data.binding.classStableId);
+      const nodeDef = globalNodeRegistry.get(node.type);
+      nodeDef?.observeGraphNode?.(node as never, { nodes, edges, runtimeData });
     }
-  }, [nodes, runtimeData]);
+  }, [edges, nodes, runtimeData]);
 
   useEffect(() => {
     for (const node of nodes) {
-      if (node.type !== 'class-ref') {
+      const nodeDef = globalNodeRegistry.get(node.type);
+      if (!nodeDef?.reconcileData) {
         continue;
       }
 
-      const data = node.data as Partial<{
-        binding: ClassBinding | null;
-        infoSelection: ClassInfoSelection;
-      }>;
-
-      if (!data.binding || !data.infoSelection) {
+      const patch = nodeDef.reconcileData(node as never, { nodes, edges, runtimeData });
+      if (!patch || Object.keys(patch).length === 0) {
         continue;
       }
 
-      const resolvedCatalog = runtimeData.getClassInfoCatalogByBinding(data.binding);
-      if (!resolvedCatalog) {
-        continue;
-      }
-
-      const reconciledSelection = reconcileClassInfoSelection(data.infoSelection, resolvedCatalog);
-      const selectionChanged = !hasSameClassInfoSelection(data.infoSelection, reconciledSelection);
-
-      if (!selectionChanged) {
-        continue;
-      }
-
-      graphStore.updateNodeData(node.id, {
-        infoSelection: reconciledSelection,
-      });
+      graphStore.updateNodeData(node.id, patch);
     }
-  }, [graphStore, nodes, runtimeData]);
+  }, [edges, graphStore, nodes, runtimeData]);
 
   return (
     <StudioRuntimeDataProvider value={runtimeData}>

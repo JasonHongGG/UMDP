@@ -1,12 +1,13 @@
 import React from 'react';
 import { Type } from 'lucide-react';
-import { BaseNodeData, INodeComponentProps, INodeDefinition, IPort, ParameterValueType } from '../../core/studio/types';
+import { BaseNodeData, INodeComponentProps, INodeDefinition, IPort, NodeExecutionOutputMap, ParameterValueType } from '../../core/studio/types';
 import { createJsonPort, createParameterDefinitionsEnvelope, PARAMETER_DEFINITIONS_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { Port } from '../../components/studio/canvas/Port';
 import { createLiteralExpressionSource, getExpressionSourceDisplayValue } from '../../core/studio/expression';
 import { parseParameterNodeDocumentState, type ExpressionSource, type ParameterNodeDocumentState } from '../../domain/studio/contracts';
 import { createStableId } from '../../domain/contracts/shared-identity';
+import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 
 interface ParameterDefinitionEntry {
   id: string;
@@ -86,6 +87,15 @@ function hydrateParameterEntries(symbols: unknown): ParameterDefinitionEntry[] {
   });
 
   return entries.length > 0 ? entries : [createDefaultParameter()];
+}
+
+function buildParametersNodeQuerySnapshot(
+  node: import('../../core/studio/types').StudioNode<ParametersNodeData>,
+  _context: StudioNodeQueryContext,
+): NodeExecutionOutputMap {
+  return {
+    'params-out': createParameterDefinitionsEnvelope(buildParameterPayload(node.data.parameters)),
+  };
 }
 
 const ParametersNodeCanvas: React.FC<INodeComponentProps<ParametersNodeData>> = ({ id, data, outputs }) => {
@@ -205,6 +215,7 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
       })),
     } satisfies ParameterNodeDocumentState,
   }),
+  buildQueryOutputs: buildParametersNodeQuerySnapshot,
   executionContract: {
     validate: () => [],
     execute: ({ documentState }) => {
@@ -217,9 +228,6 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
       };
     },
   },
-  getExecutionPreview: (data: ParametersNodeData) => ({
-    'params-out': createParameterDefinitionsEnvelope(buildParameterPayload(data.parameters)),
-  }),
   CanvasComponent: ParametersNodeCanvas,
 };
 
