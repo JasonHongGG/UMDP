@@ -1,9 +1,10 @@
 import { createLiteralExpressionSource } from '../../core/studio/expression';
-import { createCallFunctionResultEnvelope } from '../../core/studio/contracts';
+import { createCallFunctionResultEnvelope, createInstanceReferenceEnvelope } from '../../core/studio/contracts';
 import type {
   CallFunctionResultPayload,
   ClassInfoFunctionPayload,
   ClassInfoPayload,
+  InstanceReferencePayload,
   WorkflowJsonValue,
 } from '../../domain/studio/contracts';
 import type {
@@ -211,6 +212,21 @@ export function toCallFunctionResultPayload(
       objectAddress: result.result.objectAddress,
     } : null,
   };
+}
+
+export function toCallFunctionInstanceReferencePayload(
+  resultPayload: CallFunctionResultPayload,
+): InstanceReferencePayload {
+  return {
+    address: resultPayload.result?.objectAddress ?? null,
+    sourceKind: 'call-function-result',
+    runtimeTypeHint: resultPayload.method?.returnType ?? null,
+    displayName: resultPayload.method ? `${resultPayload.method.name} result` : 'Call Function result',
+  };
+}
+
+export function createCallFunctionInstanceReferenceEnvelope(resultPayload: CallFunctionResultPayload) {
+  return createInstanceReferenceEnvelope(toCallFunctionInstanceReferencePayload(resultPayload));
 }
 
 export function toCallFunctionArgumentBindings(argumentsList: CallFunctionArgumentEntry[]): CallFunctionArgumentBinding[] {

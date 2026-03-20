@@ -18,3 +18,4 @@ export type {
   RuntimeResolvedFieldDescriptor,
   StaticFieldDescriptor,
 } from './domain/analysis/contracts/canonical';
+export type { InstanceReferencePayload, InstanceReferenceSourceKind } from './domain/studio/contracts';

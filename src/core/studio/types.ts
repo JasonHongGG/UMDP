@@ -25,6 +25,8 @@ export type {
   ClassInfoFunctionParameterPayload,
   ClassInfoFunctionPayload,
   ClassInfoPayload,
+  InstanceReferencePayload,
+  InstanceReferenceSourceKind,
   JsonSchemaReference,
   NodeExecutionInputMap,
   NodeExecutionOutputMap,

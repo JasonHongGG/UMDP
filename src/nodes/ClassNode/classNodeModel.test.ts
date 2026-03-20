@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import ClassNodeDef from './ClassNode';
 import { createClassStableId, createFieldStableId, createImageStableId, createMethodStableId } from '../../domain/contracts/shared-identity';
-import { createLiteralExpressionSource } from '../../core/studio/expression';
+import { createInputExpressionSource, createLiteralExpressionSource } from '../../core/studio/expression';
 import type { NodeInstance } from '../../domain/studio/contracts';
 import { parseClassNodeDataFromDocumentState } from './classNodeModel';
 
@@ -157,5 +157,61 @@ describe('classNodeModel', () => {
         target: 'instance-in',
       },
     ]);
+  });
+
+  it('accepts canonical instance references from the instance input port', () => {
+    const issues = ClassNodeDef.executionContract?.validate({
+      documentId: 'doc-1',
+      nodeId: 'class-1',
+      nodeType: 'class-ref',
+      parameters: {},
+      bindings: {},
+      documentState: {
+        classBinding: {
+          imageStableId: IMAGE_A,
+          classStableId: CLASS_PLAYER,
+          fullName: 'Gameplay.PlayerController',
+          name: 'PlayerController',
+          namespace: 'Gameplay',
+          imageName: 'Assembly-CSharp.dll',
+        },
+        exportSelection: {
+          memberStableIds: [MEMBER_HEALTH],
+          staticStableIds: [],
+          methodStableIds: [],
+        },
+      },
+      inputBindings: {
+        'instance-in': [createInputExpressionSource('call-1', 'instance-ref-out', [], 'call-1.instance-ref-out')],
+      },
+      resolvedBindings: {},
+      resolvedInputs: {
+        'instance-in': [{
+          address: '0x1234',
+          sourceKind: 'call-function-result',
+          runtimeTypeHint: 'Gameplay.PlayerController',
+          displayName: 'CreatePlayer result',
+        }],
+      },
+      controlInputs: [],
+      getClassInfoCatalogByBinding: () => ({
+        members: [{
+          id: MEMBER_HEALTH,
+          label: 'health',
+          name: 'health',
+          legacyFieldName: 'health',
+          typeName: 'System.Int32',
+          offset: '0x10',
+          address: null,
+          value: null,
+          isStatic: false,
+          tags: [],
+        }],
+        statics: [],
+        functions: [],
+      }),
+    });
+
+    expect(issues).toEqual([]);
   });
 });

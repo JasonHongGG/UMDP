@@ -74,6 +74,15 @@ export interface ClassInfoPayload {
   functions: ClassInfoFunctionPayload[];
 }
 
+export type InstanceReferenceSourceKind = 'manual' | 'call-function-result' | 'runtime-object';
+
+export interface InstanceReferencePayload {
+  address: string | null;
+  sourceKind: InstanceReferenceSourceKind;
+  runtimeTypeHint: string | null;
+  displayName: string | null;
+}
+
 export interface CallFunctionArgumentPayload {
   name: string;
   typeName: string;

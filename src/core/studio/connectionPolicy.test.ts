@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { validateConnection } from './connectionPolicy';
-import { GENERIC_JSON_SCHEMA, PARAMETER_DEFINITIONS_SCHEMA } from './contracts';
+import { GENERIC_JSON_SCHEMA, INSTANCE_REFERENCE_SCHEMA } from './contracts';
 
 function registerConnectionTestNodes() {
   initializeStudioNodeRegistry([
@@ -33,7 +33,7 @@ function registerConnectionTestNodes() {
         category: 'Test',
         inputs: [
           { key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' },
-          { key: 'instance-in', displayName: 'Instance In', direction: 'input', channel: 'data', cardinality: 'single', dataType: PARAMETER_DEFINITIONS_SCHEMA.id },
+          { key: 'instance-in', displayName: 'Instance In', direction: 'input', channel: 'data', cardinality: 'single', dataType: INSTANCE_REFERENCE_SCHEMA.id },
         ],
         outputs: [],
         parameters: [],

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
-import { createLiteralExpressionSource, resolveExpressionSource } from './expression';
+import { createInputExpressionSource, createLiteralExpressionSource, resolveExpressionSource } from './expression';
 import { getCallFunctionClassInfoQueryState, getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, type StudioNodeQueryContext } from './nodeQueryService';
 import type { StudioRuntimeDataState } from './runtimeData';
 import type { StudioEdge, StudioNode } from './types';
@@ -148,6 +148,57 @@ describe('nodeQueryService', () => {
       ],
       success: false,
       result: null,
+    });
+    expect(outputs?.['instance-ref-out']?.payload).toMatchObject({
+      address: null,
+      sourceKind: 'call-function-result',
+    });
+  });
+
+  it('uses upstream instance references when materializing a downstream class node preview', () => {
+    const context = createContext();
+    context.nodes.push({
+      id: 'class-2',
+      type: 'class-ref',
+      position: { x: 480, y: 0 },
+      data: {
+        binding: BINDING,
+        instanceSource: null,
+        infoSelection: { members: [], statics: [], functions: [METHOD_MOVE] },
+      },
+    });
+    context.edges.push({
+      id: 'edge-call-class-instance',
+      channel: 'data',
+      sourceNodeId: 'call-1',
+      sourcePortId: 'instance-ref-out',
+      targetNodeId: 'class-2',
+      targetPortId: 'instance-in',
+    });
+    context.nodeSnapshots['call-1'] = {
+      nodeId: 'call-1',
+      status: 'success',
+      source: 'runtime',
+      inputs: {},
+      outputs: {
+        'instance-ref-out': {
+          kind: 'json',
+          schema: { id: 'studio.instance.reference', version: 1 },
+          payload: {
+            address: '244190ab960',
+            sourceKind: 'call-function-result',
+            runtimeTypeHint: 'Gameplay.PlayerController',
+            displayName: 'CreatePlayer result',
+          },
+        },
+      },
+      timing: {},
+    };
+
+    const outputs = getNodeOutputPreview('class-2', context);
+
+    expect(outputs?.['info-out']?.payload).toMatchObject({
+      instanceAddress: '0x244190AB960',
     });
   });
 

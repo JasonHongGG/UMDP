@@ -6,6 +6,7 @@ import {
   createCallFunctionResultEnvelope,
   createFlowPort,
   createJsonPort,
+  INSTANCE_REFERENCE_SCHEMA,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
@@ -16,6 +17,7 @@ import { CallFunctionNodeCanvas } from './CallFunctionNodeCanvas';
 import { CallFunctionNodeEditor } from './CallFunctionNodeEditor';
 import {
   createCallFunctionNodeData,
+  createCallFunctionInstanceReferenceEnvelope,
   findSelectedFunction,
   getClassInfoPayloadFromValue,
   parseCallFunctionNodeDataFromDocumentState,
@@ -36,6 +38,7 @@ const CALL_FUNCTION_INPUTS: IPort[] = [
 const CALL_FUNCTION_OUTPUTS: IPort[] = [
   createFlowPort('flow-out', 'Flow Out'),
   createJsonPort('result-out', 'Result', CALL_FUNCTION_RESULT_SCHEMA, 'Method invocation result wrapped in a studio JSON envelope.'),
+  createJsonPort('instance-ref-out', 'Instance Ref', INSTANCE_REFERENCE_SCHEMA, 'Projected instance reference from an object return value.'),
 ];
 
 function createValidationError(message: string, target?: string): ValidationIssue {
@@ -54,17 +57,20 @@ function createFailureOutput(
   method: ReturnType<typeof findSelectedFunction>,
   failureKind: 'validation' | 'transport',
 ) {
+  const resultPayload = {
+    method,
+    instanceAddress,
+    arguments: argumentsPayload,
+    success: false,
+    failureKind,
+    error: message,
+    exception: null,
+    result: null,
+  };
+
   return {
-    'result-out': createCallFunctionResultEnvelope({
-      method,
-      instanceAddress,
-      arguments: argumentsPayload,
-      success: false,
-      failureKind,
-      error: message,
-      exception: null,
-      result: null,
-    }),
+    'result-out': createCallFunctionResultEnvelope(resultPayload),
+    'instance-ref-out': createCallFunctionInstanceReferenceEnvelope(resultPayload),
   };
 }
 
@@ -203,12 +209,12 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
 
       try {
         const result = await invoke<RuntimeMethodInvokeResult>('invoke_runtime_method', { request });
+        const resultPayload = toCallFunctionResultPayload(method, classInfo.instanceAddress, resolvedArgumentValues, result);
         return {
           state: result.success ? 'success' : 'error',
           outputs: {
-            'result-out': createCallFunctionResultEnvelope(
-              toCallFunctionResultPayload(method, classInfo.instanceAddress, resolvedArgumentValues, result),
-            ),
+            'result-out': createCallFunctionResultEnvelope(resultPayload),
+            'instance-ref-out': createCallFunctionInstanceReferenceEnvelope(resultPayload),
           },
           issues: result.success ? undefined : [{
             severity: 'warning',

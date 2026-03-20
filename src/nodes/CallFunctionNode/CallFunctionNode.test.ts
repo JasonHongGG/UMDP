@@ -80,6 +80,12 @@ describe('CallFunctionNode', () => {
         error: 'Call Function node requires an incoming Class Info payload.',
       },
     });
+    expect(result.outputs?.['instance-ref-out']).toMatchObject({
+      payload: {
+        address: null,
+        sourceKind: 'call-function-result',
+      },
+    });
   });
 
   it('emits a structured failure result when the tauri invoke call throws', async () => {
@@ -100,6 +106,47 @@ describe('CallFunctionNode', () => {
         success: false,
         error: 'Failed to invoke method: Error: bridge offline',
         arguments: [{ name: 'x', value: 1.5 }],
+      },
+    });
+    expect(result.outputs?.['instance-ref-out']).toMatchObject({
+      payload: {
+        address: null,
+        sourceKind: 'call-function-result',
+      },
+    });
+  });
+
+  it('projects object return addresses to a dedicated instance-ref output', async () => {
+    invokeMock.mockResolvedValueOnce({
+      classStableId: CLASS_ID,
+      methodStableId: METHOD_ID,
+      methodName: 'Move',
+      methodSignature: 'System.Void (System.Single x)',
+      returnType: 'Gameplay.WorldData',
+      success: true,
+      failureKind: 'none',
+      error: null,
+      exception: null,
+      result: {
+        kind: 'object',
+        value: null,
+        objectAddress: '244190ab960',
+      },
+    });
+
+    const result = await CallFunctionNodeDef.executionContract!.execute(createExecutionContext({
+      resolvedBindings: {
+        [ARGUMENT_ID]: 1.5,
+      },
+    }));
+
+    expect(result.state).toBe('success');
+    expect(result.outputs?.['instance-ref-out']).toMatchObject({
+      payload: {
+        address: '0x244190AB960',
+        sourceKind: 'call-function-result',
+        runtimeTypeHint: 'System.Void',
+        displayName: 'Move result',
       },
     });
   });

@@ -1,11 +1,16 @@
-import { createCallFunctionResultEnvelope, createClassInfoEnvelope } from './contracts';
+import { createCallFunctionResultEnvelope, createClassInfoEnvelope, getInstanceReferencePayloadFromValue } from './contracts';
 import { getNodePortsByDirection, globalNodeRegistry } from './NodeRegistry';
 import type { StudioRuntimeDataState } from './runtimeData';
 import type { BaseNodeData, IPort, NodeExecutionOutputMap, NodeExecutionSnapshot, StudioEdge, StudioNode } from './types';
 import type { ClassInfoPayload, ExpressionSource, WorkflowJsonValue } from '../../domain/studio/contracts';
 import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoCatalog, type ClassInfoSelection } from '../../domain/studio/editor';
 import { createEmptyCatalog } from '../../nodes/ClassNode/classNodeModel';
-import { findSelectedFunction, getClassInfoPayloadFromValue, type CallFunctionNodeData } from '../../nodes/CallFunctionNode/callFunctionNodeModel';
+import {
+  createCallFunctionInstanceReferenceEnvelope,
+  findSelectedFunction,
+  getClassInfoPayloadFromValue,
+  type CallFunctionNodeData,
+} from '../../nodes/CallFunctionNode/callFunctionNodeModel';
 
 interface ClassNodePreviewState {
   binding: ClassBinding | null;
@@ -57,6 +62,8 @@ function getIncomingEdges(nodeId: string, edges: StudioEdge[]) {
 
 function createClassNodePreviewState(
   nodeData: BaseNodeData,
+  nodeId: string,
+  edges: StudioEdge[],
   runtimeData: StudioRuntimeDataState,
   snapshots: Record<string, NodeExecutionSnapshot>,
 ): ClassNodePreviewState {
@@ -68,9 +75,14 @@ function createClassNodePreviewState(
 
   const availableInfo = runtimeData.getClassInfoCatalogByBinding(classData.binding) ?? createEmptyCatalog();
   const infoSelection = classData.infoSelection ?? { members: [], statics: [], functions: [] };
-  const resolvedInstanceAddress = classData.instanceSource
-    ? runtimeData.resolveExpressionSource(classData.instanceSource, snapshots)
+  const instanceInputEdge = edges.find((edge) => edge.targetNodeId === nodeId && edge.targetPortId === 'instance-in' && edge.channel === 'data');
+  const connectedInstanceReference = instanceInputEdge
+    ? getInstanceReferencePayloadFromValue(snapshots[instanceInputEdge.sourceNodeId]?.outputs[instanceInputEdge.sourcePortId]?.payload)
     : null;
+  const resolvedInstanceAddress = connectedInstanceReference?.address
+    ?? (classData.instanceSource
+      ? runtimeData.resolveExpressionSource(classData.instanceSource, snapshots)
+      : null);
 
   return {
     binding: classData.binding ?? null,
@@ -118,7 +130,7 @@ function buildPreviewSnapshot(
   let outputs: NodeExecutionOutputMap | undefined;
 
   if (node.type === 'class-ref') {
-    const previewState = createClassNodePreviewState(node.data, context.runtimeData, snapshots);
+    const previewState = createClassNodePreviewState(node.data, node.id, context.edges, context.runtimeData, snapshots);
     const resolvedMemberValues = previewState.binding
       ? context.runtimeData.resolveClassMemberValues(previewState.binding.classStableId, previewState.resolvedInstanceAddress ?? null)
       : undefined;
@@ -144,6 +156,20 @@ function buildPreviewSnapshot(
       if (method) {
         outputs = {
           'result-out': createCallFunctionResultEnvelope({
+            method,
+            instanceAddress: classInfoPayload.instanceAddress,
+            arguments: callFunctionData.arguments.map((entry) => ({
+              name: entry.name,
+              typeName: method.parameters.find((parameter) => parameter.name === entry.name)?.typeName ?? 'System.Object',
+              value: context.runtimeData.resolveExpressionSource(entry.source, snapshots) ?? null,
+            })),
+            success: false,
+            failureKind: 'none',
+            error: null,
+            exception: null,
+            result: null,
+          }),
+          'instance-ref-out': createCallFunctionInstanceReferenceEnvelope({
             method,
             instanceAddress: classInfoPayload.instanceAddress,
             arguments: callFunctionData.arguments.map((entry) => ({

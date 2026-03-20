@@ -58,6 +58,8 @@ export type {
   ClassInfoFunctionParameterPayload,
   ClassInfoFunctionPayload,
   ClassInfoPayload,
+  InstanceReferencePayload,
+  InstanceReferenceSourceKind,
   JsonSchemaReference,
   ParameterDefinitionPayload,
   ParameterDefinitionValue,

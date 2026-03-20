@@ -3,6 +3,7 @@ import {
   ClassInfoFieldPayload,
   ClassInfoFunctionPayload,
   ClassInfoPayload,
+  InstanceReferencePayload,
   JsonSchemaReference,
   ParameterDefinitionPayload,
   WorkflowJsonEnvelope,
@@ -196,6 +197,32 @@ export function createParameterDefinitionsEnvelope(parameters: ParameterDefiniti
   return createEnvelope(PARAMETER_DEFINITIONS_SCHEMA, parameters, {
     source: 'parameters-node',
   });
+}
+
+export function createInstanceReferenceEnvelope(payload: InstanceReferencePayload): WorkflowJsonEnvelope<InstanceReferencePayload> {
+  return createEnvelope(INSTANCE_REFERENCE_SCHEMA, {
+    ...payload,
+    address: typeof payload.address === 'string' ? formatHexAddress(payload.address) : null,
+  }, {
+    source: 'instance-reference',
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
+
+export function getInstanceReferencePayloadFromValue(value: unknown): InstanceReferencePayload | null {
+  if (!isRecord(value) || !('address' in value) || !('sourceKind' in value)) {
+    return null;
+  }
+
+  return {
+    address: typeof value.address === 'string' ? formatHexAddress(value.address) : null,
+    sourceKind: value.sourceKind as InstanceReferencePayload['sourceKind'],
+    runtimeTypeHint: typeof value.runtimeTypeHint === 'string' ? value.runtimeTypeHint : null,
+    displayName: typeof value.displayName === 'string' ? value.displayName : null,
+  };
 }
 
 export function createCallFunctionResultEnvelope(payload: CallFunctionResultPayload): WorkflowJsonEnvelope<CallFunctionResultPayload> {

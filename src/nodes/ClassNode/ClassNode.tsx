@@ -3,7 +3,8 @@ import { Box } from 'lucide-react';
 import { formatHexAddress } from '../../core/addressFormat';
 import {
   CLASS_INFO_SCHEMA,
-  PARAMETER_DEFINITIONS_SCHEMA,
+  getInstanceReferencePayloadFromValue,
+  INSTANCE_REFERENCE_SCHEMA,
   createClassInfoEnvelope,
   createFlowPort,
   createJsonPort,
@@ -40,8 +41,8 @@ const CLASS_NODE_INPUTS: IPort[] = [
   createJsonPort(
     'instance-in',
     'Instance Ref',
-    PARAMETER_DEFINITIONS_SCHEMA,
-    'Parameter definitions used to supply instance reference data to this class node.',
+    INSTANCE_REFERENCE_SCHEMA,
+    'Canonical instance reference used to supply instance address data to this class node.',
   ),
 ];
 
@@ -133,9 +134,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       const selection = availableInfo
         ? reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo)
         : fromClassExportSelection(classDocumentState.exportSelection);
-      const hasIncomingInstance =
-        (context.inputBindings['instance-in']?.length ?? 0) > 0 ||
-        (context.resolvedInputs['instance-in']?.length ?? 0) > 0;
+      const hasIncomingInstance = typeof getInstanceReferencePayloadFromValue(context.resolvedInputs['instance-in']?.[0])?.address === 'string';
       const hasOwnInstanceBinding = hasResolvedExecutionValue(context.resolvedBindings.instanceSource);
       const requiresInstance = selection.members.length > 0;
 
@@ -153,7 +152,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
 
       return [];
     },
-    execute: async ({ documentState, resolvedBindings, getClassInfoCatalogByBinding }) => {
+    execute: async ({ documentState, resolvedBindings, resolvedInputs, getClassInfoCatalogByBinding }) => {
       const classDocumentState = parseClassNodeDocumentState(documentState);
       const binding = fromClassBindingReference(classDocumentState.classBinding);
       const availableInfo = getClassInfoCatalogByBinding(binding);
@@ -178,11 +177,29 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
         fromClassExportSelection(classDocumentState.exportSelection),
         availableInfo,
       );
-      const resolvedInstanceAddress = (resolvedBindings.instanceSource as WorkflowJsonValue | undefined) ?? null;
+      const inputInstanceReference = getInstanceReferencePayloadFromValue(resolvedInputs['instance-in']?.[0]);
+      const resolvedInstanceAddress = inputInstanceReference?.address
+        ?? (resolvedBindings.instanceSource as WorkflowJsonValue | undefined)
+        ?? null;
       const normalizedInstanceAddress =
         typeof resolvedInstanceAddress === 'string' ? formatHexAddress(resolvedInstanceAddress) : null;
       let resolvedMemberValues: Record<string, ResolvedMemberRuntimeValue> | undefined;
       let issues: ValidationIssue[] | undefined;
+
+      if (selection.members.length > 0 && !normalizedInstanceAddress) {
+        return {
+          state: 'error',
+          issues: [
+            {
+              severity: 'error',
+              code: 'class.instance.missing-address',
+              message: 'Upstream instance reference did not contain a usable instance address.',
+              target: 'instance-in',
+            },
+          ],
+          outputs: {},
+        };
+      }
 
       if (binding && normalizedInstanceAddress && selection.members.length > 0) {
         try {

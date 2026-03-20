@@ -13,8 +13,11 @@ import {
   createClassInfoEnvelope,
   createEnvelope,
   createFlowPort,
+  createInstanceReferenceEnvelope,
   createJsonPort,
   GENERIC_JSON_SCHEMA,
+  getInstanceReferencePayloadFromValue,
+  INSTANCE_REFERENCE_SCHEMA,
   PARAMETER_DEFINITIONS_SCHEMA,
 } from './contracts';
 
@@ -56,6 +59,23 @@ describe('studio contracts', () => {
       schema: GENERIC_JSON_SCHEMA,
       payload: { ok: true },
       meta: { source: 'unit-test' },
+    });
+  });
+
+  it('creates and parses canonical instance reference envelopes', () => {
+    const envelope = createInstanceReferenceEnvelope({
+      address: '244190ab960',
+      sourceKind: 'call-function-result',
+      runtimeTypeHint: 'WorldData',
+      displayName: 'getWorldData result',
+    });
+
+    expect(envelope.schema).toEqual(INSTANCE_REFERENCE_SCHEMA);
+    expect(getInstanceReferencePayloadFromValue(envelope.payload)).toEqual({
+      address: '0x244190AB960',
+      sourceKind: 'call-function-result',
+      runtimeTypeHint: 'WorldData',
+      displayName: 'getWorldData result',
     });
   });
 
