@@ -9,14 +9,16 @@ interface NodeWrapperProps {
 }
 
 export function NodeWrapper({ node, children }: NodeWrapperProps) {
-  const { updateNodePosition, beginNodePositionSession, commitNodePositionSession, deleteNode } = useStudioGraph();
-  const { transform, openEditModal } = useStudioUi();
+  const { nodes, updateNodePosition, updateNodePositions, beginNodePositionSession, commitNodePositionSession, deleteNode } = useStudioGraph();
+  const { transform, openEditModal, selectedNodeIds, selectSingleNode, toggleSelectedNode, registerNodeElement } = useStudioUi();
   const nodeRef = useRef<HTMLDivElement>(null);
   
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const nodeStartPos = useRef({ x: 0, y: 0 });
+  const selectedNodeStartPositions = useRef<Array<{ id: string; position: { x: number; y: number } }>>([]);
+  const isSelected = selectedNodeIds.includes(node.id);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
@@ -25,12 +27,27 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
       !target.closest('[data-studio-no-drag="true"]') &&
       !target.closest('[data-studio-toolbar="true"]')
     ) {
-        e.stopPropagation();
-        setIsDragging(true);
-        beginNodePositionSession(node.id);
-        dragStartPos.current = { x: e.clientX, y: e.clientY };
-        nodeStartPos.current = { ...node.position };
-        nodeRef.current?.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        toggleSelectedNode(node.id);
+        return;
+      }
+
+      const draggingNodeIds = isSelected && selectedNodeIds.length > 1 ? selectedNodeIds : [node.id];
+      if (!isSelected || selectedNodeIds.length <= 1) {
+        selectSingleNode(node.id);
+      }
+
+      setIsDragging(true);
+      beginNodePositionSession(draggingNodeIds);
+      dragStartPos.current = { x: e.clientX, y: e.clientY };
+      nodeStartPos.current = { ...node.position };
+      selectedNodeStartPositions.current = draggingNodeIds.map((nodeId) => ({
+        id: nodeId,
+        position: nodes.find((entry) => entry.id === nodeId)?.position ?? { x: 0, y: 0 },
+      }));
+      nodeRef.current?.setPointerCapture(e.pointerId);
     }
   };
 
@@ -42,6 +59,17 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
     const dx = (e.clientX - dragStartPos.current.x) / transform.scale;
     const dy = (e.clientY - dragStartPos.current.y) / transform.scale;
 
+    if (selectedNodeIds.includes(node.id) && selectedNodeIds.length > 1) {
+      updateNodePositions(selectedNodeStartPositions.current.map((entry) => ({
+        id: entry.id,
+        position: {
+          x: entry.position.x + dx,
+          y: entry.position.y + dy,
+        },
+      })), { trackHistory: false });
+      return;
+    }
+
     updateNodePosition(node.id, {
       x: nodeStartPos.current.x + dx,
       y: nodeStartPos.current.y + dy,
@@ -52,7 +80,7 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
     if (isDragging) {
       e.stopPropagation();
       setIsDragging(false);
-      commitNodePositionSession(node.id);
+      commitNodePositionSession(isSelected && selectedNodeIds.length > 1 ? selectedNodeIds : node.id);
       nodeRef.current?.releasePointerCapture(e.pointerId);
     }
   };
@@ -69,10 +97,14 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
 
   return (
     <div
-      ref={nodeRef}
-      className={`absolute top-0 left-0 transition-shadow ${isDragging ? 'shadow-[0_15px_40px_rgba(34,211,238,0.2)] z-50' : 'z-10 hover:z-20'}`}
+      data-studio-node="true"
+      className={`absolute top-0 left-0 transition-shadow rounded-2xl ${isDragging ? 'shadow-[0_15px_40px_rgba(34,211,238,0.2)] z-50' : 'z-10 hover:z-20'} ${isSelected ? 'ring-2 ring-cyan-400/70 ring-offset-2 ring-offset-[#0a0f16]' : ''}`}
       style={{
         transform: `translate3d(${node.position.x}px, ${node.position.y}px, 0)`,
+      }}
+      ref={(element) => {
+        nodeRef.current = element;
+        registerNodeElement(node.id, element);
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

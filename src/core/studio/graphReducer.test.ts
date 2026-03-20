@@ -88,6 +88,26 @@ describe('reduceStudioGraphDocument', () => {
     expect(next.controlConnections).toHaveLength(1);
   });
 
+  it('updates multiple node positions in a single action', () => {
+    const document: GraphDocument = {
+      ...createEmptyGraphDocument(),
+      nodes: [createNode('node-a'), createNode('node-b')],
+    };
+
+    const next = reduceStudioGraphDocument(document, {
+      type: 'update-node-positions',
+      updates: [
+        { nodeId: 'node-a', position: { x: 10, y: 20 } },
+        { nodeId: 'node-b', position: { x: 30, y: 40 } },
+      ],
+    });
+
+    expect(next.nodes.map((node) => node.position)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+  });
+
   it('deletes connected edges when a node is removed', () => {
     const document: GraphDocument = {
       ...createEmptyGraphDocument(),
@@ -99,6 +119,29 @@ describe('reduceStudioGraphDocument', () => {
 
     expect(next.nodes.map((node) => node.id)).toEqual(['node-b']);
     expect(next.controlConnections).toEqual([]);
+  });
+
+  it('deletes multiple selected nodes and their connected edges', () => {
+    const document: GraphDocument = {
+      ...createEmptyGraphDocument(),
+      nodes: [createNode('node-a'), createNode('node-b'), createNode('node-c')],
+      controlConnections: [
+        { id: 'edge-1', source: { nodeId: 'node-a', connectionKey: 'out' }, target: { nodeId: 'node-c', connectionKey: 'in' } },
+        { id: 'edge-2', source: { nodeId: 'node-b', connectionKey: 'out' }, target: { nodeId: 'node-c', connectionKey: 'in' } },
+      ],
+      dataConnections: [
+        { id: 'edge-3', source: { nodeId: 'node-c', connectionKey: 'json-out' }, target: { nodeId: 'node-a', connectionKey: 'json-in' }, bindingKey: 'json-in' },
+      ],
+    };
+
+    const next = reduceStudioGraphDocument(document, {
+      type: 'delete-nodes',
+      nodeIds: ['node-a', 'node-b'],
+    });
+
+    expect(next.nodes.map((node) => node.id)).toEqual(['node-c']);
+    expect(next.controlConnections).toEqual([]);
+    expect(next.dataConnections).toEqual([]);
   });
 
   it('replaces the current document wholesale when requested', () => {

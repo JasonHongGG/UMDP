@@ -9,8 +9,10 @@ export interface StudioGraphState {
 export type StudioGraphAction =
   | { type: 'add-node'; node: NodeInstance }
   | { type: 'update-node-position'; nodeId: string; position: NodeInstance['position'] }
+  | { type: 'update-node-positions'; updates: Array<{ nodeId: string; position: NodeInstance['position'] }> }
   | { type: 'update-node-instance'; nodeId: string; node: NodeInstance }
   | { type: 'delete-node'; nodeId: string }
+  | { type: 'delete-nodes'; nodeIds: string[] }
   | { type: 'connect-ports'; edge: StudioEdge; replaceEdgeIds?: string[] }
   | { type: 'disconnect-edge'; edgeId: string }
   | { type: 'add-edge'; edge: StudioEdge; replaceEdgeIds?: string[] }
@@ -78,6 +80,17 @@ export function reduceStudioGraphDocument(document: GraphDocument, action: Studi
           node.id === action.nodeId ? { ...node, position: action.position } : node,
         ),
       };
+    case 'update-node-positions': {
+      const updatesByNodeId = new Map(action.updates.map((entry) => [entry.nodeId, entry.position]));
+
+      return {
+        ...document,
+        nodes: document.nodes.map((node) => {
+          const nextPosition = updatesByNodeId.get(node.id);
+          return nextPosition ? { ...node, position: nextPosition } : node;
+        }),
+      };
+    }
     case 'update-node-instance':
       return {
         ...document,
@@ -86,16 +99,20 @@ export function reduceStudioGraphDocument(document: GraphDocument, action: Studi
         ),
       };
     case 'delete-node':
+    case 'delete-nodes': {
+      const nodeIds = new Set(action.type === 'delete-node' ? [action.nodeId] : action.nodeIds);
+
       return {
         ...document,
-        nodes: document.nodes.filter((node) => node.id !== action.nodeId),
+        nodes: document.nodes.filter((node) => !nodeIds.has(node.id)),
         controlConnections: document.controlConnections.filter(
-          (edge) => edge.source.nodeId !== action.nodeId && edge.target.nodeId !== action.nodeId,
+          (edge) => !nodeIds.has(edge.source.nodeId) && !nodeIds.has(edge.target.nodeId),
         ),
         dataConnections: document.dataConnections.filter(
-          (edge) => edge.source.nodeId !== action.nodeId && edge.target.nodeId !== action.nodeId,
+          (edge) => !nodeIds.has(edge.source.nodeId) && !nodeIds.has(edge.target.nodeId),
         ),
       };
+    }
     case 'connect-ports':
     case 'add-edge': {
       const currentConnections = selectConnections(document, action.edge.channel);

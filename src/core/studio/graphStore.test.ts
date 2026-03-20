@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphDocument } from '../../domain/studio/contracts';
 import { createEmptyGraphDocument } from './persistence';
-import { deriveStudioGraphCounters, isStudioGraphDocumentDirty, MAX_STUDIO_GRAPH_HISTORY_ENTRIES, pushStudioGraphHistoryEntry } from './graphStore';
+import { deriveStudioGraphCounters, duplicateStudioGraphSelection, isStudioGraphDocumentDirty, MAX_STUDIO_GRAPH_HISTORY_ENTRIES, pushStudioGraphHistoryEntry } from './graphStore';
 
 describe('graphStore helpers', () => {
   it('derives the next node and edge counters from an existing document', () => {
@@ -77,5 +77,73 @@ describe('graphStore helpers', () => {
     expect(nextHistory).toHaveLength(MAX_STUDIO_GRAPH_HISTORY_ENTRIES);
     expect(lastEntry).toEqual(nextDocument);
     expect(lastEntry).not.toBe(nextDocument);
+  });
+
+  it('duplicates selected nodes with their internal edges and applies an offset', () => {
+    const document = createEmptyGraphDocument();
+    document.nodes.push(
+      {
+        id: 'trigger-1',
+        nodeType: 'trigger',
+        typeVersion: 1,
+        position: { x: 20, y: 30 },
+        parameters: {},
+        bindings: {},
+        documentState: {},
+      },
+      {
+        id: 'display-1',
+        nodeType: 'display',
+        typeVersion: 1,
+        position: { x: 120, y: 150 },
+        parameters: {},
+        bindings: {},
+        documentState: {},
+      },
+      {
+        id: 'class-ref-1',
+        nodeType: 'class-ref',
+        typeVersion: 1,
+        position: { x: 280, y: 160 },
+        parameters: {},
+        bindings: {},
+        documentState: {},
+      },
+    );
+    document.controlConnections.push({
+      id: 'edge-1',
+      source: { nodeId: 'trigger-1', connectionKey: 'flow-out' },
+      target: { nodeId: 'display-1', connectionKey: 'flow-in' },
+    });
+    document.dataConnections.push({
+      id: 'edge-2',
+      source: { nodeId: 'display-1', connectionKey: 'payload-out' },
+      target: { nodeId: 'class-ref-1', connectionKey: 'instance-in' },
+      bindingKey: 'instance-in',
+    });
+
+    let nextNodeIndex = 10;
+    let nextEdgeIndex = 20;
+    const duplicated = duplicateStudioGraphSelection(
+      document,
+      ['trigger-1', 'display-1'],
+      (nodeType) => `${nodeType}-${nextNodeIndex++}`,
+      () => `edge-${nextEdgeIndex++}`,
+      { offset: { x: 50, y: 60 } },
+    );
+
+    expect(duplicated.duplicatedNodeIds).toEqual(['trigger-10', 'display-11']);
+    expect(duplicated.document.nodes.slice(-2)).toMatchObject([
+      { id: 'trigger-10', position: { x: 70, y: 90 } },
+      { id: 'display-11', position: { x: 170, y: 210 } },
+    ]);
+    expect(duplicated.document.controlConnections.slice(-1)).toEqual([
+      {
+        id: 'edge-20',
+        source: { nodeId: 'trigger-10', connectionKey: 'flow-out' },
+        target: { nodeId: 'display-11', connectionKey: 'flow-in' },
+      },
+    ]);
+    expect(duplicated.document.dataConnections).toHaveLength(1);
   });
 });

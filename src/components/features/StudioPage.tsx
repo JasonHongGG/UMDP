@@ -46,9 +46,11 @@ function StudioPageContent({
   pendingClassNode: PendingClassNode;
   onPendingClassNodeHandled?: () => void;
 }) {
-  const { addNode, undo, redo, saveWorkflow } = useStudioGraph();
-  const { canvasElement, transform } = useStudioUi();
+  const { addNode, undo, redo, saveWorkflow, deleteNodes, duplicateNodes } = useStudioGraph();
+  const { canvasElement, transform, selectedNodeIds, clearSelectedNodes, setSelectedNodeIds } = useStudioUi();
   const handledPendingRequestIdsRef = useRef<Set<string>>(new Set());
+  const copiedNodeIdsRef = useRef<string[]>([]);
+  const pasteCountRef = useRef(1);
 
   const viewportCenterPosition = useMemo(() => {
     if (!canvasElement) {
@@ -82,13 +84,21 @@ function StudioPageContent({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.ctrlKey) {
-        return;
-      }
-
       const target = event.target as HTMLElement | null;
       const isTypingTarget = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if (isTypingTarget) {
+        return;
+      }
+
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeIds.length > 0) {
+        event.preventDefault();
+        deleteNodes(selectedNodeIds);
+        clearSelectedNodes();
+        return;
+      }
+
+      const isPrimaryModifierPressed = event.ctrlKey || event.metaKey;
+      if (!isPrimaryModifierPressed) {
         return;
       }
 
@@ -111,11 +121,28 @@ function StudioPageContent({
         return;
       }
 
+      if (key === 'c' && selectedNodeIds.length > 0) {
+        event.preventDefault();
+        copiedNodeIdsRef.current = [...selectedNodeIds];
+        pasteCountRef.current = 1;
+        return;
+      }
+
+      if (key === 'v' && copiedNodeIdsRef.current.length > 0) {
+        event.preventDefault();
+        const offset = 40 * pasteCountRef.current;
+        const duplicatedNodeIds = duplicateNodes(copiedNodeIdsRef.current, { offset: { x: offset, y: offset } });
+        if (duplicatedNodeIds.length > 0) {
+          setSelectedNodeIds(duplicatedNodeIds);
+          pasteCountRef.current += 1;
+        }
+      }
+
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [redo, saveWorkflow, undo]);
+  }, [clearSelectedNodes, deleteNodes, duplicateNodes, redo, saveWorkflow, selectedNodeIds, setSelectedNodeIds, undo]);
 
   return (
     <div className="flex-1 flex flex-col bg-[#0a0f16] overflow-hidden relative">

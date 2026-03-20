@@ -27,6 +27,13 @@ export interface StudioUiState {
   setTransform: React.Dispatch<React.SetStateAction<{ x: number; y: number; scale: number }>>;
   canvasElement: HTMLDivElement | null;
   registerCanvasElement: (element: HTMLDivElement | null) => void;
+  selectedNodeIds: string[];
+  setSelectedNodeIds: (nodeIds: string[]) => void;
+  selectSingleNode: (nodeId: string) => void;
+  toggleSelectedNode: (nodeId: string) => void;
+  clearSelectedNodes: () => void;
+  registerNodeElement: (nodeId: string, element: HTMLDivElement | null) => void;
+  getNodeElement: (nodeId: string) => HTMLDivElement | null;
   registerPortElement: (nodeId: string, portId: string, element: HTMLDivElement | null) => void;
   getPortElement: (nodeId: string, portId: string) => HTMLDivElement | null;
   draftConnection: DraftConnection | null;
@@ -67,12 +74,19 @@ interface UseStudioUiStateOptions {
 function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOptions): StudioUiState {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [canvasElement, setCanvasElement] = useState<HTMLDivElement | null>(null);
+  const [selectedNodeIds, setSelectedNodeIdsState] = useState<string[]>([]);
   const [draftConnection, setDraftConnection] = useState<DraftConnection | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalPosition, setAddModalPosition] = useState<{ x: number; y: number } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const portElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const nodeElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  useEffect(() => {
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    setSelectedNodeIdsState((previous) => previous.filter((nodeId) => nodeIds.has(nodeId)));
+  }, [nodes]);
 
   const startConnection = useCallback((sourceNodeId: string, sourcePortId: string, sourcePortType: PortType, sourceHandleType: PortHandleType, startPos: { x: number; y: number }) => {
     if (sourceHandleType !== 'source') {
@@ -131,6 +145,38 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
     setCanvasElement(element);
   }, []);
 
+  const setSelectedNodeIds = useCallback((nodeIds: string[]) => {
+    const uniqueNodeIds = [...new Set(nodeIds)];
+    setSelectedNodeIdsState(uniqueNodeIds);
+  }, []);
+
+  const clearSelectedNodes = useCallback(() => {
+    setSelectedNodeIdsState([]);
+  }, []);
+
+  const selectSingleNode = useCallback((nodeId: string) => {
+    setSelectedNodeIdsState([nodeId]);
+  }, []);
+
+  const toggleSelectedNode = useCallback((nodeId: string) => {
+    setSelectedNodeIdsState((previous) => previous.includes(nodeId)
+      ? previous.filter((entry) => entry !== nodeId)
+      : [...previous, nodeId]);
+  }, []);
+
+  const registerNodeElement = useCallback((nodeId: string, element: HTMLDivElement | null) => {
+    if (!element) {
+      nodeElementsRef.current.delete(nodeId);
+      return;
+    }
+
+    nodeElementsRef.current.set(nodeId, element);
+  }, []);
+
+  const getNodeElement = useCallback((nodeId: string) => {
+    return nodeElementsRef.current.get(nodeId) ?? null;
+  }, []);
+
   const registerPortElement = useCallback((nodeId: string, portId: string, element: HTMLDivElement | null) => {
     const key = `${nodeId}:${portId}`;
     if (!element) {
@@ -168,6 +214,13 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
     setTransform,
     canvasElement,
     registerCanvasElement,
+    selectedNodeIds,
+    setSelectedNodeIds,
+    selectSingleNode,
+    toggleSelectedNode,
+    clearSelectedNodes,
+    registerNodeElement,
+    getNodeElement,
     registerPortElement,
     getPortElement,
     draftConnection,
@@ -187,20 +240,27 @@ function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOption
     addModalPosition,
     cancelConnection,
     canvasElement,
+    clearSelectedNodes,
     closeAddModal,
     closeEditModal,
     draftConnection,
     editingNodeId,
     editingNodeId,
     finishConnection,
+    getNodeElement,
     getPortElement,
     isAddModalOpen,
     isEditModalOpen,
     openAddModal,
     openEditModal,
     registerCanvasElement,
+    registerNodeElement,
     registerPortElement,
+    selectSingleNode,
+    selectedNodeIds,
+    setSelectedNodeIds,
     startConnection,
+    toggleSelectedNode,
     transform,
     updateConnectionTarget,
   ]);

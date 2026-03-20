@@ -21,6 +21,10 @@ export interface UpdateNodePositionOptions {
   trackHistory?: boolean;
 }
 
+export interface DuplicateNodesOptions {
+  offset?: { x: number; y: number };
+}
+
 export interface StudioGraphStore {
   nodes: StudioNode[];
   edges: StudioEdge[];
@@ -34,10 +38,13 @@ export interface StudioGraphStore {
   lastAutosavedAt: number | null;
   addNode: (typeId: string, position: NodeTransform, dataOverrides?: Partial<BaseNodeData>) => string | null;
   updateNodePosition: (id: string, position: NodeTransform, options?: UpdateNodePositionOptions) => void;
-  beginNodePositionSession: (nodeId: string) => void;
-  commitNodePositionSession: (nodeId: string) => void;
+  updateNodePositions: (updates: Array<{ id: string; position: NodeTransform }>, options?: UpdateNodePositionOptions) => void;
+  beginNodePositionSession: (nodeIds: string | string[]) => void;
+  commitNodePositionSession: (nodeIds: string | string[]) => void;
   updateNodeData: (id: string, data: Partial<BaseNodeData>) => void;
   deleteNode: (id: string) => void;
+  deleteNodes: (ids: string[]) => void;
+  duplicateNodes: (ids: string[], options?: DuplicateNodesOptions) => string[];
   connectPorts: (sourceNodeId: string, sourcePortId: string, targetNodeId: string, targetPortId: string, options?: ConnectPortsOptions) => void;
   disconnectEdge: (id: string) => void;
   addEdge: (sourceNodeId: string, sourcePortId: string, targetNodeId: string, targetPortId: string, options?: ConnectPortsOptions) => void;
@@ -91,6 +98,79 @@ export function pushStudioGraphHistoryEntry(history: GraphDocument[], document: 
   }
 
   return next;
+}
+
+export function duplicateStudioGraphSelection(
+  document: GraphDocument,
+  selectedNodeIds: string[],
+  getNextNodeId: (nodeType: string) => string,
+  getNextEdgeId: () => string,
+  options?: DuplicateNodesOptions,
+) {
+  const selectedSet = new Set(selectedNodeIds);
+  const selectedNodes = document.nodes.filter((node) => selectedSet.has(node.id));
+
+  if (selectedNodes.length === 0) {
+    return {
+      document,
+      duplicatedNodeIds: [] as string[],
+    };
+  }
+
+  const offset = options?.offset ?? { x: 40, y: 40 };
+  const idMap = new Map<string, string>();
+  const duplicatedNodes = selectedNodes.map((node) => {
+    const duplicatedNode = JSON.parse(JSON.stringify(node)) as NodeInstance;
+    duplicatedNode.id = getNextNodeId(node.nodeType);
+    duplicatedNode.position = {
+      x: node.position.x + offset.x,
+      y: node.position.y + offset.y,
+    };
+    idMap.set(node.id, duplicatedNode.id);
+    return duplicatedNode;
+  });
+
+  const duplicateControlConnection = (connection: GraphDocument['controlConnections'][number]) => ({
+    ...JSON.parse(JSON.stringify(connection)),
+    id: getNextEdgeId(),
+    source: {
+      ...connection.source,
+      nodeId: idMap.get(connection.source.nodeId) ?? connection.source.nodeId,
+    },
+    target: {
+      ...connection.target,
+      nodeId: idMap.get(connection.target.nodeId) ?? connection.target.nodeId,
+    },
+  });
+  const duplicateDataConnection = (connection: GraphDocument['dataConnections'][number]) => ({
+    ...JSON.parse(JSON.stringify(connection)),
+    id: getNextEdgeId(),
+    source: {
+      ...connection.source,
+      nodeId: idMap.get(connection.source.nodeId) ?? connection.source.nodeId,
+    },
+    target: {
+      ...connection.target,
+      nodeId: idMap.get(connection.target.nodeId) ?? connection.target.nodeId,
+    },
+  });
+
+  const duplicatedControlConnections = document.controlConnections
+    .filter((connection) => selectedSet.has(connection.source.nodeId) && selectedSet.has(connection.target.nodeId))
+    .map(duplicateControlConnection);
+  const duplicatedDataConnections = document.dataConnections
+    .filter((connection) => selectedSet.has(connection.source.nodeId) && selectedSet.has(connection.target.nodeId))
+    .map(duplicateDataConnection);
+
+  return {
+    document: {
+      ...document,
+      nodes: [...document.nodes, ...duplicatedNodes],
+      controlConnections: [...document.controlConnections, ...duplicatedControlConnections],
+      dataConnections: [...document.dataConnections, ...duplicatedDataConnections],
+    },
+    duplicatedNodeIds: duplicatedNodes.map((node) => node.id),
+  };
 }
 
 function connectionKeyToEdge(channel: StudioEdge['channel'], connection: GraphDocument['controlConnections'][number] | GraphDocument['dataConnections'][number]): StudioEdge {
@@ -268,13 +348,36 @@ export function useStudioGraphStore(): StudioGraphStore {
     });
   }, [applyGraphAction]);
 
-  const beginNodePositionSession = useCallback((nodeId: string) => {
-    dragHistorySnapshotsRef.current.set(nodeId, cloneGraphDocument(graphState.document));
+  const updateNodePositions = useCallback((updates: Array<{ id: string; position: NodeTransform }>, options?: UpdateNodePositionOptions) => {
+    if (updates.length === 0) {
+      return;
+    }
+
+    applyGraphAction({
+      type: 'update-node-positions',
+      updates: updates.map((entry) => ({ nodeId: entry.id, position: entry.position })),
+    }, {
+      trackHistory: options?.trackHistory,
+    });
+  }, [applyGraphAction]);
+
+  const beginNodePositionSession = useCallback((nodeIds: string | string[]) => {
+    const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+    const snapshot = cloneGraphDocument(graphState.document);
+    ids.forEach((nodeId) => {
+      dragHistorySnapshotsRef.current.set(nodeId, snapshot);
+    });
   }, [graphState.document]);
 
-  const commitNodePositionSession = useCallback((nodeId: string) => {
-    const snapshot = dragHistorySnapshotsRef.current.get(nodeId);
-    dragHistorySnapshotsRef.current.delete(nodeId);
+  const commitNodePositionSession = useCallback((nodeIds: string | string[]) => {
+    const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
+    const snapshot = ids
+      .map((nodeId) => dragHistorySnapshotsRef.current.get(nodeId))
+      .find((entry): entry is GraphDocument => Boolean(entry));
+
+    ids.forEach((nodeId) => {
+      dragHistorySnapshotsRef.current.delete(nodeId);
+    });
 
     if (!snapshot) {
       return;
@@ -311,6 +414,38 @@ export function useStudioGraphStore(): StudioGraphStore {
   const deleteNode = useCallback((id: string) => {
     applyGraphAction({ type: 'delete-node', nodeId: id });
   }, [applyGraphAction]);
+
+  const deleteNodes = useCallback((ids: string[]) => {
+    if (ids.length === 0) {
+      return;
+    }
+
+    applyGraphAction({ type: 'delete-nodes', nodeIds: ids });
+  }, [applyGraphAction]);
+
+  const duplicateNodes = useCallback((ids: string[], options?: DuplicateNodesOptions) => {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const { document: nextDocument, duplicatedNodeIds } = duplicateStudioGraphSelection(
+      graphState.document,
+      ids,
+      (nodeType) => `${nodeType}-${idCounter.current++}`,
+      () => `edge-${edgeCounter.current++}`,
+      options,
+    );
+
+    if (duplicatedNodeIds.length === 0) {
+      return [];
+    }
+
+    pushDocumentIntoHistory(graphState.document);
+    setFutureDocuments([]);
+    dispatch({ type: 'replace-document', document: nextDocument });
+
+    return duplicatedNodeIds;
+  }, [graphState.document, pushDocumentIntoHistory]);
 
   const connectPorts = useCallback((sourceNodeId: string, sourcePortId: string, targetNodeId: string, targetPortId: string, options?: ConnectPortsOptions) => {
     const sourceNode = nodes.find((node) => node.id === sourceNodeId);
@@ -408,10 +543,13 @@ export function useStudioGraphStore(): StudioGraphStore {
     lastAutosavedAt,
     addNode,
     updateNodePosition,
+    updateNodePositions,
     beginNodePositionSession,
     commitNodePositionSession,
     updateNodeData,
     deleteNode,
+    deleteNodes,
+    duplicateNodes,
     connectPorts,
     disconnectEdge,
     addEdge: connectPorts,
@@ -429,6 +567,8 @@ export function useStudioGraphStore(): StudioGraphStore {
     commitNodePositionSession,
     connectPorts,
     deleteNode,
+    deleteNodes,
+    duplicateNodes,
     disconnectEdge,
     edges,
     futureDocuments.length,
@@ -447,5 +587,6 @@ export function useStudioGraphStore(): StudioGraphStore {
     undo,
     updateNodeData,
     updateNodePosition,
+    updateNodePositions,
   ]);
 }

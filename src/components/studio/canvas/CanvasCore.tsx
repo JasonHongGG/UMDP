@@ -1,14 +1,63 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
 import { NodeLayer } from './NodeLayer';
 import { EdgeLayer } from './EdgeLayer';
 
+interface SelectionRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export function CanvasCore() {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { transform, setTransform, openAddModal, registerCanvasElement } = useStudioUi();
+  const { nodes } = useStudioGraph();
+  const { transform, setTransform, openAddModal, registerCanvasElement, clearSelectedNodes, setSelectedNodeIds, getNodeElement } = useStudioUi();
   
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
+  const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const buildSelectionRect = useCallback((startX: number, startY: number, endX: number, endY: number): SelectionRect => ({
+    left: Math.min(startX, endX),
+    top: Math.min(startY, endY),
+    width: Math.abs(endX - startX),
+    height: Math.abs(endY - startY),
+  }), []);
+
+  const selectNodesInRect = useCallback((rect: SelectionRect) => {
+    if (!wrapperRef.current) {
+      return;
+    }
+
+    const wrapperBounds = wrapperRef.current.getBoundingClientRect();
+    const selectedIds = nodes.flatMap((node) => {
+      const element = getNodeElement(node.id);
+      if (!element) {
+        return [];
+      }
+
+      const nodeBounds = element.getBoundingClientRect();
+      const relativeBounds = {
+        left: nodeBounds.left - wrapperBounds.left,
+        top: nodeBounds.top - wrapperBounds.top,
+        right: nodeBounds.right - wrapperBounds.left,
+        bottom: nodeBounds.bottom - wrapperBounds.top,
+      };
+      const intersects = !(
+        relativeBounds.right < rect.left ||
+        relativeBounds.left > rect.left + rect.width ||
+        relativeBounds.bottom < rect.top ||
+        relativeBounds.top > rect.top + rect.height
+      );
+
+      return intersects ? [node.id] : [];
+    });
+
+    setSelectedNodeIds(selectedIds);
+  }, [getNodeElement, nodes, setSelectedNodeIds]);
 
   const handleWheel = useCallback((e: WheelEvent) => {
     if (!e.ctrlKey) {
@@ -59,22 +108,62 @@ export function CanvasCore() {
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
       wrapperRef.current?.setPointerCapture(e.pointerId);
+      return;
     }
+
+    if (e.button !== 0 || !wrapperRef.current) {
+      return;
+    }
+
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-studio-node="true"]') || target.closest('[data-studio-port="true"]') || target.closest('[data-studio-toolbar="true"]')) {
+      return;
+    }
+
+    const bounds = wrapperRef.current.getBoundingClientRect();
+    const startX = e.clientX - bounds.left;
+    const startY = e.clientY - bounds.top;
+    selectionStartRef.current = { x: startX, y: startY };
+    setSelectionRect({ left: startX, top: startY, width: 0, height: 0 });
+    clearSelectedNodes();
+    wrapperRef.current.setPointerCapture(e.pointerId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isPanning) return;
-    
-    const dx = e.clientX - panStart.x;
-    const dy = e.clientY - panStart.y;
-    
-    setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-    setPanStart({ x: e.clientX, y: e.clientY });
+  const handleSelectionMove = useCallback((clientX: number, clientY: number) => {
+    if (!selectionStartRef.current || !wrapperRef.current) {
+      return;
+    }
+
+    const bounds = wrapperRef.current.getBoundingClientRect();
+    const currentX = clientX - bounds.left;
+    const currentY = clientY - bounds.top;
+    const nextRect = buildSelectionRect(selectionStartRef.current.x, selectionStartRef.current.y, currentX, currentY);
+    setSelectionRect(nextRect);
+    selectNodesInRect(nextRect);
+  }, [buildSelectionRect, selectNodesInRect]);
+
+  const handlePointerMoveCapture = (e: React.PointerEvent) => {
+    if (isPanning) {
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    handleSelectionMove(e.clientX, e.clientY);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     if (isPanning) {
       setIsPanning(false);
+      wrapperRef.current?.releasePointerCapture(e.pointerId);
+      return;
+    }
+
+    if (selectionStartRef.current) {
+      selectionStartRef.current = null;
+      setSelectionRect(null);
       wrapperRef.current?.releasePointerCapture(e.pointerId);
     }
   };
@@ -103,7 +192,7 @@ export function CanvasCore() {
       ref={wrapperRef}
       className={`w-full h-full relative overflow-hidden bg-[#0a0f16] ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
+      onPointerMove={handlePointerMoveCapture}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       onDoubleClick={handleDoubleClick}
@@ -134,6 +223,18 @@ export function CanvasCore() {
         <EdgeLayer />
         <NodeLayer />
       </div>
+
+      {selectionRect ? (
+        <div
+          className="absolute pointer-events-none border border-cyan-400/80 bg-cyan-400/10 z-30 rounded-sm"
+          style={{
+            left: selectionRect.left,
+            top: selectionRect.top,
+            width: selectionRect.width,
+            height: selectionRect.height,
+          }}
+        />
+      ) : null}
     </div>
   );
 }
