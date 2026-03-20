@@ -5,7 +5,7 @@ import {
   createImageStableId,
   createMethodStableId,
 } from '../../domain/contracts/shared-identity';
-import type { ClassInfoPayload } from '../../core/studio/types';
+import type { ClassInfoPayload } from '../../domain/studio/contracts';
 import {
   findSelectedFunction,
   getClassInfoPayloadFromValue,

@@ -8,9 +8,9 @@ import {
   createJsonPort,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, StudioNodeRuntimeState, WorkflowJsonValue } from '../../core/studio/types';
+import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from '../../domain/analysis/contracts';
-import { parseCallFunctionNodeDocumentState, type ValidationIssue } from '../../domain/studio/contracts';
+import { parseCallFunctionNodeDocumentState, type ValidationIssue, type WorkflowJsonValue } from '../../domain/studio/contracts';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import { CallFunctionNodeCanvas } from './CallFunctionNodeCanvas';
 import { CallFunctionNodeEditor } from './CallFunctionNodeEditor';
@@ -44,6 +44,27 @@ function createValidationError(message: string, target?: string): ValidationIssu
     code: 'call-function.invalid',
     message,
     target,
+  };
+}
+
+function createFailureOutput(
+  message: string,
+  instanceAddress: WorkflowJsonValue,
+  argumentsPayload: Array<{ name: string; typeName: string; value: WorkflowJsonValue }>,
+  method: ReturnType<typeof findSelectedFunction>,
+  failureKind: 'validation' | 'transport',
+) {
+  return {
+    'result-out': createCallFunctionResultEnvelope({
+      method,
+      instanceAddress,
+      arguments: argumentsPayload,
+      success: false,
+      failureKind,
+      error: message,
+      exception: null,
+      result: null,
+    }),
   };
 }
 
@@ -118,17 +139,21 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       const parsedState = parseCallFunctionNodeDocumentState(documentState);
       const classInfo = getClassInfoPayloadFromValue(resolvedInputs['class-info-in']?.[0]);
       if (!classInfo) {
+        const message = 'Call Function node requires an incoming Class Info payload.';
         return {
           state: 'error',
-          issues: [createValidationError('Call Function node requires an incoming Class Info payload.', 'class-info-in')],
+          outputs: createFailureOutput(message, null, [], null, 'validation'),
+          issues: [createValidationError(message, 'class-info-in')],
         };
       }
 
       const method = findSelectedFunction(classInfo, parsedState.selectedMethodStableId);
       if (!method) {
+        const message = 'Selected method no longer exists in the upstream Class Info payload.';
         return {
           state: 'error',
-          issues: [createValidationError('Selected method no longer exists in the upstream Class Info payload.')],
+          outputs: createFailureOutput(message, classInfo.instanceAddress, [], null, 'validation'),
+          issues: [createValidationError(message)],
         };
       }
 
@@ -146,9 +171,21 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       });
 
       if (argumentValues.some((entry) => entry.value === undefined)) {
+        const message = 'One or more argument values could not be resolved before invocation.';
         return {
           state: 'error',
-          issues: [createValidationError('One or more argument values could not be resolved before invocation.')],
+          outputs: createFailureOutput(
+            message,
+            classInfo.instanceAddress,
+            argumentValues.map((entry) => ({
+              name: entry.name,
+              typeName: entry.typeName,
+              value: entry.value ?? null,
+            })),
+            method,
+            'validation',
+          ),
+          issues: [createValidationError(message)],
         };
       }
 
@@ -180,12 +217,14 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
           }],
         };
       } catch (error) {
+        const message = `Failed to invoke method: ${String(error)}`;
         return {
           state: 'error',
+          outputs: createFailureOutput(message, classInfo.instanceAddress, resolvedArgumentValues, method, 'transport'),
           issues: [{
             severity: 'error',
             code: 'call-function.invoke_error',
-            message: `Failed to invoke method: ${String(error)}`,
+            message,
           }],
         };
       }

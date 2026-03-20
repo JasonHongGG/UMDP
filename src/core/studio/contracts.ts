@@ -2,16 +2,15 @@ import {
   CallFunctionResultPayload,
   ClassInfoFieldPayload,
   ClassInfoFunctionPayload,
-  ConnectionDirection,
   ClassInfoPayload,
-  IPort,
   JsonSchemaReference,
   ParameterDefinitionPayload,
-  WORKFLOW_SCHEMA_IDS,
   WorkflowJsonEnvelope,
   WorkflowJsonValue,
-} from './types';
+  WORKFLOW_SCHEMA_IDS,
+} from '../../domain/studio/contracts';
 import type { ConnectionChannel } from '../../domain/studio/contracts';
+import { ConnectionDirection, IPort } from './types';
 import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '../../domain/studio/editor';
 import { addHexOffset, formatHexAddress } from '../addressFormat';
 import { coerceRuntimeFieldValue } from '../runtimeValue';

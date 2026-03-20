@@ -104,6 +104,20 @@ export interface RuntimeInstanceFieldSnapshot {
 
 export type RuntimeInvokeArgumentKind = 'null' | 'boolean' | 'number' | 'string';
 
+export type RuntimeInvokeFailureKind =
+  | 'none'
+  | 'not-attached'
+  | 'metadata-unavailable'
+  | 'class-not-found'
+  | 'method-not-found'
+  | 'instance-required'
+  | 'argument-mismatch'
+  | 'bridge-launch-failed'
+  | 'bridge-failed'
+  | 'bridge-parse-failed'
+  | 'runtime-exception'
+  | 'unknown';
+
 export interface RuntimeMethodInvokeArgument {
   name: string;
   typeName: string;
@@ -131,6 +145,7 @@ export interface RuntimeMethodInvokeResult {
   methodSignature: string;
   returnType: string;
   success: boolean;
+  failureKind: RuntimeInvokeFailureKind;
   error: string | null;
   exception: string | null;
   result: RuntimeMethodInvokeValue | null;

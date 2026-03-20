@@ -5,6 +5,8 @@ import type {
   ClassInfoFunctionPayload,
   ClassInfoPayload,
   WorkflowJsonValue,
+} from '../../domain/studio/contracts';
+import type {
   BaseNodeData,
 } from '../../core/studio/types';
 import { createStableId, type StableId } from '../../domain/contracts/shared-identity';
@@ -138,6 +140,7 @@ export function createCallFunctionPreviewEnvelope(
     instanceAddress,
     arguments: argumentsPayload,
     success: false,
+    failureKind: 'none',
     error: null,
     exception: null,
     result: null,
@@ -199,6 +202,7 @@ export function toCallFunctionResultPayload(
     instanceAddress,
     arguments: argumentsPayload,
     success: result.success,
+    failureKind: result.failureKind,
     error: result.error,
     exception: result.exception,
     result: result.result ? {

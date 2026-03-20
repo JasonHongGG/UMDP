@@ -20,5 +20,5 @@ pub async fn invoke_runtime_method(
         invocation_service::invoke_runtime_method(&app_handle, &state, request)
     })
     .await
-    .map_err(join_error_message)?
+    .map_err(join_error_message)
 }

@@ -1,18 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
-import { useStudioGraph, useStudioUi, useStudioRuntime } from '../../../../core/studio/StudioContext';
-import { BaseNodeData, IPort, NodeExecutionSnapshot, StudioNode } from '../../../../core/studio/types';
+import { useStudioGraph, useStudioQuery, useStudioUi } from '../../../../core/studio/StudioContext';
+import { BaseNodeData, IPort, StudioNode } from '../../../../core/studio/types';
 import { getNodePortsByDirection, getStudioNodePort, globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
 import { beginPointerExpressionDrag } from '../../../../core/studio/drag/expressionPointerDrag';
 import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
-import { createCallFunctionResultEnvelope, createClassInfoEnvelope } from '../../../../core/studio/contracts';
-import { reconcileClassInfoSelection, type ClassBinding, type ClassInfoSelection } from '../../../../domain/studio/editor';
-import type { ExpressionSource } from '../../../../domain/studio/contracts';
-import { useStudioRuntimeData } from '../../../../core/studio/runtimeData';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
-import { findSelectedFunction, getClassInfoPayloadFromValue, type CallFunctionNodeData } from '../../../../nodes/CallFunctionNode/callFunctionNodeModel';
-import { createEmptyCatalog } from '../../../../nodes/ClassNode/classNodeModel';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -121,9 +115,8 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 
 export function EditNodeModal() {
   const { nodes, edges, updateNodeData } = useStudioGraph();
-  const runtimeData = useStudioRuntimeData();
   const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
-  const { nodeSnapshots } = useStudioRuntime();
+  const query = useStudioQuery();
   const expressionDrag = useExpressionDrag();
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftNodeName, setDraftNodeName] = useState('');
@@ -142,18 +135,6 @@ export function EditNodeModal() {
   }, [node, nodeDef]);
 
   // Derived state for the left column
-  const incomingData = useMemo(() => {
-    if (!node) return [];
-    return edges
-      .filter(e => e.targetNodeId === node.id)
-      .map(e => {
-        const sourceNode = nodes.find(n => n.id === e.sourceNodeId);
-        const sourcePort = getStudioNodePort(sourceNode, 'output', e.sourcePortId);
-        return { node: sourceNode, port: sourcePort };
-      })
-      .filter(d => d.node && d.port);
-  }, [edges, nodes, node]);
-
   // Derived output previews
   const simulatedOutputPreview = useMemo(() => {
     if (!node || !nodeDef || !nodeDef.getExecutionPreview) return null;
@@ -165,146 +146,17 @@ export function EditNodeModal() {
     }
   }, [node, nodeDef]);
 
-  const createClassNodePreviewState = (nodeData: BaseNodeData, snapshots: Record<string, NodeExecutionSnapshot>) => {
-    const classData = nodeData as BaseNodeData & {
-      binding?: ClassBinding | null;
-      instanceSource?: ExpressionSource | null;
-      infoSelection?: ClassInfoSelection;
-    };
-
-    const availableInfo = runtimeData.getClassInfoCatalogByBinding(classData.binding) ?? createEmptyCatalog();
-    const infoSelection = classData.infoSelection ?? { members: [], statics: [], functions: [] };
-    const resolvedInstanceAddress = classData.instanceSource
-      ? runtimeData.resolveExpressionSource(classData.instanceSource, snapshots)
-      : null;
-
-    return {
-      binding: classData.binding ?? null,
-      availableInfo,
-      selection: reconcileClassInfoSelection(infoSelection, availableInfo),
-      resolvedInstanceAddress,
-    };
-  };
-
-  const previewSnapshots = useMemo<Record<string, NodeExecutionSnapshot>>(() => {
-    return nodes.reduce<Record<string, NodeExecutionSnapshot>>((acc, candidateNode) => {
-      const snapshot = nodeSnapshots[candidateNode.id];
-      if (snapshot) {
-        acc[candidateNode.id] = snapshot;
-        return acc;
-      }
-
-      const candidateNodeDef = globalNodeRegistry.get(candidateNode.type);
-      const classPreviewState = createClassNodePreviewState(candidateNode.data, { ...nodeSnapshots, ...acc });
-      const previewOutputs = candidateNode.type === 'class-ref'
-        ? {
-          'info-out': createClassInfoEnvelope(
-            classPreviewState.binding,
-            classPreviewState.availableInfo,
-            classPreviewState.selection,
-            classPreviewState.resolvedInstanceAddress ?? null,
-          ),
-        }
-        : candidateNodeDef?.getExecutionPreview?.(candidateNode.data);
-      if (!previewOutputs) {
-        return acc;
-      }
-
-      acc[candidateNode.id] = {
-        nodeId: candidateNode.id,
-        state: 'idle',
-        inputs: {},
-        outputs: previewOutputs,
-      };
-      return acc;
-    }, {});
-  }, [nodeSnapshots, nodes]);
-
-  const classNodePreviewState = useMemo(() => {
-    if (!node || node.type !== 'class-ref') {
-      return null;
-    }
-
-    return createClassNodePreviewState(node.data, previewSnapshots);
-  }, [node, previewSnapshots, runtimeData]);
-
-  useEffect(() => {
-    if (!classNodePreviewState?.binding || typeof classNodePreviewState.resolvedInstanceAddress !== 'string') {
-      return;
-    }
-
-    if (classNodePreviewState.selection.members.length === 0) {
-      return;
-    }
-
-    runtimeData.ensureRuntimeInstanceFieldsLoaded(
-      classNodePreviewState.binding.classStableId,
-      classNodePreviewState.resolvedInstanceAddress,
-    );
-  }, [classNodePreviewState, runtimeData]);
+  const inputBindingStates = useMemo(() => node ? query.getNodeInputBindingStates(node.id) : [], [node, query]);
+  const callFunctionInputState = useMemo(() => node?.type === 'call-function' ? query.getCallFunctionClassInfoQueryState(node.id) : null, [node, query]);
+  const liveQuerySnapshot = useMemo(() => node ? query.getNodeSnapshot(node.id) : null, [node, query]);
 
   const liveOutputPreview = useMemo(() => {
-    if (!node || !nodeDef) {
+    if (!node) {
       return null;
     }
 
-    const runtimeOutputs = nodeSnapshots[node.id]?.outputs;
-    if (runtimeOutputs) {
-      return runtimeOutputs;
-    }
-
-    if (node.type !== 'class-ref') {
-      if (node.type !== 'call-function') {
-        return simulatedOutputPreview;
-      }
-
-      const classInfoEdge = edges.find((edge) => edge.targetNodeId === node.id && edge.targetPortId === 'class-info-in' && edge.channel === 'data');
-      if (!classInfoEdge) {
-        return simulatedOutputPreview;
-      }
-
-      const classInfoPayload = getClassInfoPayloadFromValue(previewSnapshots[classInfoEdge.sourceNodeId]?.outputs[classInfoEdge.sourcePortId]?.payload);
-      if (!classInfoPayload) {
-        return simulatedOutputPreview;
-      }
-
-      const callFunctionData = node.data as CallFunctionNodeData;
-      const method = findSelectedFunction(classInfoPayload, callFunctionData.selectedMethodStableId);
-      if (!method) {
-        return simulatedOutputPreview;
-      }
-
-      return {
-        'result-out': createCallFunctionResultEnvelope({
-          method,
-          instanceAddress: classInfoPayload.instanceAddress,
-          arguments: callFunctionData.arguments.map((entry) => ({
-            name: entry.name,
-            typeName: method.parameters.find((parameter) => parameter.name === entry.name)?.typeName ?? 'System.Object',
-            value: runtimeData.resolveExpressionSource(entry.source, previewSnapshots) ?? null,
-          })),
-          success: false,
-          error: null,
-          exception: null,
-          result: null,
-        }),
-      };
-    }
-
-    const resolvedMemberValues = classNodePreviewState?.binding
-      ? runtimeData.resolveClassMemberValues(classNodePreviewState.binding.classStableId, classNodePreviewState.resolvedInstanceAddress ?? null)
-      : undefined;
-
-    return {
-      'info-out': createClassInfoEnvelope(
-        classNodePreviewState?.binding ?? null,
-        classNodePreviewState?.availableInfo ?? { members: [], statics: [], functions: [] },
-        classNodePreviewState?.selection ?? { members: [], statics: [], functions: [] },
-        classNodePreviewState?.resolvedInstanceAddress ?? null,
-        resolvedMemberValues,
-      ),
-    };
-  }, [classNodePreviewState, edges, node, nodeDef, nodeSnapshots, previewSnapshots, runtimeData, simulatedOutputPreview]);
+    return query.getNodeOutputPreview(node.id) ?? simulatedOutputPreview;
+  }, [node, query, simulatedOutputPreview]);
 
   const EditComponent = nodeDef?.EditComponent;
   const EditFooterComponent = nodeDef?.EditFooterComponent;
@@ -448,37 +300,40 @@ export function EditNodeModal() {
                 <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Input Data</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {incomingData.length === 0 ? (
+                {inputBindingStates.length === 0 ? (
                     <div className="text-center mt-10">
                         <div className="text-slate-600 text-sm mb-2">No incoming connections.</div>
                         <div className="text-slate-700 text-xs px-4">Connect other nodes to this node's input ports.</div>
                     </div>
                 ) : (
-                    incomingData.map((d, i) => {
-                      // Attempt to construct tree data from preview or previous snapshots
-                      const sourceNodeDef = globalNodeRegistry.get(d.node!.type);
-                      const classPreviewState = d.node?.type === 'class-ref'
-                        ? createClassNodePreviewState(d.node.data, previewSnapshots)
-                        : null;
-                      const staticPreview = d.node?.type === 'class-ref'
-                        ? {
-                          'info-out': createClassInfoEnvelope(
-                            classPreviewState?.binding ?? null,
-                            classPreviewState?.availableInfo ?? createEmptyCatalog(),
-                            classPreviewState?.selection ?? { members: [], statics: [], functions: [] },
-                            classPreviewState?.resolvedInstanceAddress ?? null,
-                          ),
-                        }
-                        : (sourceNodeDef?.getExecutionPreview ? sourceNodeDef.getExecutionPreview(d.node!.data) : null);
-                      const snapshot = nodeSnapshots[d.node!.id];
-                      
-                      const resolvedPayload = snapshot?.outputs[d.port!.id]?.payload || staticPreview?.[d.port!.id]?.payload || { _notice: 'No payload preview available. Connect and execute to view structural data.' };
+                    inputBindingStates.map((bindingState) => {
+                      if (bindingState.sources.length === 0) {
+                        return (
+                          <div key={bindingState.port.id} className="bg-[#0f172a] border border-slate-800/80 rounded-xl overflow-hidden shadow-sm flex flex-col">
+                            <div className="p-2.5 border-b border-slate-700/60 bg-slate-800/40 flex items-center justify-between">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{bindingState.port.type}</div>
+                                <span className="text-xs font-bold text-slate-200 truncate">{bindingState.port.label}</span>
+                              </div>
+                            </div>
+                            <div className="p-3 bg-[#0a0f16]">
+                              <div className="text-[11px] text-slate-600 italic bg-slate-900/40 p-3 rounded border border-slate-800/50">
+                                {bindingState.issues[0]?.message ?? 'No input bound.'}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                      return (
-                        <div key={i} className="bg-[#0f172a] border border-slate-700/60 rounded-xl overflow-hidden shadow-sm flex flex-col group/card hover:border-slate-600 transition-colors">
+                      return bindingState.sources.map((source, sourceIndex) => {
+                        const sourceNodeDef = source.sourceNode ? globalNodeRegistry.get(source.sourceNode.type) : null;
+                        const resolvedPayload = source.payload ?? { _notice: bindingState.issues[0]?.message ?? 'No payload preview available. Connect and execute to view structural data.' };
+
+                        return (
+                        <div key={`${bindingState.port.id}:${source.edge.id}:${sourceIndex}`} className="bg-[#0f172a] border border-slate-700/60 rounded-xl overflow-hidden shadow-sm flex flex-col group/card hover:border-slate-600 transition-colors">
                             <div 
                               onMouseDown={(event) => {
-                                if (event.button !== 0 || !d.node || !d.port) {
+                                if (event.button !== 0 || !source.sourceNode || !source.sourcePort) {
                                   return;
                                 }
 
@@ -486,10 +341,10 @@ export function EditNodeModal() {
                                   event,
                                   createExpressionReferenceDragPayload(
                                   createInputExpressionSource(
-                                    d.node.id,
-                                    d.port.id,
+                                    source.sourceNode.id,
+                                    source.sourcePort.id,
                                     [],
-                                    `${d.node.data.nodeName || d.node.id}.${d.port.id}`,
+                                    `${source.sourceNode.data.nodeName || source.sourceNode.id}.${source.sourcePort.id}`,
                                   ),
                                   'input-panel',
                                   ),
@@ -505,29 +360,30 @@ export function EditNodeModal() {
                                     {sourceNodeDef?.icon ? React.createElement(sourceNodeDef.icon as any, { size: 10, className: "text-slate-400" }) : <Box size={10} className="text-slate-400" />}
                                   </div>
                                   <span className="text-xs font-bold text-slate-200 truncate">
-                                    {d.node?.data.nodeName || sourceNodeDef?.manifest.displayName || d.node?.type}
+                                    {source.sourceNode?.data.nodeName || sourceNodeDef?.manifest.displayName || source.sourceNode?.type}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-slate-500 font-medium">1 item</span>
+                                  <span className="text-[10px] text-slate-500 font-medium">{bindingState.port.label}</span>
                                 </div>
                             </div>
                             <div className="p-3 overflow-x-auto bg-[#0a0f16] flex-1">
                                 <div className="flex items-center gap-3 mb-2 ml-1 opacity-70">
-                                  <div className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{d.port?.type || 'JSON'}</div>
-                                  <span className="text-[10px] text-slate-500 font-medium truncate">{d.port?.label}</span>
+                                  <div className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{source.sourcePort?.type || 'JSON'}</div>
+                                  <span className="text-[10px] text-slate-500 font-medium truncate">{source.sourcePort?.label}</span>
                                 </div>
                                 <div className="pl-1">
                                   <JsonDraggableTreeItem 
                                     data={resolvedPayload} 
                                     path="" 
-                                    sourceNode={d.node!} 
-                                    sourcePortId={d.port!.id} 
+                                    sourceNode={source.sourceNode!} 
+                                    sourcePortId={source.sourcePort!.id} 
                                   />
                                 </div>
                             </div>
                         </div>
                       );
+                      });
                     })
                 )}
             </div>
@@ -576,6 +432,16 @@ export function EditNodeModal() {
             <div className="h-10 border-b border-slate-800/80 flex items-center px-4 bg-slate-900/40">
                 <LogOut size={14} className="text-slate-400 mr-2" />
                 <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Output</span>
+                {liveQuerySnapshot ? (
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900/80 px-1.5 py-0.5 rounded">
+                      {liveQuerySnapshot.source}
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900/80 px-1.5 py-0.5 rounded">
+                      {liveQuerySnapshot.status}
+                    </span>
+                  </div>
+                ) : null}
             </div>
             
             <div className="flex-1 overflow-y-auto w-full p-4">
@@ -604,6 +470,11 @@ export function EditNodeModal() {
                                 
                                 {/* Port Payload Preview */}
                                 <div className="p-3 bg-[#0a0f16] max-h-64 overflow-y-auto">
+                                    {liveQuerySnapshot?.errorMessage ? (
+                                      <div className="text-[10px] text-rose-300/90 bg-rose-500/10 border border-rose-500/20 rounded px-2 py-1.5 mb-2">
+                                        {liveQuerySnapshot.errorMessage}
+                                      </div>
+                                    ) : null}
                                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 block">Payload Preview</span>
                                     {portPreview ? (
                                         <pre className="text-[11px] leading-relaxed text-cyan-200/90 font-mono whitespace-pre-wrap break-all bg-slate-950/50 p-3 rounded-lg border border-slate-800/80">
@@ -611,7 +482,9 @@ export function EditNodeModal() {
                                         </pre>
                                     ) : (
                                         <div className="text-[11px] text-slate-600 italic bg-slate-900/40 p-3 rounded border border-slate-800/50">
-                                            No payload mapped or generated yet.
+                                        {node.type === 'call-function' && out.id === 'result-out'
+                                          ? (callFunctionInputState?.issues[0]?.message ?? 'No payload mapped or generated yet.')
+                                          : 'No payload mapped or generated yet.'}
                                         </div>
                                     )}
                                 </div>

@@ -157,6 +157,23 @@ pub enum RuntimeInvokeArgumentKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeInvokeFailureKind {
+    None,
+    NotAttached,
+    MetadataUnavailable,
+    ClassNotFound,
+    MethodNotFound,
+    InstanceRequired,
+    ArgumentMismatch,
+    BridgeLaunchFailed,
+    BridgeFailed,
+    BridgeParseFailed,
+    RuntimeException,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeMethodInvokeArgument {
     pub name: String,
@@ -191,6 +208,7 @@ pub struct RuntimeMethodInvokeResult {
     pub method_signature: String,
     pub return_type: String,
     pub success: bool,
+    pub failure_kind: RuntimeInvokeFailureKind,
     pub error: Option<String>,
     pub exception: Option<String>,
     pub result: Option<RuntimeMethodInvokeValue>,

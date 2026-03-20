@@ -35,11 +35,35 @@ export type {
   TriggerNodeDocumentState,
   ValidationIssue,
 } from './nodes';
+export type {
+  NodeExecutionInputMap,
+  NodeExecutionOutputMap,
+  NodeExecutionSnapshot,
+  NodeExecutionSource,
+  NodeExecutionStatus,
+  NodeExecutionTiming,
+} from './execution';
 export {
   parseClassNodeDocumentState,
   parseCallFunctionNodeDocumentState,
   parseParameterNodeDocumentState,
   parseTriggerNodeDocumentState,
 } from './nodes';
+export type {
+  CallFunctionArgumentPayload,
+  CallFunctionResultPayload,
+  CallFunctionResultValuePayload,
+  ClassInfoBasicPayload,
+  ClassInfoFieldPayload,
+  ClassInfoFunctionParameterPayload,
+  ClassInfoFunctionPayload,
+  ClassInfoPayload,
+  JsonSchemaReference,
+  ParameterDefinitionPayload,
+  ParameterDefinitionValue,
+  WorkflowJsonEnvelope,
+  WorkflowJsonValue,
+} from './payloads';
+export { WORKFLOW_SCHEMA_IDS } from './payloads';
 export type { GraphDocumentEnvelope } from './persistence';
 export { createGraphDocumentEnvelope } from './persistence';

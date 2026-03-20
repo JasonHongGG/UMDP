@@ -1,50 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Code2 } from 'lucide-react';
-import { globalNodeRegistry } from '../../core/studio/NodeRegistry';
-import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import { useStudioQuery } from '../../core/studio/StudioContext';
 import {
   getExpressionSourceDisplayValue,
   readExpressionDragData,
   createLiteralExpressionSource,
 } from '../../core/studio/expression';
 import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
-import type { ClassInfoPayload, INodeEditProps } from '../../core/studio/types';
+import type { INodeEditProps } from '../../core/studio/types';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import type { ExpressionSource } from '../../domain/studio/contracts';
 import type { CallFunctionNodeData } from './callFunctionNodeModel';
 import {
   findSelectedFunction,
-  getClassInfoPayloadFromValue,
   hasSameCallFunctionArguments,
   reconcileCallFunctionArguments,
 } from './callFunctionNodeModel';
 
-function useConnectedClassInfoPayload(nodeId: string): ClassInfoPayload | null {
-  const { nodes, edges } = useStudioGraph();
-  const { nodeSnapshots } = useStudioRuntime();
-
-  return useMemo(() => {
-    const incomingEdge = edges.find((edge) => edge.targetNodeId === nodeId && edge.targetPortId === 'class-info-in' && edge.channel === 'data');
-    if (!incomingEdge) {
-      return null;
-    }
-
-    const runtimeEnvelope = nodeSnapshots[incomingEdge.sourceNodeId]?.outputs[incomingEdge.sourcePortId];
-    if (runtimeEnvelope?.schema.id === 'studio.class.info') {
-      return getClassInfoPayloadFromValue(runtimeEnvelope.payload);
-    }
-
-    const sourceNode = nodes.find((entry) => entry.id === incomingEdge.sourceNodeId);
-    const sourceNodeDef = sourceNode ? globalNodeRegistry.get(sourceNode.type) : null;
-    const previewOutputs = sourceNode && sourceNodeDef?.getExecutionPreview?.(sourceNode.data);
-    const previewEnvelope = previewOutputs?.[incomingEdge.sourcePortId];
-    if (previewEnvelope?.schema.id === 'studio.class.info') {
-      return getClassInfoPayloadFromValue(previewEnvelope.payload);
-    }
-
-    return null;
-  }, [edges, nodeId, nodeSnapshots, nodes]);
-}
 
 function ArgumentInput({
   value,
@@ -98,8 +70,10 @@ function ArgumentInput({
 }
 
 export const CallFunctionNodeEditor: React.FC<INodeEditProps<CallFunctionNodeData>> = ({ nodeId, data, updateData }) => {
-  const classInfoPayload = useConnectedClassInfoPayload(nodeId);
-  const availableMethods = classInfoPayload?.functions ?? [];
+  const query = useStudioQuery();
+  const classInfoState = useMemo(() => query.getCallFunctionClassInfoQueryState(nodeId), [nodeId, query]);
+  const classInfoPayload = classInfoState.payload;
+  const availableMethods = classInfoState.methods;
   const selectedMethod = findSelectedFunction(classInfoPayload, data.selectedMethodStableId);
 
   useEffect(() => {
@@ -131,9 +105,9 @@ export const CallFunctionNodeEditor: React.FC<INodeEditProps<CallFunctionNodeDat
         <span>Call Function</span>
       </div>
 
-      {!classInfoPayload ? (
+      {classInfoState.issues.length > 0 ? (
         <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-          Connect a Class Info input first. The available method list is driven entirely by the upstream Class node payload.
+          {classInfoState.issues[0]?.message}
         </div>
       ) : null}
 

@@ -117,11 +117,13 @@ describe('runtimeGraph helpers', () => {
     const snapshots = {
       'source-1': {
         nodeId: 'source-1',
-        state: 'success' as const,
+        status: 'success' as const,
+        source: 'runtime' as const,
         inputs: {},
         outputs: {
           'json-out': createEnvelope(GENERIC_JSON_SCHEMA, { ok: true }),
         },
+        timing: {},
       },
     };
     const edges: StudioEdge[] = [

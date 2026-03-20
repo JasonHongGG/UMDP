@@ -1,10 +1,10 @@
 import React, { createContext, useContext } from 'react';
 import { createPendingClassNodeRequest, type ClassBinding, type ClassInfoCatalog, type PendingClassNodeRequest, type StudioClassCatalogEntry } from '../../domain/studio/editor';
 import type { StableId } from '../../domain/contracts/shared-identity';
-import type { ExpressionSource } from '../../domain/studio/contracts';
+import type { ExpressionSource, WorkflowJsonValue } from '../../domain/studio/contracts';
 import { resolveExpressionSource } from './expression';
 import type { ResolvedMemberRuntimeValue } from './contracts';
-import type { NodeExecutionSnapshot, WorkflowJsonValue } from './types';
+import type { NodeExecutionSnapshot } from './types';
 
 export interface StudioRuntimeDataState {
   classes: StudioClassCatalogEntry[];

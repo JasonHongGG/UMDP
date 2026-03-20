@@ -10,13 +10,23 @@ import { validateConnection } from './connectionPolicy';
 import { executeStudioFlow } from './executionEngine';
 import { ExpressionDragProvider } from './drag/ExpressionDragContext';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
+import {
+  getCallFunctionClassInfoQueryState,
+  getNodeInputBindingStates,
+  getNodeOutputPreview,
+  getNodeQuerySnapshot,
+  type CallFunctionClassInfoQueryState,
+  type InputPortBindingState,
+  type StudioNodeQueryContext,
+} from './nodeQueryService';
 import { StudioRuntimeDataProvider, type StudioRuntimeDataState } from './runtimeData';
-import type { ConnectPortsOptions, DraftConnection, NodeExecutionSnapshot, NodeExecutionState, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
+import type { ConnectPortsOptions, DraftConnection, NodeExecutionOutputMap, NodeExecutionSnapshot, NodeExecutionState, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
 import { getConnectionChannelForPortType } from './types';
 
 const StudioGraphContext = createContext<StudioGraphStore | null>(null);
 const StudioUiContext = createContext<StudioUiState | null>(null);
 const StudioRuntimeContext = createContext<StudioRuntimeState | null>(null);
+const StudioQueryContext = createContext<StudioQueryState | null>(null);
 
 export interface StudioUiState {
   transform: { x: number; y: number; scale: number };
@@ -44,6 +54,14 @@ export interface StudioRuntimeState {
   nodeStates: Record<string, NodeExecutionState>;
   nodeSnapshots: Record<string, NodeExecutionSnapshot>;
   executeFlow: (startNodeId: string) => void;
+}
+
+export interface StudioQueryState {
+  context: StudioNodeQueryContext;
+  getNodeSnapshot: (nodeId: string) => NodeExecutionSnapshot | null;
+  getNodeOutputPreview: (nodeId: string) => NodeExecutionOutputMap | null;
+  getNodeInputBindingStates: (nodeId: string) => InputPortBindingState[];
+  getCallFunctionClassInfoQueryState: (nodeId: string) => CallFunctionClassInfoQueryState;
 }
 
 interface UseStudioUiStateOptions {
@@ -240,6 +258,28 @@ function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edg
   }), [executeFlow, nodeSnapshots, nodeStates]);
 }
 
+function useStudioQueryState(
+  nodes: StudioNode[],
+  edges: StudioEdge[],
+  nodeSnapshots: Record<string, NodeExecutionSnapshot>,
+  runtimeData: StudioRuntimeDataState,
+): StudioQueryState {
+  const context = useMemo<StudioNodeQueryContext>(() => ({
+    nodes,
+    edges,
+    nodeSnapshots,
+    runtimeData,
+  }), [edges, nodeSnapshots, nodes, runtimeData]);
+
+  return useMemo(() => ({
+    context,
+    getNodeSnapshot: (nodeId: string) => getNodeQuerySnapshot(nodeId, context),
+    getNodeOutputPreview: (nodeId: string) => getNodeOutputPreview(nodeId, context),
+    getNodeInputBindingStates: (nodeId: string) => getNodeInputBindingStates(nodeId, context),
+    getCallFunctionClassInfoQueryState: (nodeId: string) => getCallFunctionClassInfoQueryState(nodeId, context),
+  }), [context]);
+}
+
 export function useStudioGraph() {
   const context = useContext(StudioGraphContext);
   if (!context) {
@@ -267,11 +307,21 @@ export function useStudioRuntime() {
   return context;
 }
 
+export function useStudioQuery() {
+  const context = useContext(StudioQueryContext);
+  if (!context) {
+    throw new Error('useStudioQuery must be used within a StudioProvider');
+  }
+
+  return context;
+}
+
 export function useStudio() {
   return {
     ...useStudioGraph(),
     ...useStudioUi(),
     ...useStudioRuntime(),
+    ...useStudioQuery(),
   };
 }
 
@@ -280,6 +330,7 @@ export function StudioProvider({ children, runtimeData }: { children: React.Reac
   const { nodes, edges, document, connectPorts } = graphStore;
   const uiValue = useStudioUiState({ nodes, edges, connectPorts });
   const runtimeValue = useStudioRuntimeState(document, nodes, edges, runtimeData);
+  const queryValue = useStudioQueryState(nodes, edges, runtimeValue.nodeSnapshots, runtimeData);
 
   useEffect(() => {
     for (const node of nodes) {
@@ -335,7 +386,9 @@ export function StudioProvider({ children, runtimeData }: { children: React.Reac
         <StudioGraphContext.Provider value={graphStore}>
           <StudioUiContext.Provider value={uiValue}>
             <StudioRuntimeContext.Provider value={runtimeValue}>
-              {children}
+              <StudioQueryContext.Provider value={queryValue}>
+                {children}
+              </StudioQueryContext.Provider>
             </StudioRuntimeContext.Provider>
           </StudioUiContext.Provider>
         </StudioGraphContext.Provider>

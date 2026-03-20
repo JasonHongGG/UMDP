@@ -10,7 +10,7 @@ describe('executeStudioFlow', () => {
     initializeStudioNodeRegistry([]);
   });
 
-  it('uses definition-level validation instead of hardcoded node types', () => {
+  it('uses definition-level validation instead of hardcoded node types', async () => {
     vi.useFakeTimers();
 
     const executeSpy = vi.fn(() => ({ state: 'success' as const, outputs: {} }));
@@ -36,7 +36,7 @@ describe('executeStudioFlow', () => {
 
     initializeStudioNodeRegistry([guardedNode]);
 
-    const snapshots: Array<{ state: string; error?: string }> = [];
+    const snapshots: Array<{ status: string; errorMessage?: string }> = [];
     executeStudioFlow({
       startNodeId: 'guarded-1',
       nodes: [
@@ -51,18 +51,18 @@ describe('executeStudioFlow', () => {
       onReset: vi.fn(),
       onNodeStateChange: vi.fn(),
       onNodeSnapshot: (snapshot) => {
-        snapshots.push({ state: snapshot.state, error: snapshot.error });
+        snapshots.push({ status: snapshot.status, errorMessage: snapshot.errorMessage });
       },
       stepDelayMs: 25,
     });
 
-    vi.runAllTimers();
+    await vi.runAllTimersAsync();
 
     expect(executeSpy).not.toHaveBeenCalled();
-    expect(snapshots).toContainEqual({ state: 'error', error: 'Guard rejected execution.' });
+    expect(snapshots).toContainEqual({ status: 'error', errorMessage: 'Guard rejected execution.' });
   });
 
-  it('materializes passive json provider nodes for downstream inputs without flow edges', () => {
+  it('materializes passive json provider nodes for downstream inputs without flow edges', async () => {
     vi.useFakeTimers();
 
     const parameterNode: StudioNodeDefinition = {
@@ -192,11 +192,117 @@ describe('executeStudioFlow', () => {
       stepDelayMs: 25,
     });
 
-    vi.runAllTimers();
+    await vi.runAllTimersAsync();
 
     expect(consumerExecute).toHaveBeenCalled();
     expect(seenSnapshots['params-1']).toEqual({
       'params-out': createEnvelope(GENERIC_JSON_SCHEMA, { instanceAddress: '0x1234' }),
     });
+  });
+
+  it('supports async passive json provider nodes before downstream execution', async () => {
+    vi.useFakeTimers();
+
+    const asyncParameterNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'async-params',
+        typeVersion: 1,
+        family: 'data',
+        displayName: 'Async Parameters',
+        description: 'Async passive parameter provider',
+        category: 'Test',
+        inputs: [],
+        outputs: [{ key: 'params-out', displayName: 'Params', direction: 'output', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: async () => ({
+          state: 'success',
+          outputs: {
+            'params-out': createEnvelope(GENERIC_JSON_SCHEMA, { instanceAddress: '0x9999' }),
+          },
+        }),
+      },
+      CanvasComponent: () => null,
+    };
+
+    const consumerExecute = vi.fn(({ resolvedInputs }) => ({
+      state: 'success' as const,
+      outputs: {
+        'json-out': createEnvelope(GENERIC_JSON_SCHEMA, { received: resolvedInputs['json-in']?.[0] ?? null }),
+      },
+    }));
+
+    const consumerNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'consumer',
+        typeVersion: 1,
+        family: 'runtime',
+        displayName: 'Consumer',
+        description: 'Consumes JSON input',
+        category: 'Test',
+        inputs: [
+          { key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' },
+          { key: 'json-in', displayName: 'Json In', direction: 'input', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id },
+        ],
+        outputs: [{ key: 'json-out', displayName: 'Json Out', direction: 'output', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: consumerExecute,
+      },
+      CanvasComponent: () => null,
+    };
+
+    const triggerNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'trigger',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Trigger',
+        description: 'Flow start',
+        category: 'Test',
+        inputs: [],
+        outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: () => ({ state: 'success', outputs: {} }),
+      },
+      CanvasComponent: () => null,
+    };
+
+    initializeStudioNodeRegistry([triggerNode, asyncParameterNode, consumerNode]);
+
+    executeStudioFlow({
+      startNodeId: 'trigger-1',
+      nodes: [
+        { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
+        { id: 'params-1', type: 'async-params', position: { x: 120, y: 0 }, data: {} },
+        { id: 'consumer-1', type: 'consumer', position: { x: 240, y: 0 }, data: {} },
+      ],
+      edges: [
+        { id: 'edge-flow', channel: 'control', sourceNodeId: 'trigger-1', sourcePortId: 'flow-out', targetNodeId: 'consumer-1', targetPortId: 'flow-in' },
+        { id: 'edge-json', channel: 'data', sourceNodeId: 'params-1', sourcePortId: 'params-out', targetNodeId: 'consumer-1', targetPortId: 'json-in' },
+      ],
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: vi.fn(),
+      stepDelayMs: 25,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(consumerExecute).toHaveBeenCalledWith(expect.objectContaining({
+      resolvedInputs: expect.objectContaining({
+        'json-in': [{ instanceAddress: '0x9999' }],
+      }),
+    }));
   });
 });

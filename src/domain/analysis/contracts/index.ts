@@ -13,6 +13,7 @@ export type {
   RuntimeMethodInvokeValue,
   RuntimeInstanceFieldSnapshot,
   RuntimeFlavor,
+  RuntimeInvokeFailureKind,
   RuntimeOverlaySnapshot,
   RuntimeResolvedFieldDescriptor,
   StaticFieldDescriptor,

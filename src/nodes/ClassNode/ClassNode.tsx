@@ -1,7 +1,6 @@
-import { Box } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
-import { defineStudioNode } from '../../core/studio/NodeRegistry';
+import { Box } from 'lucide-react';
+import { formatHexAddress } from '../../core/addressFormat';
 import {
   CLASS_INFO_SCHEMA,
   PARAMETER_DEFINITIONS_SCHEMA,
@@ -10,10 +9,12 @@ import {
   createJsonPort,
   type ResolvedMemberRuntimeValue,
 } from '../../core/studio/contracts';
-import { formatHexAddress } from '../../core/addressFormat';
-import { reconcileClassInfoSelection } from '../../domain/studio/editor';
-import { parseClassNodeDocumentState } from '../../domain/studio/contracts';
+import { defineStudioNode } from '../../core/studio/NodeRegistry';
+import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
 import type { RuntimeInstanceFieldSnapshot } from '../../domain/analysis/contracts';
+import type { ValidationIssue, WorkflowJsonValue } from '../../domain/studio/contracts';
+import { parseClassNodeDocumentState } from '../../domain/studio/contracts';
+import { reconcileClassInfoSelection } from '../../domain/studio/editor';
 import { ClassNodeBindingEditor } from './ClassNodeBindingEditor';
 import { ClassNodeCanvas } from './ClassNodeCanvas';
 import { ClassNodeSelectionEditor } from './ClassNodeSelectionEditor';
@@ -27,13 +28,21 @@ import {
   type ClassNodeData,
 } from './classNodeModel';
 
-const CLASS_INFO_OUTPUT: IPort = {
-  ...createJsonPort('info-out', 'Info', CLASS_INFO_SCHEMA, 'Selected class metadata wrapped in the studio JSON envelope.'),
-};
+const CLASS_INFO_OUTPUT: IPort = createJsonPort(
+  'info-out',
+  'Info',
+  CLASS_INFO_SCHEMA,
+  'Selected class metadata wrapped in the studio JSON envelope.',
+);
 
 const CLASS_NODE_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In'),
-  createJsonPort('instance-in', 'Instance Ref', PARAMETER_DEFINITIONS_SCHEMA, 'Parameter definitions used to supply instance reference data to this class node.'),
+  createJsonPort(
+    'instance-in',
+    'Instance Ref',
+    PARAMETER_DEFINITIONS_SCHEMA,
+    'Parameter definitions used to supply instance reference data to this class node.',
+  ),
 ];
 
 const CLASS_NODE_OUTPUTS: IPort[] = [
@@ -41,11 +50,18 @@ const CLASS_NODE_OUTPUTS: IPort[] = [
   CLASS_INFO_OUTPUT,
 ];
 
-function createResolvedMemberValueMap(snapshot: RuntimeInstanceFieldSnapshot): Record<string, ResolvedMemberRuntimeValue> {
-  return Object.fromEntries(snapshot.fields.map((field) => [field.stableId, {
-    address: formatHexAddress(field.address),
-    value: field.value,
-  }]));
+function createResolvedMemberValueMap(
+  snapshot: RuntimeInstanceFieldSnapshot,
+): Record<string, ResolvedMemberRuntimeValue> {
+  return Object.fromEntries(
+    snapshot.fields.map((field) => [
+      field.stableId,
+      {
+        address: formatHexAddress(field.address),
+        value: field.value,
+      },
+    ]),
+  );
 }
 
 const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
@@ -111,16 +127,28 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
   },
   executionContract: {
     validate: (context) => {
-      const hasIncomingInstance = (context.inputBindings['instance-in']?.length ?? 0) > 0 || (context.resolvedInputs['instance-in']?.length ?? 0) > 0;
+      const classDocumentState = parseClassNodeDocumentState(context.documentState);
+      const binding = fromClassBindingReference(classDocumentState.classBinding);
+      const availableInfo = context.getClassInfoCatalogByBinding(binding);
+      const selection = availableInfo
+        ? reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo)
+        : fromClassExportSelection(classDocumentState.exportSelection);
+      const hasIncomingInstance =
+        (context.inputBindings['instance-in']?.length ?? 0) > 0 ||
+        (context.resolvedInputs['instance-in']?.length ?? 0) > 0;
       const hasOwnInstanceBinding = hasResolvedExecutionValue(context.resolvedBindings.instanceSource);
+      const requiresInstance = selection.members.length > 0;
 
-      if (!hasIncomingInstance && !hasOwnInstanceBinding) {
-        return [{
-          severity: 'error',
-          code: 'class.instance.required',
-          message: 'Class node requires an incoming instance reference or an instance source expression.',
-          target: 'instance-in',
-        }];
+      if (requiresInstance && !hasIncomingInstance && !hasOwnInstanceBinding) {
+        return [
+          {
+            severity: 'error',
+            code: 'class.instance.required',
+            message:
+              'Class node requires an incoming instance reference or an instance source expression when exporting runtime member values.',
+            target: 'instance-in',
+          },
+        ];
       }
 
       return [];
@@ -129,24 +157,32 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       const classDocumentState = parseClassNodeDocumentState(documentState);
       const binding = fromClassBindingReference(classDocumentState.classBinding);
       const availableInfo = getClassInfoCatalogByBinding(binding);
+
       if (!availableInfo) {
         return {
           state: 'error',
-          issues: [{
-            severity: 'error',
-            code: 'class.catalog.unavailable',
-            message: 'Canonical class catalog is unavailable for this binding. Re-run analysis or rebind the class node.',
-            target: 'binding',
-          }],
+          issues: [
+            {
+              severity: 'error',
+              code: 'class.catalog.unavailable',
+              message:
+                'Canonical class catalog is unavailable for this binding. Re-run analysis or rebind the class node.',
+              target: 'binding',
+            },
+          ],
           outputs: {},
         };
       }
 
-      const selection = reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo);
-      const resolvedInstanceAddress = (resolvedBindings.instanceSource as import('../../core/studio/types').WorkflowJsonValue | undefined) ?? null;
-      const normalizedInstanceAddress = typeof resolvedInstanceAddress === 'string' ? formatHexAddress(resolvedInstanceAddress) : null;
+      const selection = reconcileClassInfoSelection(
+        fromClassExportSelection(classDocumentState.exportSelection),
+        availableInfo,
+      );
+      const resolvedInstanceAddress = (resolvedBindings.instanceSource as WorkflowJsonValue | undefined) ?? null;
+      const normalizedInstanceAddress =
+        typeof resolvedInstanceAddress === 'string' ? formatHexAddress(resolvedInstanceAddress) : null;
       let resolvedMemberValues: Record<string, ResolvedMemberRuntimeValue> | undefined;
-      let issues: import('../../domain/studio/contracts').ValidationIssue[] | undefined;
+      let issues: ValidationIssue[] | undefined;
 
       if (binding && normalizedInstanceAddress && selection.members.length > 0) {
         try {
@@ -156,12 +192,14 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
           });
           resolvedMemberValues = createResolvedMemberValueMap(snapshot);
         } catch (error) {
-          issues = [{
-            severity: 'warning',
-            code: 'class.instance.resolve_failed',
-            message: `Failed to resolve runtime member values: ${String(error)}`,
-            target: 'instance-in',
-          }];
+          issues = [
+            {
+              severity: 'warning',
+              code: 'class.instance.resolve_failed',
+              message: `Failed to resolve runtime member values: ${String(error)}`,
+              target: 'instance-in',
+            },
+          ];
         }
       }
 
