@@ -21,6 +21,7 @@ import {
 } from '../studio/editor';
 import type { StableId } from '../contracts/shared-identity';
 import { formatHexAddress } from '../../core/addressFormat';
+import type { ResolvedMemberRuntimeValue } from '../../core/studio/contracts';
 import type {
   AnalysisClassInfo,
   AnalysisClassSummary,
@@ -481,25 +482,23 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
       });
   }, [analysisSnapshot, processSession, runtimeInstanceFieldSnapshots]);
 
-  const resolveClassMemberValues = useCallback((classStableId: string, instanceAddress: unknown) => {
-    if (typeof instanceAddress !== 'string') {
-      return undefined;
-    }
+  const runtimeMemberValuesByClassAndAddress = useMemo(() => {
+    return Object.values(runtimeInstanceFieldSnapshots).reduce<Record<string, Record<string, Record<string, ResolvedMemberRuntimeValue>>>>((acc, snapshot) => {
+      const normalizedAddress = formatHexAddress(snapshot.instanceAddress);
+      if (!normalizedAddress) {
+        return acc;
+      }
 
-    const normalizedAddress = formatHexAddress(instanceAddress);
-    if (!normalizedAddress) {
-      return undefined;
-    }
+      if (!acc[snapshot.classStableId]) {
+        acc[snapshot.classStableId] = {};
+      }
 
-    const snapshot = runtimeInstanceFieldSnapshots[`${classStableId}::${normalizedAddress}`];
-    if (!snapshot) {
-      return undefined;
-    }
-
-    return Object.fromEntries(snapshot.fields.map((field) => [field.stableId, {
-      address: formatHexAddress(field.address),
-      value: field.value,
-    }]));
+      acc[snapshot.classStableId]![normalizedAddress] = Object.fromEntries(snapshot.fields.map((field) => [field.stableId, {
+        address: formatHexAddress(field.address),
+        value: field.value,
+      }]));
+      return acc;
+    }, {});
   }, [runtimeInstanceFieldSnapshots]);
 
   useEffect(() => {
@@ -805,8 +804,8 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     classes: studioClassCatalogEntries,
     classInfoCatalogByStableId,
     staticFieldAddressByClassAndMember,
+    runtimeMemberValuesByClassAndAddress,
     ensureRuntimeOverlayLoaded,
-    resolveClassMemberValues,
     ensureRuntimeInstanceFieldsLoaded,
     openInspectorForBinding: handleOpenInspectorForBinding,
   }), [
@@ -814,7 +813,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     ensureRuntimeInstanceFieldsLoaded,
     ensureRuntimeOverlayLoaded,
     handleOpenInspectorForBinding,
-    resolveClassMemberValues,
+    runtimeMemberValuesByClassAndAddress,
     staticFieldAddressByClassAndMember,
     studioClassCatalogEntries,
   ]);
