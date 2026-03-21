@@ -3,7 +3,7 @@ use crate::domain::analysis_models::{
     RuntimeFieldValueKind, RuntimeInvokeArgumentKind, RuntimeMethodInvokeArgument,
 };
 use crate::domain::bridge_protocol::BridgeOperation;
-use crate::services::analysis::bridge_transport::{execute_json_with, BridgeRequest, BridgeTransport, ProcessBridgeTransport};
+use crate::services::analysis::bridge_transport::{execute_json_with, BridgeRequest, BridgeTransport};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
@@ -101,19 +101,11 @@ pub trait BridgeGateway {
     ) -> Result<HelperFieldSetResponse, String>;
 }
 
-pub struct ProcessBridgeGateway<TTransport = ProcessBridgeTransport>
+pub struct ProcessBridgeGateway<TTransport>
 where
     TTransport: BridgeTransport,
 {
     transport: TTransport,
-}
-
-impl Default for ProcessBridgeGateway<ProcessBridgeTransport> {
-    fn default() -> Self {
-        Self {
-            transport: ProcessBridgeTransport,
-        }
-    }
 }
 
 impl<TTransport> ProcessBridgeGateway<TTransport>

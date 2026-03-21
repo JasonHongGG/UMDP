@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:release-gate": "npm run test:run && cargo test --manifest-path src-tauri/Cargo.toml && dotnet test tools/ManagedMetadataReader.Tests/ManagedMetadataReader.Tests.csproj",
+    "test:performance-gate": "vitest run src/core/studio/releaseGate.integration.test.ts",
     "preview": "vite preview",
     "tauri": "tauri"
   },

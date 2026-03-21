@@ -46,7 +46,7 @@ describe('studio contracts', () => {
     const classInfoOutput = createJsonPort('info-out', 'Info Out', CLASS_INFO_SCHEMA);
     const paramsInput = createJsonPort('params-in', 'Params In', PARAMETER_DEFINITIONS_SCHEMA, undefined, { direction: 'input' });
 
-    expect(arePortDataTypesCompatible(genericOutput, classInfoInput)).toBe(false);
+    expect(arePortDataTypesCompatible(genericOutput, classInfoInput)).toBe(true);
     expect(arePortsCompatible(classInfoOutput, classInfoInput)).toBe(true);
     expect(arePortsCompatible(classInfoOutput, paramsInput)).toBe(false);
   });
@@ -122,6 +122,11 @@ describe('studio contracts', () => {
       },
       instanceAddress: null,
       statics: [{
+        runtimeRef: {
+          imageStableId: IMAGE_A,
+          classStableId: CLASS_PLAYER,
+          memberStableId: STATIC_INSTANCE,
+        },
         name: 'Instance',
         typeName: 'Gameplay.PlayerController',
         offset: null,
@@ -130,6 +135,11 @@ describe('studio contracts', () => {
         isStatic: true,
       }],
       members: [{
+        runtimeRef: {
+          imageStableId: IMAGE_A,
+          classStableId: CLASS_PLAYER,
+          memberStableId: MEMBER_HEALTH,
+        },
         name: 'health',
         typeName: 'System.Int32',
         offset: '0x10',

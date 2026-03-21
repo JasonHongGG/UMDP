@@ -182,13 +182,6 @@ impl WorkspaceState {
         self.lifecycle.lock().clone()
     }
 
-    pub fn set_selecting_process(&self) {
-        let mut lifecycle = self.lifecycle.lock();
-        lifecycle.status = WorkspaceLifecycleStatus::SelectingProcess;
-        lifecycle.error_message = None;
-        lifecycle.runtime_session.status = RuntimeSessionStatus::Idle;
-    }
-
     pub fn set_attaching(&self) {
         let mut lifecycle = self.lifecycle.lock();
         lifecycle.status = WorkspaceLifecycleStatus::Attaching;
@@ -292,18 +285,6 @@ impl WorkspaceState {
         }
         lifecycle.runtime_session.clone()
     }
-
-    pub fn reset(&self) {
-        let mut lifecycle = self.lifecycle.lock();
-        *lifecycle = WorkspaceLifecycleState {
-            status: WorkspaceLifecycleStatus::Detached,
-            process_session: None,
-            runtime: RuntimeFlavor::Unknown,
-            has_snapshot: false,
-            error_message: None,
-            runtime_session: RuntimeSessionState::default(),
-        };
-    }
 }
 
 fn runtime_session_key_for(process_session: &ProcessSession) -> String {
@@ -334,5 +315,46 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         Self::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
+
+    fn sample_session() -> ProcessSession {
+        ProcessSession {
+            pid: 777,
+            process_name: "Unity.exe".to_string(),
+            exe_path: "C:/Game/Unity.exe".to_string(),
+            data_dir: Some("C:/Game/Unity_Data".to_string()),
+            managed_dir: Some("C:/Game/Unity_Data/Managed".to_string()),
+            runtime: RuntimeFlavor::Mono,
+        }
+    }
+
+    #[test]
+    fn workspace_marks_recovering_after_bridge_error_when_attached() {
+        let workspace = WorkspaceState::default();
+        workspace.set_attached_without_snapshot(sample_session());
+        workspace.set_bridge_error("bridge dropped");
+
+        let current = workspace.current();
+        assert_eq!(current.status, WorkspaceLifecycleStatus::Recovering);
+        assert_eq!(current.runtime_session.status, RuntimeSessionStatus::Recovering);
+        assert!(!current.runtime_session.bridge_connected);
+        assert_eq!(current.runtime_session.last_error.as_deref(), Some("bridge dropped"));
+    }
+
+    #[test]
+    fn workspace_marks_bridge_connected_and_heartbeats() {
+        let workspace = WorkspaceState::default();
+        workspace.set_attached_without_snapshot(sample_session());
+
+        let connected = workspace.mark_runtime_bridge_connected();
+        assert!(connected.bridge_connected);
+        assert!(connected.last_heartbeat_at.is_some());
+        assert_eq!(connected.session_key.as_deref(), Some("777:Unity.exe:Mono"));
     }
 }

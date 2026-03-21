@@ -47,7 +47,7 @@ function buildParameterPayload(parameters: ParameterDefinitionEntry[]) {
   return Object.fromEntries(
     parameters
       .map((entry, index) => [entry.name.trim() || `para${index + 1}`, {
-        type: entry.type,
+        type: entry.type ?? 'string',
         value: getExpressionSourceDisplayValue(entry.source),
         source: entry.source,
       }] as const),
@@ -58,7 +58,7 @@ function createRuntimeSymbols(parameters: ParameterDefinitionEntry[]) {
   return parameters.map((entry, index) => ({
     id: entry.id,
     name: entry.name.trim() || `para${index + 1}`,
-    type: entry.type,
+    type: entry.type ?? 'string',
     source: entry.source,
   }));
 }

@@ -81,3 +81,22 @@ pub fn classify_field_set_bridge_error(error: &str) -> RuntimeFieldSetFailureKin
         RuntimeFieldSetFailureKind::BridgeFailed
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_invoke_bridge_errors_is_stable() {
+        assert!(matches!(classify_invoke_bridge_error("Failed to parse response"), RuntimeInvokeFailureKind::BridgeParseFailed));
+        assert!(matches!(classify_invoke_bridge_error("Failed to launch helper"), RuntimeInvokeFailureKind::BridgeLaunchFailed));
+        assert!(matches!(classify_invoke_bridge_error("runtime exception"), RuntimeInvokeFailureKind::BridgeFailed));
+    }
+
+    #[test]
+    fn classify_field_set_bridge_errors_is_stable() {
+        assert!(matches!(classify_field_set_bridge_error("parse error"), RuntimeFieldSetFailureKind::BridgeParseFailed));
+        assert!(matches!(classify_field_set_bridge_error("resolve executable"), RuntimeFieldSetFailureKind::BridgeLaunchFailed));
+        assert!(matches!(classify_field_set_bridge_error("write failed"), RuntimeFieldSetFailureKind::BridgeFailed));
+    }
+}

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import type { WorkspaceLifecycleState } from '../../../shared/contracts';
-import { deriveWorkspaceLifecycle } from '../../../app/shell/workspaceLifecycle';
+import { EMPTY_WORKSPACE_LIFECYCLE } from '../../../app/shell/workspaceLifecycle';
 
 interface UseAnalysisSessionStateOptions {
   repository: AnalysisRepository;
@@ -15,12 +15,7 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
   const [attachError, setAttachError] = useState<string | null>(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
-  const [workspaceLifecycle, setWorkspaceLifecycle] = useState<WorkspaceLifecycleState>(() => deriveWorkspaceLifecycle({
-    processSession: null,
-    analysisSnapshot: null,
-    loadingImages: false,
-    attachError: null,
-  }));
+  const [workspaceLifecycle, setWorkspaceLifecycle] = useState<WorkspaceLifecycleState>(EMPTY_WORKSPACE_LIFECYCLE);
 
   const refreshWorkspaceLifecycle = useCallback(async (fallback?: Partial<WorkspaceLifecycleState>) => {
     try {

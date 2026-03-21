@@ -8,27 +8,6 @@ export interface StoredGraphDocumentRecord {
   document: GraphDocument;
 }
 
-function sanitizeNodeInstance(instance: NodeInstance): NodeInstance {
-  if (instance.nodeType !== 'class-ref') {
-    return instance;
-  }
-
-  const documentState = instance.documentState ? { ...instance.documentState } : {};
-  delete documentState.availableInfo;
-
-  return {
-    ...instance,
-    documentState,
-  };
-}
-
-function sanitizeGraphDocument(document: GraphDocument): GraphDocument {
-  return {
-    ...document,
-    nodes: document.nodes.map((node) => sanitizeNodeInstance(node)),
-  };
-}
-
 function isStudioNodeInstance(value: unknown): value is NodeInstance {
   if (!value || typeof value !== 'object') {
     return false;
@@ -91,7 +70,7 @@ export function createEmptyGraphDocument(): GraphDocument {
 }
 
 export function cloneGraphDocument(document: GraphDocument): GraphDocument {
-  return sanitizeGraphDocument(JSON.parse(JSON.stringify(document)) as GraphDocument);
+  return JSON.parse(JSON.stringify(document)) as GraphDocument;
 }
 
 export function serializeGraphDocument(document: GraphDocument) {
@@ -121,7 +100,7 @@ export function parseGraphDocument(raw: string): GraphDocument | null {
       return null;
     }
 
-    return sanitizeGraphDocument(cloneGraphDocument(parsed));
+    return cloneGraphDocument(parsed);
   } catch {
     return null;
   }
@@ -154,7 +133,7 @@ export function readStoredGraphDocument(storageKey: string): StoredGraphDocument
 
     return {
       savedAt: parsed.savedAt,
-      document: sanitizeGraphDocument(cloneGraphDocument(parsed.document)),
+      document: cloneGraphDocument(parsed.document),
     };
   } catch {
     return null;

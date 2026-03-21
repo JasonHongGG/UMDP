@@ -37,6 +37,9 @@ function createPassiveSourceDefinition(type: string, payload: unknown): StudioNo
       category: 'Test',
       inputs: [],
       outputs: [{ key: 'json-out', displayName: 'Json Out', direction: 'output', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id }],
+      preview: {
+        mode: 'supported',
+      },
       parameters: [],
     },
     icon: () => null,

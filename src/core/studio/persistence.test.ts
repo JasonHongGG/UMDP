@@ -104,56 +104,6 @@ describe('studio persistence', () => {
     });
   });
 
-  it('strips legacy availableInfo from class node document state on parse', () => {
-    const document = createEmptyGraphDocument();
-    document.nodes.push({
-      id: 'class-node',
-      nodeType: 'class-ref',
-      typeVersion: 1,
-      position: { x: 10, y: 20 },
-      parameters: {},
-      bindings: {},
-      documentState: {
-        classBinding: {
-          imageStableId: 'image:a',
-          classStableId: 'class:a',
-          fullName: 'Gameplay.Player',
-          name: 'Player',
-          namespace: 'Gameplay',
-          imageName: 'Assembly-CSharp.dll',
-        },
-        exportSelection: {
-          memberStableIds: [],
-          staticStableIds: [],
-          methodStableIds: [],
-        },
-        availableInfo: {
-          members: [{ id: 'field:a' }],
-          statics: [],
-          functions: [],
-        },
-      },
-    });
-
-    const parsed = parseGraphDocument(serializeGraphDocument(document));
-
-    expect(parsed?.nodes[0]?.documentState).toEqual({
-      classBinding: {
-        imageStableId: 'image:a',
-        classStableId: 'class:a',
-        fullName: 'Gameplay.Player',
-        name: 'Player',
-        namespace: 'Gameplay',
-        imageName: 'Assembly-CSharp.dll',
-      },
-      exportSelection: {
-        memberStableIds: [],
-        staticStableIds: [],
-        methodStableIds: [],
-      },
-    });
-  });
-
   it('rejects malformed workflow payloads', () => {
     expect(parseGraphDocument('{"schemaVersion":1,"nodes":"invalid","dataConnections":[]}')).toBeNull();
     expect(isGraphDocument({ schemaVersion: 1, nodes: [], dataConnections: 'invalid' })).toBe(false);
