@@ -8,7 +8,7 @@ import {
 } from './runtimeGraph';
 import type { StudioNodeQueryContext } from './queryTypes';
 import type { NodeExecutionSnapshot, StudioEdge, StudioNode, StudioNodeDefinition } from './types';
-import type { NodeExecutionContext, ValidationIssue } from '../../domain/studio/contracts';
+import { supportsNodePreview, type NodeExecutionContext, type ValidationIssue } from '../../domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
 import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 
@@ -309,7 +309,9 @@ export function materializeNodeQuerySnapshot(
     ...dependencySnapshots,
   };
 
-  const queryOutputs = nodeDef?.buildQueryOutputs?.(node as never, context, snapshots);
+  const queryOutputs = nodeDef && supportsNodePreview(nodeDef.manifest)
+    ? nodeDef.buildQueryOutputs?.(node as never, context, snapshots)
+    : null;
   if (queryOutputs) {
     resolving.delete(nodeId);
     return createMaterializedNodeSnapshot(node.id, queryOutputs, queryRevision);

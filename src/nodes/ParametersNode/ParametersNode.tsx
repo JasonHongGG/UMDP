@@ -134,6 +134,10 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
     tags: ['json', 'params', 'input', 'definitions'],
     inputs: [],
     outputs: PARAMETERS_OUTPUTS.map((port) => ({ key: port.id, displayName: port.label, direction: 'output', channel: 'data', cardinality: port.cardinality, dataType: PARAMETER_DEFINITIONS_SCHEMA.id })),
+    preview: {
+      mode: 'supported',
+      description: 'Parameter definitions are fully materialized from node-local configuration.',
+    },
     parameters: [{
       name: 'parameters',
       displayName: 'Parameter Definitions',

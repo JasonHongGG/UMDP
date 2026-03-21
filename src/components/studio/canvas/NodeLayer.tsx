@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStudioGraph } from '../../../core/studio/StudioContext';
+import { useStudioGraph, useStudioRuntime } from '../../../core/studio/StudioContext';
 import { getNodePortsByDirection } from '../../../core/studio/NodeRegistry';
 import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 import { NodeWrapper } from './NodeWrapper';
@@ -7,6 +7,7 @@ import { NodeWrapper } from './NodeWrapper';
 export function NodeLayer() {
   const catalog = getRegisteredStudioNodeCatalog();
   const { nodes } = useStudioGraph();
+  const { nodeStates, nodeSnapshots, activeRun } = useStudioRuntime();
 
   return (
     // Needs pointer-events-none so we can still pan on the canvas beneath,
@@ -19,7 +20,13 @@ export function NodeLayer() {
         const Component = def.CanvasComponent;
 
         return (
-          <NodeWrapper key={node.id} node={node}>
+          <NodeWrapper
+            key={node.id}
+            node={node}
+            executionState={nodeStates[node.id] ?? 'idle'}
+            executionSnapshot={nodeSnapshots[node.id] ?? null}
+            isRunActive={activeRun?.status === 'running'}
+          >
              <div className="pointer-events-auto">
                <Component
                  id={node.id}

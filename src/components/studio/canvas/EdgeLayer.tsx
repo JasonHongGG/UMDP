@@ -1,10 +1,11 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { getStudioNodePort, getStudioNodePorts } from '../../../core/studio/NodeRegistry';
-import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioGraph, useStudioRuntime, useStudioUi } from '../../../core/studio/StudioContext';
 import { PORT_COLORS, PortType, StudioEdge } from '../../../core/studio/types';
 
 export function EdgeLayer() {
   const { edges, nodes, disconnectEdge } = useStudioGraph();
+  const { nodeStates, activeRun } = useStudioRuntime();
   const { transform, draftConnection, canvasElement, getPortElement } = useStudioUi();
   const [portPositions, setPortPositions] = useState<Record<string, { x: number, y: number }>>({});
 
@@ -90,6 +91,17 @@ export function EdgeLayer() {
   };
 
   const getEdgeColor = (edge: StudioEdge) => {
+    const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
+    if (sourceState === 'running') {
+      return '#34d399';
+    }
+    if (sourceState === 'error') {
+      return '#fb7185';
+    }
+    if (sourceState === 'success' && activeRun?.status === 'running') {
+      return '#22d3ee';
+    }
+
     const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
     const port = getStudioNodePort(sourceNode, 'output', edge.sourcePortId) || getStudioNodePort(sourceNode, 'input', edge.sourcePortId);
     const type = port?.type || 'json';
@@ -148,6 +160,7 @@ export function EdgeLayer() {
         const pathId = `edge-path-${edge.id}`;
         const pathString = createBezierPath(start.x, start.y, end.x, end.y);
         const color = getEdgeColor(edge);
+        const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
 
         return (
           <g key={edge.id}>
@@ -163,8 +176,8 @@ export function EdgeLayer() {
               d={pathString}
               fill="none"
               stroke={color}
-              strokeOpacity={0.3}
-              strokeWidth={6}
+              strokeOpacity={sourceState === 'running' ? 0.55 : 0.3}
+              strokeWidth={sourceState === 'running' ? 8 : 6}
               className="blur-sm pointer-events-none"
             />
             <path
@@ -172,8 +185,10 @@ export function EdgeLayer() {
               d={pathString}
               fill="none"
               stroke={color}
-              strokeWidth={2}
+              strokeWidth={sourceState === 'running' ? 3 : 2}
               className="pointer-events-none"
+              strokeDasharray={sourceState === 'running' ? '7 6' : undefined}
+              style={sourceState === 'running' ? { animation: 'studio-edge-dash 0.55s linear infinite' } : undefined}
             />
           </g>
         );

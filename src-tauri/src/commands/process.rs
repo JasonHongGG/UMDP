@@ -1,4 +1,5 @@
 use crate::domain::analysis_models::{ProcessInfo, ProcessSession};
+use crate::domain::workspace::WorkspaceLifecycleState;
 use crate::services::analysis::{process_catalog_service, session_service};
 use crate::state::AppState;
 use tauri::State;
@@ -22,4 +23,10 @@ pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> 
             Err(error)
         }
     }
+}
+
+#[tauri::command]
+pub fn get_workspace_lifecycle(state: State<'_, AppState>) -> WorkspaceLifecycleState {
+    state.workspace.touch_runtime_session();
+    state.workspace.current()
 }

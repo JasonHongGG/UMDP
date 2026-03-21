@@ -3,7 +3,7 @@ use crate::domain::analysis_models::{
     RuntimeFieldValueKind, RuntimeInvokeArgumentKind, RuntimeMethodInvokeArgument,
 };
 use crate::domain::bridge_protocol::BridgeOperation;
-use crate::services::analysis::bridge_transport::{execute_json, ProcessBridgeRequest};
+use crate::services::analysis::bridge_transport::{execute_json_with, BridgeRequest, BridgeTransport, ProcessBridgeTransport};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
@@ -71,47 +71,206 @@ pub fn current_timestamp() -> String {
     now.to_string()
 }
 
-pub fn load_all_metadata(app: &AppHandle, metadata_input: &str) -> Result<AnalysisSnapshot, String> {
-    execute_json(
-        app,
-        ProcessBridgeRequest {
-            operation: BridgeOperation::AnalysisSnapshotLoad,
-            executable_name: "ManagedMetadataReader.exe",
-            args: vec!["dump-all".into(), metadata_input.to_string()],
-        },
-    )
+pub trait BridgeGateway {
+    fn load_all_metadata(&self, app: &AppHandle, metadata_input: &str) -> Result<AnalysisSnapshot, String>;
+
+    fn load_runtime_overlay(
+        &self,
+        app: &AppHandle,
+        pid: u32,
+        descriptor: &ClassDescriptor,
+        instance_address: Option<&str>,
+    ) -> Result<HelperRuntimeStaticFields, String>;
+
+    fn invoke_runtime_method(
+        &self,
+        app: &AppHandle,
+        pid: u32,
+        descriptor: &ClassDescriptor,
+        method: &MethodDescriptor,
+        instance_address: Option<&str>,
+        arguments: &[RuntimeMethodInvokeArgument],
+    ) -> Result<HelperInvokeResponse, String>;
+
+    fn set_runtime_field_value(
+        &self,
+        app: &AppHandle,
+        pid: u32,
+        descriptor: &ClassDescriptor,
+        request: &RuntimeFieldSetRequest,
+    ) -> Result<HelperFieldSetResponse, String>;
 }
 
-pub fn load_runtime_overlay(
-    app: &AppHandle,
-    pid: u32,
-    descriptor: &ClassDescriptor,
-    instance_address: Option<&str>,
-) -> Result<HelperRuntimeStaticFields, String> {
-    let mut args = vec![
-        "--pid".into(),
-        pid.to_string(),
-        "--image".into(),
-        descriptor.legacy_image_id.clone(),
-        "--namespace".into(),
-        descriptor.namespace.clone(),
-        "--class".into(),
-        descriptor.name.clone(),
-    ];
+pub struct ProcessBridgeGateway<TTransport = ProcessBridgeTransport>
+where
+    TTransport: BridgeTransport,
+{
+    transport: TTransport,
+}
 
-    if let Some(address) = instance_address {
-        args.push("--instance".into());
-        args.push(address.to_string());
+impl Default for ProcessBridgeGateway<ProcessBridgeTransport> {
+    fn default() -> Self {
+        Self {
+            transport: ProcessBridgeTransport,
+        }
+    }
+}
+
+impl<TTransport> ProcessBridgeGateway<TTransport>
+where
+    TTransport: BridgeTransport,
+{
+    fn execute_json<T>(&self, app: &AppHandle, request: BridgeRequest) -> Result<T, String>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        execute_json_with(&self.transport, app, request)
+    }
+}
+
+impl<TTransport> BridgeGateway for ProcessBridgeGateway<TTransport>
+where
+    TTransport: BridgeTransport,
+{
+    fn load_all_metadata(&self, app: &AppHandle, metadata_input: &str) -> Result<AnalysisSnapshot, String> {
+        self.execute_json(
+            app,
+            BridgeRequest {
+                operation: BridgeOperation::AnalysisSnapshotLoad,
+                executable_name: "ManagedMetadataReader.exe",
+                args: vec!["dump-all".into(), metadata_input.to_string()],
+            },
+        )
     }
 
-    execute_json(
-        app,
-        ProcessBridgeRequest {
-            operation: BridgeOperation::AnalysisOverlayLoad,
-            executable_name: "UnityMonoBridge.exe",
-            args,
-        },
-    )
+    fn load_runtime_overlay(
+        &self,
+        app: &AppHandle,
+        pid: u32,
+        descriptor: &ClassDescriptor,
+        instance_address: Option<&str>,
+    ) -> Result<HelperRuntimeStaticFields, String> {
+        let mut args = vec![
+            "--pid".into(),
+            pid.to_string(),
+            "--image".into(),
+            descriptor.legacy_image_id.clone(),
+            "--namespace".into(),
+            descriptor.namespace.clone(),
+            "--class".into(),
+            descriptor.name.clone(),
+        ];
+
+        if let Some(address) = instance_address {
+            args.push("--instance".into());
+            args.push(address.to_string());
+        }
+
+        self.execute_json(
+            app,
+            BridgeRequest {
+                operation: BridgeOperation::AnalysisOverlayLoad,
+                executable_name: "UnityMonoBridge.exe",
+                args,
+            },
+        )
+    }
+
+    fn invoke_runtime_method(
+        &self,
+        app: &AppHandle,
+        pid: u32,
+        descriptor: &ClassDescriptor,
+        method: &MethodDescriptor,
+        instance_address: Option<&str>,
+        arguments: &[RuntimeMethodInvokeArgument],
+    ) -> Result<HelperInvokeResponse, String> {
+        let mut args = vec![
+            "--operation".into(),
+            "invoke".into(),
+            "--pid".into(),
+            pid.to_string(),
+            "--image".into(),
+            descriptor.legacy_image_id.clone(),
+            "--namespace".into(),
+            descriptor.namespace.clone(),
+            "--class".into(),
+            descriptor.name.clone(),
+            "--method-name".into(),
+            method.name.clone(),
+            "--method-signature".into(),
+            method.signature.clone(),
+        ];
+
+        if let Some(address) = instance_address {
+            args.push("--instance".into());
+            args.push(address.to_string());
+        }
+
+        for argument in arguments {
+            push_invoke_argument(&mut args, argument);
+        }
+
+        self.execute_json(
+            app,
+            BridgeRequest {
+                operation: BridgeOperation::RuntimeMethodInvoke,
+                executable_name: "UnityMonoBridge.exe",
+                args,
+            },
+        )
+    }
+
+    fn set_runtime_field_value(
+        &self,
+        app: &AppHandle,
+        pid: u32,
+        descriptor: &ClassDescriptor,
+        request: &RuntimeFieldSetRequest,
+    ) -> Result<HelperFieldSetResponse, String> {
+        let mut args = vec![
+            "--operation".into(),
+            "set-field".into(),
+            "--pid".into(),
+            pid.to_string(),
+            "--image".into(),
+            descriptor.legacy_image_id.clone(),
+            "--namespace".into(),
+            descriptor.namespace.clone(),
+            "--class".into(),
+            descriptor.name.clone(),
+            "--field-name".into(),
+            request.field_name.clone(),
+            "--field-type".into(),
+            request.field_type_name.clone(),
+            "--field-static".into(),
+            if request.is_static { "true".into() } else { "false".into() },
+            "--value-kind".into(),
+            encode_value_kind(&request.value_kind).into(),
+        ];
+
+        if let Some(instance_address) = &request.instance_address {
+            args.push("--instance".into());
+            args.push(instance_address.clone());
+        }
+        if let Some(target_address) = &request.target_address {
+            args.push("--target-address".into());
+            args.push(target_address.clone());
+        }
+        if let Some(serialized_value) = &request.serialized_value {
+            args.push("--field-value".into());
+            args.push(serialized_value.clone());
+        }
+
+        self.execute_json(
+            app,
+            BridgeRequest {
+                operation: BridgeOperation::RuntimeFieldWrite,
+                executable_name: "UnityMonoBridge.exe",
+                args,
+            },
+        )
+    }
 }
 
 fn push_invoke_argument(args: &mut Vec<String>, argument: &RuntimeMethodInvokeArgument) {
@@ -130,50 +289,6 @@ fn push_invoke_argument(args: &mut Vec<String>, argument: &RuntimeMethodInvokeAr
     }
 }
 
-pub fn invoke_runtime_method(
-    app: &AppHandle,
-    pid: u32,
-    descriptor: &ClassDescriptor,
-    method: &MethodDescriptor,
-    instance_address: Option<&str>,
-    arguments: &[RuntimeMethodInvokeArgument],
-) -> Result<HelperInvokeResponse, String> {
-    let mut args = vec![
-        "--operation".into(),
-        "invoke".into(),
-        "--pid".into(),
-        pid.to_string(),
-        "--image".into(),
-        descriptor.legacy_image_id.clone(),
-        "--namespace".into(),
-        descriptor.namespace.clone(),
-        "--class".into(),
-        descriptor.name.clone(),
-        "--method-name".into(),
-        method.name.clone(),
-        "--method-signature".into(),
-        method.signature.clone(),
-    ];
-
-    if let Some(address) = instance_address {
-        args.push("--instance".into());
-        args.push(address.to_string());
-    }
-
-    for argument in arguments {
-        push_invoke_argument(&mut args, argument);
-    }
-
-    execute_json(
-        app,
-        ProcessBridgeRequest {
-            operation: BridgeOperation::RuntimeMethodInvoke,
-            executable_name: "UnityMonoBridge.exe",
-            args,
-        },
-    )
-}
-
 fn encode_value_kind(kind: &RuntimeFieldValueKind) -> &'static str {
     match kind {
         RuntimeFieldValueKind::Boolean => "boolean",
@@ -182,54 +297,4 @@ fn encode_value_kind(kind: &RuntimeFieldValueKind) -> &'static str {
         RuntimeFieldValueKind::String => "string",
         RuntimeFieldValueKind::Address => "address",
     }
-}
-
-pub fn set_runtime_field_value(
-    app: &AppHandle,
-    pid: u32,
-    descriptor: &ClassDescriptor,
-    request: &RuntimeFieldSetRequest,
-) -> Result<HelperFieldSetResponse, String> {
-    let mut args = vec![
-        "--operation".into(),
-        "set-field".into(),
-        "--pid".into(),
-        pid.to_string(),
-        "--image".into(),
-        descriptor.legacy_image_id.clone(),
-        "--namespace".into(),
-        descriptor.namespace.clone(),
-        "--class".into(),
-        descriptor.name.clone(),
-        "--field-name".into(),
-        request.field_name.clone(),
-        "--field-type".into(),
-        request.field_type_name.clone(),
-        "--field-static".into(),
-        if request.is_static { "true".into() } else { "false".into() },
-        "--value-kind".into(),
-        encode_value_kind(&request.value_kind).into(),
-    ];
-
-    if let Some(instance_address) = &request.instance_address {
-        args.push("--instance".into());
-        args.push(instance_address.clone());
-    }
-    if let Some(target_address) = &request.target_address {
-        args.push("--target-address".into());
-        args.push(target_address.clone());
-    }
-    if let Some(serialized_value) = &request.serialized_value {
-        args.push("--field-value".into());
-        args.push(serialized_value.clone());
-    }
-
-    execute_json(
-        app,
-        ProcessBridgeRequest {
-            operation: BridgeOperation::RuntimeFieldWrite,
-            executable_name: "UnityMonoBridge.exe",
-            args,
-        },
-    )
 }

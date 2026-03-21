@@ -37,6 +37,8 @@ export type {
   NodeExecutionContract,
   NodeExecutionResult,
   NodeManifest,
+  NodePreviewCapability,
+  NodePreviewMode,
   ParameterDefinition,
   ParameterNodeDocumentState,
   ParameterSymbolDefinition,
@@ -69,6 +71,7 @@ export type {
   NodeQueryIssue,
 } from './query';
 export {
+  getNodePreviewMode,
   parseClassNodeDocumentState,
   parseCallFunctionNodeDocumentState,
   parseDisplayNodeDocumentState,
@@ -77,6 +80,7 @@ export {
   parseEditorNodeDocumentState,
   parseParameterNodeDocumentState,
   parseTriggerNodeDocumentState,
+  supportsNodePreview,
 } from './nodes';
 export type {
   CallFunctionArgumentPayload,

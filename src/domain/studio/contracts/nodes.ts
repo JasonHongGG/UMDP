@@ -7,6 +7,7 @@ export type ExpressionSupportMode = 'disabled' | 'optional' | 'required';
 export type ParameterValueType = 'string' | 'number' | 'boolean' | 'json' | 'class-binding' | 'selection' | 'collection';
 export type ConnectionChannel = 'control' | 'data';
 export type ConnectionDirection = 'input' | 'output';
+export type NodePreviewMode = 'supported' | 'degraded' | 'execute-only';
 
 export interface ParameterOption {
   label: string;
@@ -52,6 +53,11 @@ export interface ConnectionDefinition {
   dataType?: string;
 }
 
+export interface NodePreviewCapability {
+  mode: NodePreviewMode;
+  description?: string;
+}
+
 export interface NodeManifest {
   type: string;
   typeVersion: number;
@@ -63,8 +69,17 @@ export interface NodeManifest {
   inputs: ConnectionDefinition[];
   outputs: ConnectionDefinition[];
   parameters: ParameterDefinition[];
+  preview?: NodePreviewCapability;
   isTrigger?: boolean;
   isOutputNode?: boolean;
+}
+
+export function getNodePreviewMode(manifest: NodeManifest): NodePreviewMode {
+  return manifest.preview?.mode ?? 'execute-only';
+}
+
+export function supportsNodePreview(manifest: NodeManifest): boolean {
+  return getNodePreviewMode(manifest) !== 'execute-only';
 }
 
 export interface ValidationIssue {

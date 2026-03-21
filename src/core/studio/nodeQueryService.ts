@@ -1,7 +1,7 @@
 import { getNodePortsByDirection } from './NodeRegistry';
 import { materializeNodeQuerySnapshot } from './graphInterpreter';
 import type { IPort, StudioEdge, StudioNode } from './types';
-import type { NodeQueryIssue } from '../../domain/studio/contracts';
+import { getNodePreviewMode, supportsNodePreview, type NodePreviewMode, type NodeQueryIssue } from '../../domain/studio/contracts';
 import { getClassInfoPayloadFromValue } from '../../nodes/CallFunctionNode/callFunctionNodeModel';
 import type { StudioNodeQueryContext } from './queryTypes';
 import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
@@ -43,7 +43,19 @@ export function getNodeQueryState<T>(nodeId: string, context: StudioNodeQueryCon
   return (nodeDef.buildQueryState(node as never, context) as T | null) ?? null;
 }
 
+export function getNodePreviewCapability(nodeId: string, context: StudioNodeQueryContext): NodePreviewMode | null {
+  const node = getNodeById(nodeId, context.nodes);
+  const nodeDef = node ? getRegisteredStudioNodeCatalog().get(node.type) : null;
+  return nodeDef ? getNodePreviewMode(nodeDef.manifest) : null;
+}
+
 export function getNodeOutputPreview(nodeId: string, context: StudioNodeQueryContext) {
+  const node = getNodeById(nodeId, context.nodes);
+  const nodeDef = node ? getRegisteredStudioNodeCatalog().get(node.type) : null;
+  if (!nodeDef || !supportsNodePreview(nodeDef.manifest)) {
+    return null;
+  }
+
   return getNodeQuerySnapshot(nodeId, context)?.outputs ?? null;
 }
 

@@ -117,6 +117,10 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
       cardinality: port.cardinality,
       dataType: port.dataType,
     })),
+    preview: {
+      mode: 'degraded',
+      description: 'Display nodes can preview upstream payloads when available, but depend on upstream preview support.',
+    },
     parameters: [
       {
         name: 'expandedByDefault',

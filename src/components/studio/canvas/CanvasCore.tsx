@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioGraph, useStudioRuntime, useStudioUi } from '../../../core/studio/StudioContext';
+import { useAnalysisWorkspace } from '../../../domain/analysis/AnalysisWorkspaceContext';
 import { NodeLayer } from './NodeLayer';
 import { EdgeLayer } from './EdgeLayer';
 
@@ -13,7 +14,9 @@ interface SelectionRect {
 export function CanvasCore() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { nodes } = useStudioGraph();
+  const { activeRun } = useStudioRuntime();
   const { transform, setTransform, openAddModal, registerCanvasElement, clearSelectedNodes, setSelectedNodeIds, getNodeElement } = useStudioUi();
+  const { workspaceLifecycle } = useAnalysisWorkspace();
   
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -222,6 +225,15 @@ export function CanvasCore() {
       >
         <EdgeLayer />
         <NodeLayer />
+      </div>
+
+      <div className="absolute bottom-4 right-4 z-20 pointer-events-none flex flex-col items-end gap-2">
+        <div className="rounded-full border border-slate-800/80 bg-[#071018]/88 backdrop-blur-xl px-3 py-1.5 text-[11px] text-slate-300 shadow-[0_12px_30px_rgba(0,0,0,0.35)]">
+          {workspaceLifecycle.runtime === 'unknown' ? 'Runtime Unknown' : `Runtime ${String(workspaceLifecycle.runtime).toUpperCase()}`}
+        </div>
+        <div className={`rounded-full border px-3 py-1.5 text-[11px] shadow-[0_12px_30px_rgba(0,0,0,0.35)] ${activeRun ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-slate-800/80 bg-[#071018]/88 text-slate-400'}`}>
+          {activeRun ? `Running ${activeRun.startNodeId} · ${activeRun.status}` : 'Canvas Idle'}
+        </div>
       </div>
 
       {selectionRect ? (

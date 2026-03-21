@@ -219,6 +219,10 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       dataType: port.dataType,
     })),
     parameters: [],
+    preview: {
+      mode: 'degraded',
+      description: 'Invocation previews show the planned call shape, but not a real runtime result until execution.',
+    },
   },
   icon: Code2,
   createInitialData: createCallFunctionNodeData,

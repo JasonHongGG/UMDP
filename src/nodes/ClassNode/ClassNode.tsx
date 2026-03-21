@@ -163,6 +163,10 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       dataType: port.dataType,
     })),
     parameters: [],
+    preview: {
+      mode: 'supported',
+      description: 'Class metadata and selected exports can be materialized without a live execution run.',
+    },
   },
   icon: Box,
   createInitialData: createClassNodeData,

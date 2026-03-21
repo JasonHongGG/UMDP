@@ -6,11 +6,15 @@ import type {
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
 } from '../../domain/analysis/contracts';
+import type { WorkspaceLifecycleState } from '../../shared/contracts';
 
 export function createTauriAnalysisRepository(): AnalysisRepository {
   return {
     attachToProcess(request: AttachToProcessRequest) {
       return invoke<ProcessSession>('attach_to_process', request as unknown as Record<string, unknown>);
+    },
+    getWorkspaceLifecycle() {
+      return invoke<WorkspaceLifecycleState>('get_workspace_lifecycle');
     },
     loadAllMetadata() {
       return invoke<AnalysisSnapshot>('load_all_metadata');

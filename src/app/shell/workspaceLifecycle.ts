@@ -1,5 +1,21 @@
 import type { AnalysisSnapshot } from '../../domain/analysis/contracts';
-import type { ProcessSession, WorkspaceLifecycleState } from '../../shared/contracts';
+import type { ProcessSession, RuntimeCapability, RuntimeSessionState, WorkspaceLifecycleState } from '../../shared/contracts';
+
+function createDefaultRuntimeSession(runtime: ProcessSession['runtime'] | 'unknown'): RuntimeSessionState {
+  const capabilities: RuntimeCapability[] = runtime === 'unknown'
+    ? ['metadata']
+    : ['metadata', 'preview-query', 'execution', 'field-read', 'field-write', 'method-invoke'];
+
+  return {
+    status: runtime === 'unknown' ? 'idle' : 'starting',
+    runtime,
+    capabilities,
+    bridgeConnected: false,
+    sessionKey: null,
+    lastError: null,
+    lastHeartbeatAt: null,
+  };
+}
 
 interface DeriveWorkspaceLifecycleInput {
   processSession: ProcessSession | null;
@@ -21,6 +37,11 @@ export function deriveWorkspaceLifecycle({
       runtime: processSession?.runtime ?? 'unknown',
       hasSnapshot: Boolean(analysisSnapshot),
       errorMessage: attachError,
+      runtimeSession: {
+        ...createDefaultRuntimeSession(processSession?.runtime ?? 'unknown'),
+        status: processSession ? 'recovering' : 'error',
+        lastError: attachError,
+      },
     };
   }
 
@@ -31,6 +52,7 @@ export function deriveWorkspaceLifecycle({
       runtime: 'unknown',
       hasSnapshot: false,
       errorMessage: null,
+      runtimeSession: createDefaultRuntimeSession('unknown'),
     };
   }
 
@@ -41,6 +63,7 @@ export function deriveWorkspaceLifecycle({
       runtime: 'unknown',
       hasSnapshot: false,
       errorMessage: null,
+      runtimeSession: createDefaultRuntimeSession('unknown'),
     };
   }
 
@@ -51,6 +74,7 @@ export function deriveWorkspaceLifecycle({
       runtime: processSession.runtime,
       hasSnapshot: false,
       errorMessage: null,
+      runtimeSession: createDefaultRuntimeSession(processSession.runtime),
     };
   }
 
@@ -61,6 +85,7 @@ export function deriveWorkspaceLifecycle({
       runtime: processSession.runtime,
       hasSnapshot: false,
       errorMessage: null,
+      runtimeSession: createDefaultRuntimeSession(processSession.runtime),
     };
   }
 
@@ -70,6 +95,11 @@ export function deriveWorkspaceLifecycle({
     runtime: processSession.runtime,
     hasSnapshot: true,
     errorMessage: null,
+    runtimeSession: {
+      ...createDefaultRuntimeSession(processSession.runtime),
+      status: 'ready',
+      bridgeConnected: true,
+    },
   };
 }
 

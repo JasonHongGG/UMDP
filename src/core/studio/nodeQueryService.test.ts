@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createInputExpressionSource, createLiteralExpressionSource, resolveExpressionSource } from './expression';
-import { getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, getNodeQuerySnapshot, getNodeQueryState, type StudioNodeQueryContext } from './nodeQueryService';
+import { getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, getNodePreviewCapability, getNodeQuerySnapshot, getNodeQueryState, type StudioNodeQueryContext } from './nodeQueryService';
 import type { StudioRuntimeDataState } from './runtimeData';
 import type { StudioEdge, StudioNode } from './types';
 import {
@@ -218,6 +218,25 @@ describe('nodeQueryService', () => {
     expect(outputs?.['info-out']?.payload).toMatchObject({
       instanceAddress: '0x244190AB960',
     });
+  });
+
+  it('reports explicit preview capability from node manifests', () => {
+    expect(getNodePreviewCapability('class-1', createContext())).toBe('supported');
+    expect(getNodePreviewCapability('call-1', createContext())).toBe('degraded');
+  });
+
+  it('does not expose output previews for execute-only nodes', () => {
+    const context = createContext();
+    context.nodes.push({
+      id: 'trigger-1',
+      type: 'trigger',
+      position: { x: 0, y: 240 },
+      data: {},
+    });
+
+    expect(getNodePreviewCapability('trigger-1', context)).toBe('execute-only');
+    expect(getNodeOutputPreview('trigger-1', context)).toBeNull();
+    expect(getNodeQuerySnapshot('trigger-1', context)).toBeNull();
   });
 
   it('returns diagnostics when incoming data is connected to the wrong target port', () => {

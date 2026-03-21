@@ -16,6 +16,7 @@ export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChan
     const window = getCurrentWindow();
     const lifecycleLabel = getWorkspaceLifecycleLabel(workspace);
     const lifecycleTone = getWorkspaceLifecycleTone(workspace);
+    const runtimeSessionLabel = workspace.runtimeSession.status.replace(/-/g, ' ');
     const lifecycleClassName = lifecycleTone === 'ready'
         ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]'
         : lifecycleTone === 'loading'
@@ -62,6 +63,9 @@ export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChan
                             <span className="text-rose-400/80 pointer-events-none">No Process Attached</span>
                         )}
                         <span className={`text-[10px] uppercase tracking-wider ${lifecycleClassName}`}>{lifecycleLabel}</span>
+                        <span className={`text-[10px] uppercase tracking-wider ${workspace.runtimeSession.bridgeConnected ? 'text-emerald-300' : 'text-amber-300'}`}>
+                            Runtime {runtimeSessionLabel}
+                        </span>
                     </div>
                 </div>
             </div>

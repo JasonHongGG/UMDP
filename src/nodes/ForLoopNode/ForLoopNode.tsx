@@ -243,6 +243,10 @@ const ForLoopNodeDefinition: INodeDefinition<ForLoopNodeData> = {
       dataType: port.dataType,
       required: port.required,
     })),
+    preview: {
+      mode: 'degraded',
+      description: 'Loop previews expose iteration intent, while actual loop progression happens during execution.',
+    },
     parameters: [{
       name: 'countSource',
       displayName: 'Loop Count',

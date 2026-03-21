@@ -3,6 +3,61 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
+pub enum RuntimeSessionStatus {
+    Idle,
+    Starting,
+    Ready,
+    Degraded,
+    Recovering,
+    Error,
+}
+
+impl Default for RuntimeSessionStatus {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeCapability {
+    Metadata,
+    PreviewQuery,
+    Execution,
+    InstanceEnumeration,
+    FieldRead,
+    FieldWrite,
+    MethodInvoke,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSessionState {
+    pub status: RuntimeSessionStatus,
+    pub runtime: RuntimeFlavor,
+    pub capabilities: Vec<RuntimeCapability>,
+    pub bridge_connected: bool,
+    pub session_key: Option<String>,
+    pub last_error: Option<String>,
+    pub last_heartbeat_at: Option<String>,
+}
+
+impl Default for RuntimeSessionState {
+    fn default() -> Self {
+        Self {
+            status: RuntimeSessionStatus::Idle,
+            runtime: RuntimeFlavor::Unknown,
+            capabilities: Vec::new(),
+            bridge_connected: false,
+            session_key: None,
+            last_error: None,
+            last_heartbeat_at: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub enum WorkspaceLifecycleStatus {
     Detached,
     SelectingProcess,
@@ -28,6 +83,7 @@ pub struct WorkspaceLifecycleState {
     pub runtime: RuntimeFlavor,
     pub has_snapshot: bool,
     pub error_message: Option<String>,
+    pub runtime_session: RuntimeSessionState,
 }
 
 impl Default for WorkspaceLifecycleState {
@@ -38,6 +94,7 @@ impl Default for WorkspaceLifecycleState {
             runtime: RuntimeFlavor::Unknown,
             has_snapshot: false,
             error_message: None,
+            runtime_session: RuntimeSessionState::default(),
         }
     }
 }

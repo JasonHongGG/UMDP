@@ -173,6 +173,10 @@ const WaitNodeDefinition: INodeDefinition<WaitNodeData> = {
       dataType: port.dataType,
       required: port.required,
     })),
+    preview: {
+      mode: 'degraded',
+      description: 'Wait nodes can preview timing configuration, but real delay progression only exists in execution.',
+    },
     parameters: [{
       name: 'delaySeconds',
       displayName: 'Delay Seconds',

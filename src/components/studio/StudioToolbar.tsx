@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Download, FolderOpen, History, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
-import { useStudioGraph } from '../../core/studio/StudioContext';
+import { Cpu, Download, FolderOpen, History, Play, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
+import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import { useAnalysisWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -33,9 +34,21 @@ export function StudioToolbar() {
     loadSavedWorkflow,
     clearWorkflow,
   } = useStudioGraph();
+  const { activeRun, runHistory } = useStudioRuntime();
+  const { workspaceLifecycle } = useAnalysisWorkspace();
   const [statusMessage, setStatusMessage] = useState<string>('');
 
   const countsLabel = useMemo(() => `${nodes.length} nodes · ${edges.length} edges`, [edges.length, nodes.length]);
+  const runtimeLabel = workspaceLifecycle.runtime === 'unknown'
+    ? 'Runtime Unknown'
+    : workspaceLifecycle.runtime === 'mono'
+      ? 'Mono Runtime'
+      : 'IL2CPP Runtime';
+  const runLabel = activeRun
+    ? `Run ${activeRun.status.toUpperCase()} · ${activeRun.startNodeId}`
+    : runHistory[0]
+      ? `Last Run ${runHistory[0].status.toUpperCase()}`
+      : 'No Runs Yet';
 
   const handleSave = () => {
     setStatusMessage(saveWorkflow() ? 'Workflow saved to local draft slot.' : 'Save failed.');
@@ -71,6 +84,12 @@ export function StudioToolbar() {
         <div className="flex items-center gap-3 min-w-0">
           <div className={`px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] border ${hasUnsavedChanges ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'}`}>
             {hasUnsavedChanges ? 'Dirty' : 'Saved'}
+          </div>
+          <div className="px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] border border-cyan-500/30 bg-cyan-500/10 text-cyan-200 inline-flex items-center gap-1.5">
+            <Cpu size={12} /> {runtimeLabel}
+          </div>
+          <div className={`px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] border inline-flex items-center gap-1.5 ${activeRun ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900/70 text-slate-400'}`}>
+            <Play size={12} /> {runLabel}
           </div>
           <div className="min-w-0">
             <div className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Studio Workflow</div>

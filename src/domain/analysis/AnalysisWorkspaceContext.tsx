@@ -5,6 +5,7 @@ import type {
   ProcessSession,
   RuntimeClassOverlayDescriptor,
 } from './contracts';
+import type { WorkspaceLifecycleState } from '../../shared/contracts';
 import {
   buildStudioClassCatalog,
   createClassInfoCatalogFromClassDescriptor,
@@ -57,6 +58,7 @@ interface AnalysisWorkspaceContextValue {
   processSession: ProcessSession | null;
   attachError: string | null;
   analysisSnapshot: AnalysisSnapshot | null;
+  workspaceLifecycle: WorkspaceLifecycleState;
   runtimeOverlays: Record<string, RuntimeClassOverlayDescriptor>;
   images: AnalysisImageInfo[];
   classesByImage: Record<string, AnalysisClassSummary[]>;
@@ -171,6 +173,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     attachError,
     analysisSnapshot,
     loadingImages,
+    workspaceLifecycle,
   } = useAnalysisSessionState({ repository, onResetWorkspace: resetWorkspace });
 
   const {
@@ -694,6 +697,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     processSession,
     attachError,
     analysisSnapshot,
+    workspaceLifecycle,
     runtimeOverlays,
     images,
     classesByImage,
@@ -814,6 +818,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     setReferenceSearchMode,
     setReferenceTargetFromClass,
     studioClassCatalogEntries,
+    workspaceLifecycle,
     tabs,
   ]);
 

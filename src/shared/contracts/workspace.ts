@@ -2,6 +2,33 @@ import type { ProcessSession, RuntimeFlavor } from './analysis';
 
 export type WorkspacePage = 'inspector' | 'studio';
 
+export type RuntimeSessionStatus =
+  | 'idle'
+  | 'starting'
+  | 'ready'
+  | 'degraded'
+  | 'recovering'
+  | 'error';
+
+export type RuntimeCapability =
+  | 'metadata'
+  | 'preview-query'
+  | 'execution'
+  | 'instance-enumeration'
+  | 'field-read'
+  | 'field-write'
+  | 'method-invoke';
+
+export interface RuntimeSessionState {
+  status: RuntimeSessionStatus;
+  runtime: RuntimeFlavor | 'unknown';
+  capabilities: RuntimeCapability[];
+  bridgeConnected: boolean;
+  sessionKey: string | null;
+  lastError: string | null;
+  lastHeartbeatAt: string | null;
+}
+
 export type WorkspaceLifecycleStatus =
   | 'detached'
   | 'selecting-process'
@@ -18,4 +45,5 @@ export interface WorkspaceLifecycleState {
   runtime: RuntimeFlavor | 'unknown';
   hasSnapshot: boolean;
   errorMessage: string | null;
+  runtimeSession: RuntimeSessionState;
 }

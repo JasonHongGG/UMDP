@@ -78,6 +78,10 @@ const TriggerNodeDefinition: INodeDefinition<TriggerNodeData> = {
     inputs: [],
     outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
     parameters: [],
+    preview: {
+      mode: 'execute-only',
+      description: 'Trigger nodes only participate during live execution.',
+    },
     isTrigger: true,
   },
   icon: Play,

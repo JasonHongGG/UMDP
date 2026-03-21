@@ -1,14 +1,30 @@
 import React, { useRef, useState } from 'react';
-import { StudioNode } from '../../../core/studio/types';
+import { NodeExecutionSnapshot, NodeExecutionState, StudioNode } from '../../../core/studio/types';
 import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
 import { Trash2 } from 'lucide-react';
 
 interface NodeWrapperProps {
   node: StudioNode;
+  executionState?: NodeExecutionState;
+  executionSnapshot?: NodeExecutionSnapshot | null;
+  isRunActive?: boolean;
   children: React.ReactNode;
 }
 
-export function NodeWrapper({ node, children }: NodeWrapperProps) {
+function resolveExecutionClass(executionState: NodeExecutionState, isRunActive: boolean) {
+  if (executionState === 'running') {
+    return 'ring-2 ring-emerald-400/80 shadow-[0_0_30px_rgba(52,211,153,0.28)]';
+  }
+  if (executionState === 'error') {
+    return 'ring-2 ring-rose-400/75 shadow-[0_0_26px_rgba(244,63,94,0.25)]';
+  }
+  if (executionState === 'success' && isRunActive) {
+    return 'ring-2 ring-cyan-400/65 shadow-[0_0_24px_rgba(34,211,238,0.18)]';
+  }
+  return '';
+}
+
+export function NodeWrapper({ node, executionState = 'idle', executionSnapshot = null, isRunActive = false, children }: NodeWrapperProps) {
   const { nodes, updateNodePosition, updateNodePositions, beginNodePositionSession, commitNodePositionSession, deleteNode } = useStudioGraph();
   const { transform, openEditModal, selectedNodeIds, selectSingleNode, toggleSelectedNode, registerNodeElement } = useStudioUi();
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -19,6 +35,14 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
   const nodeStartPos = useRef({ x: 0, y: 0 });
   const selectedNodeStartPositions = useRef<Array<{ id: string; position: { x: number; y: number } }>>([]);
   const isSelected = selectedNodeIds.includes(node.id);
+  const executionClass = resolveExecutionClass(executionState, isRunActive);
+  const executionBadgeLabel = executionState === 'idle'
+    ? null
+    : executionState === 'running'
+      ? executionSnapshot?.progress?.displayText ?? 'Running'
+      : executionState === 'success'
+        ? 'Done'
+        : executionSnapshot?.errorMessage ?? 'Error';
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
@@ -98,7 +122,7 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
   return (
     <div
       data-studio-node="true"
-      className={`absolute top-0 left-0 transition-shadow rounded-2xl ${isDragging ? 'shadow-[0_15px_40px_rgba(34,211,238,0.2)] z-50' : 'z-10 hover:z-20'} ${isSelected ? 'ring-2 ring-cyan-400/70 ring-offset-2 ring-offset-[#0a0f16]' : ''}`}
+      className={`absolute top-0 left-0 transition-shadow rounded-2xl ${isDragging ? 'shadow-[0_15px_40px_rgba(34,211,238,0.2)] z-50' : 'z-10 hover:z-20'} ${isSelected ? 'ring-2 ring-cyan-400/70 ring-offset-2 ring-offset-[#0a0f16]' : ''} ${executionClass}`}
       style={{
         transform: `translate3d(${node.position.x}px, ${node.position.y}px, 0)`,
       }}
@@ -114,6 +138,11 @@ export function NodeWrapper({ node, children }: NodeWrapperProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {executionBadgeLabel ? (
+        <div className={`absolute -top-3 right-3 z-[95] max-w-[180px] truncate rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${executionState === 'running' ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : executionState === 'success' ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : 'border-rose-400/40 bg-rose-500/10 text-rose-200'}`}>
+          {executionBadgeLabel}
+        </div>
+      ) : null}
       {/* n8n-style Hover Toolbar - rendered above node layer */}
       <div data-studio-no-drag="true" data-studio-toolbar="true" className={`absolute bottom-full left-1/2 -translate-x-1/2 z-[100] pb-1 transition-all duration-150 ${isHovered && !isDragging ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex items-center gap-1">

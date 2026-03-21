@@ -250,6 +250,10 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
       dataType: port.dataType,
     })),
     parameters: [],
+    preview: {
+      mode: 'degraded',
+      description: 'Editor previews describe intended writes, but live mutation results require execution.',
+    },
   },
   icon: PencilLine,
   createInitialData: createEditorNodeData,

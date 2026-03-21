@@ -1,7 +1,11 @@
 use crate::domain::analysis_models::{
-    ClassDescriptor, RuntimeFieldSetFailureKind, RuntimeFieldSetRequest, RuntimeFieldSetResult,
+    RuntimeFieldSetFailureKind, RuntimeFieldSetRequest, RuntimeFieldSetResult,
 };
-use crate::services::analysis::bridge_gateway::set_runtime_field_value as set_bridge_field_value;
+use crate::services::analysis::bridge_gateway::{BridgeGateway, ProcessBridgeGateway};
+use crate::services::analysis::runtime_session_service::{
+    classify_field_set_bridge_error, ensure_attached_session, execute_runtime_operation,
+    resolve_class_descriptor,
+};
 use crate::state::AppState;
 use tauri::AppHandle;
 
@@ -25,26 +29,6 @@ fn build_failure_result(
     }
 }
 
-fn resolve_attached_session(state: &AppState) -> Result<crate::domain::analysis_models::ProcessSession, String> {
-    state
-        .analysis
-        .process_session()
-        .ok_or_else(|| "No process attached".to_string())
-}
-
-fn resolve_metadata_descriptor(state: &AppState, class_stable_id: &str) -> Result<ClassDescriptor, String> {
-    let metadata = state
-        .analysis
-        .metadata_snapshot()
-        .ok_or_else(|| "Metadata not loaded. Please attach to a process first.".to_string())?;
-
-    metadata
-        .classes
-        .get(class_stable_id)
-        .cloned()
-        .ok_or_else(|| format!("Class details not found for {class_stable_id}"))
-}
-
 fn decode_failure_kind(raw: &str) -> RuntimeFieldSetFailureKind {
     match raw {
         "none" => RuntimeFieldSetFailureKind::None,
@@ -63,13 +47,13 @@ pub fn set_runtime_field_value(
     state: &AppState,
     request: RuntimeFieldSetRequest,
 ) -> RuntimeFieldSetResult {
-    let attached = match resolve_attached_session(state) {
+    let attached = match ensure_attached_session(state) {
         Ok(session) => session,
         Err(error) => {
             return build_failure_result(&request, RuntimeFieldSetFailureKind::NotAttached, error);
         }
     };
-    let descriptor = match resolve_metadata_descriptor(state, &request.class_stable_id) {
+    let descriptor = match resolve_class_descriptor(state, &request.class_stable_id) {
         Ok(descriptor) => descriptor,
         Err(error) => {
             return build_failure_result(&request, RuntimeFieldSetFailureKind::ClassNotFound, error);
@@ -97,19 +81,15 @@ pub fn set_runtime_field_value(
         );
     }
 
-    let response = match set_bridge_field_value(app, attached.pid, &descriptor, &request) {
+    let response = match execute_runtime_operation(state, || {
+        let gateway = ProcessBridgeGateway::default();
+        gateway.set_runtime_field_value(app, attached.pid, &descriptor, &request)
+    }) {
         Ok(response) => response,
         Err(error) => {
-            let failure_kind = if error.contains("parse") {
-                RuntimeFieldSetFailureKind::BridgeParseFailed
-            } else if error.contains("resolve") || error.contains("launch") {
-                RuntimeFieldSetFailureKind::BridgeLaunchFailed
-            } else {
-                RuntimeFieldSetFailureKind::BridgeFailed
-            };
             return build_failure_result(
                 &request,
-                failure_kind,
+                classify_field_set_bridge_error(&error),
                 error,
             );
         }

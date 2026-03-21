@@ -359,6 +359,10 @@ const IfNodeDefinition: INodeDefinition<IfNodeData> = {
       required: port.required,
     })),
     parameters: [],
+    preview: {
+      mode: 'degraded',
+      description: 'If nodes can preview predicted branch resolution when operands are materializable.',
+    },
   },
   icon: GitBranch,
   createInitialData: createIfNodeData,

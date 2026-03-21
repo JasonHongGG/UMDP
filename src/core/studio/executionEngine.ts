@@ -22,6 +22,8 @@ interface ExecuteStudioFlowOptions {
   onReset: () => void;
   onNodeStateChange: (nodeId: string, state: NodeExecutionState) => void;
   onNodeSnapshot: (snapshot: NodeExecutionSnapshot) => void;
+  onRunStart?: (run: { runId: string; startNodeId: string; startedAt: number }) => void;
+  onRunComplete?: (run: { runId: string; startNodeId: string; startedAt: number; completedAt: number; status: 'success' | 'error' | 'aborted' }) => void;
   stepDelayMs?: number;
 }
 
@@ -35,6 +37,8 @@ export function executeStudioFlow({
   onReset,
   onNodeStateChange,
   onNodeSnapshot,
+  onRunStart,
+  onRunComplete,
   stepDelayMs = 800,
 }: ExecuteStudioFlowOptions) {
   const timers: Array<ReturnType<typeof setTimeout>> = [];
@@ -43,6 +47,10 @@ export function executeStudioFlow({
   const abortController = new AbortController();
   let disposed = false;
   const runId = `run-${Date.now()}`;
+  const runStartedAt = Date.now();
+  let pendingNodeCount = 0;
+  let runHasErrors = false;
+  let completionPublished = false;
 
   const getPrimaryIssueMessage = (issues: ValidationIssue[] | undefined, fallback: string) => {
     const issue = issues?.find((entry) => entry.severity === 'error') ?? issues?.[0];
@@ -94,6 +102,32 @@ export function executeStudioFlow({
     reportNodeProgress: publishNodeProgress,
   };
 
+  const publishRunCompletion = (status: 'success' | 'error' | 'aborted') => {
+    if (completionPublished) {
+      return;
+    }
+
+    completionPublished = true;
+    onRunComplete?.({
+      runId,
+      startNodeId,
+      startedAt: runStartedAt,
+      completedAt: Date.now(),
+      status,
+    });
+  };
+
+  const settleNode = (status: NodeExecutionState) => {
+    if (status === 'error') {
+      runHasErrors = true;
+    }
+
+    pendingNodeCount = Math.max(0, pendingNodeCount - 1);
+    if (!disposed && pendingNodeCount === 0) {
+      publishRunCompletion(runHasErrors ? 'error' : 'success');
+    }
+  };
+
   const materializePassiveJsonNode = async (nodeId: string, resolving = new Set<string>()) => {
     if (snapshots[nodeId] || resolving.has(nodeId)) {
       return;
@@ -122,9 +156,11 @@ export function executeStudioFlow({
   };
 
   const runNode = (nodeId: string, delay: number) => {
+    pendingNodeCount += 1;
     schedule(() => {
       void (async () => {
         if (disposed) {
+          settleNode('error');
           return;
         }
 
@@ -171,6 +207,7 @@ export function executeStudioFlow({
                 timing: createExecutionTiming(startedAt, Date.now()),
                 progress: undefined,
               });
+              settleNode('error');
               return;
             }
 
@@ -191,6 +228,8 @@ export function executeStudioFlow({
                   runNode(edge.targetNodeId, 0);
                 });
               }
+
+              settleNode(snapshot.status === 'success' ? 'success' : 'error');
             } catch (error) {
               onNodeStateChange(nodeId, 'error');
               publishSnapshot({
@@ -205,6 +244,7 @@ export function executeStudioFlow({
                 timing: createExecutionTiming(startedAt, Date.now()),
                 progress: undefined,
               });
+              settleNode('error');
             }
           })();
         }, stepDelayMs);
@@ -227,16 +267,23 @@ export function executeStudioFlow({
           timing: createExecutionTiming(startedAt, Date.now()),
           progress: undefined,
         });
+        settleNode('error');
       });
     }, delay);
   };
 
   onReset();
+  onRunStart?.({
+    runId,
+    startNodeId,
+    startedAt: runStartedAt,
+  });
   runNode(startNodeId, 0);
 
   return () => {
     disposed = true;
     abortController.abort();
     timers.forEach((timer) => clearTimeout(timer));
+    publishRunCompletion('aborted');
   };
 }

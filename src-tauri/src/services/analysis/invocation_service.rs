@@ -2,7 +2,11 @@ use crate::domain::analysis_models::{
     MethodDescriptor, RuntimeInvokeFailureKind, RuntimeMethodInvokeRequest,
     RuntimeMethodInvokeResult, RuntimeMethodInvokeValue,
 };
-use crate::services::analysis::bridge_gateway::invoke_runtime_method as invoke_bridge_method;
+use crate::services::analysis::bridge_gateway::{BridgeGateway, ProcessBridgeGateway};
+use crate::services::analysis::runtime_session_service::{
+    classify_invoke_bridge_error, ensure_attached_session, ensure_metadata_snapshot,
+    execute_runtime_operation,
+};
 use crate::state::AppState;
 use tauri::AppHandle;
 
@@ -32,25 +36,25 @@ pub fn invoke_runtime_method(
     state: &AppState,
     request: RuntimeMethodInvokeRequest,
 ) -> RuntimeMethodInvokeResult {
-    let attached = match state.analysis.process_session() {
-        Some(session) => session,
-        None => {
+    let attached = match ensure_attached_session(state) {
+        Ok(session) => session,
+        Err(error) => {
             return build_failure_result(
                 &request,
                 RuntimeInvokeFailureKind::NotAttached,
-                "No process attached",
+                error,
                 None,
                 None,
             )
         }
     };
-    let metadata = match state.analysis.metadata_snapshot() {
-        Some(snapshot) => snapshot,
-        None => {
+    let metadata = match ensure_metadata_snapshot(state) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
             return build_failure_result(
                 &request,
                 RuntimeInvokeFailureKind::MetadataUnavailable,
-                "Metadata not loaded. Please attach to a process first.",
+                error,
                 None,
                 None,
             )
@@ -106,26 +110,22 @@ pub fn invoke_runtime_method(
         );
     }
 
-    let response = match invoke_bridge_method(
-        app,
-        attached.pid,
-        &descriptor,
-        &method,
-        request.instance_address.as_deref(),
-        &request.arguments,
-    ) {
+    let response = match execute_runtime_operation(state, || {
+        let gateway = ProcessBridgeGateway::default();
+        gateway.invoke_runtime_method(
+            app,
+            attached.pid,
+            &descriptor,
+            &method,
+            request.instance_address.as_deref(),
+            &request.arguments,
+        )
+    }) {
         Ok(response) => response,
         Err(error) => {
-            let failure_kind = if error.contains("parse") {
-                RuntimeInvokeFailureKind::BridgeParseFailed
-            } else if error.contains("resolve") || error.contains("launch") {
-                RuntimeInvokeFailureKind::BridgeLaunchFailed
-            } else {
-                RuntimeInvokeFailureKind::BridgeFailed
-            };
             return build_failure_result(
                 &request,
-                failure_kind,
+                classify_invoke_bridge_error(&error),
                 error,
                 None,
                 Some(&method),
