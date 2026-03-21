@@ -24,6 +24,27 @@ InvokeValueKind ParseInvokeValueKind(const std::string& value)
     return InvokeValueKind::Null;
 }
 
+FieldValueKind ParseFieldValueKind(const std::string& value)
+{
+    if (value == "boolean") {
+        return FieldValueKind::Boolean;
+    }
+    if (value == "integer") {
+        return FieldValueKind::Integer;
+    }
+    if (value == "float") {
+        return FieldValueKind::Float;
+    }
+    if (value == "string") {
+        return FieldValueKind::String;
+    }
+    if (value == "address") {
+        return FieldValueKind::Address;
+    }
+
+    return FieldValueKind::Null;
+}
+
 }
 
 BridgeRequest ArgumentParser::Parse(int argc, char* argv[])
@@ -36,7 +57,15 @@ BridgeRequest ArgumentParser::Parse(int argc, char* argv[])
             request.pid = static_cast<std::size_t>(std::stoull(value));
         }
         else if (key == "--operation") {
-            request.operation = value == "invoke" ? BridgeOperation::InvokeMethod : BridgeOperation::InspectClass;
+            if (value == "invoke") {
+                request.operation = BridgeOperation::InvokeMethod;
+            }
+            else if (value == "set-field") {
+                request.operation = BridgeOperation::SetField;
+            }
+            else {
+                request.operation = BridgeOperation::InspectClass;
+            }
         }
         else if (key == "--image") {
             request.image_name = value;
@@ -55,6 +84,24 @@ BridgeRequest ArgumentParser::Parse(int argc, char* argv[])
         }
         else if (key == "--method-signature") {
             request.method_signature = value;
+        }
+        else if (key == "--field-name") {
+            request.field_name = value;
+        }
+        else if (key == "--field-type") {
+            request.field_type_name = value;
+        }
+        else if (key == "--field-static") {
+            request.field_is_static = value == "true";
+        }
+        else if (key == "--target-address") {
+            request.target_address = static_cast<std::size_t>(std::stoull(value, nullptr, 0));
+        }
+        else if (key == "--value-kind") {
+            request.field_value_kind = ParseFieldValueKind(value);
+        }
+        else if (key == "--field-value") {
+            request.field_value = value;
         }
         else if (key == "--arg-kind") {
             InvokeArgument argument;
@@ -75,6 +122,10 @@ BridgeRequest ArgumentParser::Parse(int argc, char* argv[])
         throw std::runtime_error("Missing method invocation arguments");
     }
 
+    if (request.operation == BridgeOperation::SetField && (request.field_name.empty() || request.field_type_name.empty())) {
+        throw std::runtime_error("Missing field write arguments");
+    }
+
     return request;
 }
 
@@ -88,6 +139,12 @@ RuntimeMethodInvokeResponse RuntimeBridge::ExecuteInvoke(const BridgeRequest& re
 {
     runtime::RuntimeInspector inspector(request.pid);
     return inspector.InvokeClassMethod(request);
+}
+
+RuntimeFieldSetResponse RuntimeBridge::ExecuteSetField(const BridgeRequest& request) const
+{
+    runtime::RuntimeInspector inspector(request.pid);
+    return inspector.SetFieldValue(request);
 }
 
 } // namespace bridge

@@ -11,6 +11,10 @@ int main(int argc, char* argv[])
             const auto response = runtime_bridge.ExecuteInvoke(request);
             std::cout << bridge::SerializeResponse(response);
         }
+        else if (request.operation == bridge::BridgeOperation::SetField) {
+            const auto response = runtime_bridge.ExecuteSetField(request);
+            std::cout << bridge::SerializeResponse(response);
+        }
         else {
             const auto response = runtime_bridge.Execute(request);
             std::cout << bridge::SerializeResponse(response);

@@ -9,8 +9,9 @@ RuntimeInspector::RuntimeInspector(std::size_t pid)
       assembly_service_(context_.api()),
       class_service_(context_.api()),
       field_enumeration_service_(context_.api()),
-            field_value_reader_(context_.api()),
-            method_invocation_service_(context_.api(), context_.memory())
+    field_value_reader_(context_.api()),
+    field_value_writer_(context_.api(), context_.memory(), field_value_reader_),
+    method_invocation_service_(context_.api(), context_.memory())
 {
 }
 
@@ -59,6 +60,49 @@ RuntimeMethodInvokeResponse RuntimeInspector::InvokeClassMethod(const BridgeRequ
     const Address image = assembly_service_.ResolveImage(request.image_name);
     const Address klass = class_service_.ResolveClass(image, request.class_namespace, request.class_name);
     return method_invocation_service_.InvokeClassMethod(klass, request);
+}
+
+RuntimeFieldSetResponse RuntimeInspector::SetFieldValue(const BridgeRequest& request) const
+{
+    const Address image = assembly_service_.ResolveImage(request.image_name);
+    const Address klass = class_service_.ResolveClass(image, request.class_namespace, request.class_name);
+    const auto hierarchy = class_service_.BuildClassHierarchy(klass);
+
+    std::vector<FieldRecord> static_fields;
+    std::vector<FieldRecord> instance_fields;
+    for (const auto class_handle : hierarchy) {
+        field_enumeration_service_.AppendClassFields(class_handle, static_fields, instance_fields);
+    }
+
+    const auto& candidates = request.field_is_static ? static_fields : instance_fields;
+    const auto match = std::find_if(candidates.begin(), candidates.end(), [&request](const FieldRecord& field) {
+        if (field.name != request.field_name || field.type_name != request.field_type_name || field.is_static != request.field_is_static) {
+            return false;
+        }
+
+        if (request.target_address.has_value()) {
+            if (field.is_static) {
+                return field.static_address.has_value() && *field.static_address == *request.target_address;
+            }
+            if (request.instance_address.has_value()) {
+                return *request.instance_address + static_cast<Address>(field.offset) == *request.target_address;
+            }
+        }
+
+        return true;
+    });
+
+    if (match == candidates.end()) {
+        RuntimeFieldSetResponse response;
+        response.failure_kind = RuntimeFieldSetFailureKind::FieldNotFound;
+        response.field_name = request.field_name;
+        response.field_type = request.field_type_name;
+        response.is_static = request.field_is_static;
+        response.error = "field not found";
+        return response;
+    }
+
+    return field_value_writer_.SetFieldValue(*match, request);
 }
 
 } // namespace bridge::runtime

@@ -80,6 +80,28 @@ void WriteInvokeValue(std::ostringstream& output, const bridge::InvokeValue& val
     output << '}';
 }
 
+std::string FailureKindToString(bridge::RuntimeFieldSetFailureKind kind)
+{
+    switch (kind) {
+    case bridge::RuntimeFieldSetFailureKind::None:
+        return "none";
+    case bridge::RuntimeFieldSetFailureKind::FieldNotFound:
+        return "field-not-found";
+    case bridge::RuntimeFieldSetFailureKind::InstanceRequired:
+        return "instance-required";
+    case bridge::RuntimeFieldSetFailureKind::AddressMismatch:
+        return "address-mismatch";
+    case bridge::RuntimeFieldSetFailureKind::UnsupportedType:
+        return "unsupported-type";
+    case bridge::RuntimeFieldSetFailureKind::InvalidValue:
+        return "invalid-value";
+    case bridge::RuntimeFieldSetFailureKind::WriteFailed:
+        return "write-failed";
+    default:
+        return "unknown";
+    }
+}
+
 } // namespace
 
 namespace bridge {
@@ -114,6 +136,27 @@ std::string SerializeResponse(const RuntimeMethodInvokeResponse& response)
     else {
         output << "null";
     }
+    output << '}';
+    return output.str();
+}
+
+std::string SerializeResponse(const RuntimeFieldSetResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"success\":" << (response.success ? "true" : "false") << ','
+           << "\"failure_kind\":\"" << JsonEscape(FailureKindToString(response.failure_kind)) << "\"," 
+           << "\"field_name\":\"" << JsonEscape(response.field_name) << "\"," 
+           << "\"field_type\":\"" << JsonEscape(response.field_type) << "\"," 
+           << "\"is_static\":" << (response.is_static ? "true" : "false") << ',';
+    output << "\"address\":";
+    WriteOptionalString(output, response.address);
+    output << ",\"error\":";
+    WriteOptionalString(output, response.error);
+    output << ",\"previous_value\":";
+    WriteOptionalString(output, response.previous_value);
+    output << ",\"applied_value\":";
+    WriteOptionalString(output, response.applied_value);
     output << '}';
     return output.str();
 }

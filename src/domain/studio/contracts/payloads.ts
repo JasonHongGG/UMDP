@@ -39,6 +39,11 @@ export interface ClassInfoBasicPayload {
 }
 
 export interface ClassInfoFieldPayload {
+  runtimeRef: {
+    imageStableId: string;
+    classStableId: string;
+    memberStableId: string;
+  };
   name: string;
   typeName: string;
   offset: string | null;
@@ -106,10 +111,36 @@ export interface CallFunctionResultPayload {
   result: CallFunctionResultValuePayload | null;
 }
 
+export interface EditorTargetResultPayload {
+  memberStableId: string;
+  name: string;
+  typeName: string;
+  isStatic: boolean;
+  address: WorkflowJsonValue;
+  previousValue: WorkflowJsonValue;
+  nextValue: WorkflowJsonValue;
+  success: boolean;
+  error: string | null;
+}
+
+export interface EditorResultSummaryPayload {
+  total: number;
+  succeeded: number;
+  failed: number;
+}
+
+export interface EditorResultPayload {
+  basic: ClassInfoBasicPayload | null;
+  instanceAddress: WorkflowJsonValue;
+  targets: EditorTargetResultPayload[];
+  summary: EditorResultSummaryPayload;
+}
+
 export const WORKFLOW_SCHEMA_IDS = {
   genericJson: 'studio.json.generic',
   classInfo: 'studio.class.info',
   callFunctionResult: 'studio.call-function.result',
   instanceReference: 'studio.instance.reference',
   parameterDefinitions: 'studio.params.definition',
+  editorResult: 'studio.editor.result',
 } as const;

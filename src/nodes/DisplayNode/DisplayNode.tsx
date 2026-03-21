@@ -175,7 +175,7 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
       showMeta: data.showMeta,
     },
     bindings: {},
-    documentState: toDisplayNodeDocumentState(data),
+    documentState: toDisplayNodeDocumentState(data) as unknown as Record<string, unknown>,
   }),
   createRuntimeState: (node) => ({
     displayName: node.data.nodeName?.trim() || undefined,
@@ -186,7 +186,7 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
       showMeta: node.data.showMeta,
     },
     bindings: {},
-    documentState: toDisplayNodeDocumentState(node.data),
+    documentState: toDisplayNodeDocumentState(node.data) as unknown as Record<string, unknown>,
   } satisfies StudioNodeRuntimeState),
   buildQueryState: buildDisplayQueryState,
   executionContract: {

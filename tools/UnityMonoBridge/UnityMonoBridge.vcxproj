@@ -90,6 +90,7 @@
     <ClCompile Include="src\runtime\services\AssemblyService.cpp" />
     <ClCompile Include="src\runtime\services\ClassService.cpp" />
     <ClCompile Include="src\runtime\services\FieldEnumerationService.cpp" />
+    <ClCompile Include="src\runtime\services\FieldValueWriter.cpp" />
     <ClCompile Include="src\runtime\services\MethodInvocationService.cpp" />
     <ClCompile Include="src\runtime\services\RuntimeInspector.cpp" />
     <ClCompile Include="src\runtime\services\FieldValueReader.cpp" />
@@ -113,6 +114,7 @@
     <ClInclude Include="include\runtime\services\AssemblyService.h" />
     <ClInclude Include="include\runtime\services\ClassService.h" />
     <ClInclude Include="include\runtime\services\FieldEnumerationService.h" />
+    <ClInclude Include="include\runtime\services\FieldValueWriter.h" />
     <ClInclude Include="include\runtime\services\MethodInvocationService.h" />
     <ClInclude Include="include\runtime\services\RuntimeInspector.h" />
     <ClInclude Include="include\runtime\services\FieldValueReader.h" />

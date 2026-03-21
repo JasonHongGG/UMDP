@@ -3,6 +3,7 @@ import {
   ClassInfoFieldPayload,
   ClassInfoFunctionPayload,
   ClassInfoPayload,
+  EditorResultPayload,
   InstanceReferencePayload,
   JsonSchemaReference,
   ParameterDefinitionPayload,
@@ -49,12 +50,19 @@ export const CALL_FUNCTION_RESULT_SCHEMA: JsonSchemaReference = {
   title: 'Call Function Result Envelope',
 };
 
+export const EDITOR_RESULT_SCHEMA: JsonSchemaReference = {
+  id: WORKFLOW_SCHEMA_IDS.editorResult,
+  version: 1,
+  title: 'Editor Result Envelope',
+};
+
 const KNOWN_JSON_SCHEMAS: Record<string, JsonSchemaReference> = {
   [GENERIC_JSON_SCHEMA.id]: GENERIC_JSON_SCHEMA,
   [INSTANCE_REFERENCE_SCHEMA.id]: INSTANCE_REFERENCE_SCHEMA,
   [PARAMETER_DEFINITIONS_SCHEMA.id]: PARAMETER_DEFINITIONS_SCHEMA,
   [CLASS_INFO_SCHEMA.id]: CLASS_INFO_SCHEMA,
   [CALL_FUNCTION_RESULT_SCHEMA.id]: CALL_FUNCTION_RESULT_SCHEMA,
+  [EDITOR_RESULT_SCHEMA.id]: EDITOR_RESULT_SCHEMA,
 };
 
 export function resolveJsonSchemaReference(dataType?: string): JsonSchemaReference {
@@ -118,6 +126,7 @@ export interface ResolvedMemberRuntimeValue {
 }
 
 function createFieldPayload(
+  binding: ClassBinding,
   item: ClassInfoCatalog['members'][number] | ClassInfoCatalog['statics'][number],
   instanceAddress: WorkflowJsonValue,
   resolvedMemberValues?: Record<string, ResolvedMemberRuntimeValue>,
@@ -128,6 +137,11 @@ function createFieldPayload(
   const rawValue = item.isStatic ? item.value : resolvedMemberValues?.[item.id]?.value ?? null;
 
   return {
+    runtimeRef: {
+      imageStableId: binding.imageStableId,
+      classStableId: binding.classStableId,
+      memberStableId: item.id,
+    },
     name: item.name,
     typeName: item.typeName,
     offset: item.offset,
@@ -184,8 +198,8 @@ export function createClassInfoEnvelope(
       fullName: binding.fullName,
     },
     instanceAddress,
-    statics: selectedStatics.map((item) => createFieldPayload(item, instanceAddress, resolvedMemberValues)),
-    members: selectedMembers.map((item) => createFieldPayload(item, instanceAddress, resolvedMemberValues)),
+    statics: selectedStatics.map((item) => createFieldPayload(binding, item, instanceAddress, resolvedMemberValues)),
+    members: selectedMembers.map((item) => createFieldPayload(binding, item, instanceAddress, resolvedMemberValues)),
     functions: selectedFunctions.map((item) => createFunctionPayload(binding, item)),
   }, {
     source: 'class-node',
@@ -228,5 +242,11 @@ export function getInstanceReferencePayloadFromValue(value: unknown): InstanceRe
 export function createCallFunctionResultEnvelope(payload: CallFunctionResultPayload): WorkflowJsonEnvelope<CallFunctionResultPayload> {
   return createEnvelope(CALL_FUNCTION_RESULT_SCHEMA, payload, {
     source: 'call-function-node',
+  });
+}
+
+export function createEditorResultEnvelope(payload: EditorResultPayload): WorkflowJsonEnvelope<EditorResultPayload> {
+  return createEnvelope(EDITOR_RESULT_SCHEMA, payload, {
+    source: 'editor-node',
   });
 }

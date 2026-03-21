@@ -151,6 +151,19 @@ export interface DisplayNodeDocumentState {
   showMeta: boolean;
 }
 
+export interface EditorTargetDocumentItem {
+  targetId: StableId;
+  memberStableId: StableId;
+  memberName: string;
+  memberTypeName: string;
+  isStatic: boolean;
+  valueSource: ExpressionSource;
+}
+
+export interface EditorNodeDocumentState {
+  targets: EditorTargetDocumentItem[];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
 }
@@ -227,6 +240,16 @@ function isCallFunctionArgumentBinding(value: unknown): value is CallFunctionArg
     && isExpressionSourceLike(value.valueSource);
 }
 
+function isEditorTargetDocumentItem(value: unknown): value is EditorTargetDocumentItem {
+  return isRecord(value)
+    && typeof value.targetId === 'string'
+    && typeof value.memberStableId === 'string'
+    && typeof value.memberName === 'string'
+    && typeof value.memberTypeName === 'string'
+    && typeof value.isStatic === 'boolean'
+    && isExpressionSourceLike(value.valueSource);
+}
+
 export function parseCallFunctionNodeDocumentState(value: unknown): CallFunctionNodeDocumentState {
   const documentState = isRecord(value) ? value : {};
   const argumentsList = Array.isArray(documentState.arguments)
@@ -251,5 +274,15 @@ export function parseDisplayNodeDocumentState(value: unknown): DisplayNodeDocume
       : 180,
     showSchema: typeof documentState.showSchema === 'boolean' ? documentState.showSchema : true,
     showMeta: typeof documentState.showMeta === 'boolean' ? documentState.showMeta : true,
+  };
+}
+
+export function parseEditorNodeDocumentState(value: unknown): EditorNodeDocumentState {
+  const documentState = isRecord(value) ? value : {};
+
+  return {
+    targets: Array.isArray(documentState.targets)
+      ? documentState.targets.flatMap((entry) => isEditorTargetDocumentItem(entry) ? [entry] : [])
+      : [],
   };
 }

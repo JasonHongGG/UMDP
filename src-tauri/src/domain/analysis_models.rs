@@ -214,6 +214,65 @@ pub struct RuntimeMethodInvokeResult {
     pub result: Option<RuntimeMethodInvokeValue>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RuntimeFieldValueKind {
+    Boolean,
+    Integer,
+    Float,
+    String,
+    Address,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeFieldSetFailureKind {
+    None,
+    NotAttached,
+    MetadataUnavailable,
+    ClassNotFound,
+    FieldNotFound,
+    InstanceRequired,
+    AddressMismatch,
+    UnsupportedType,
+    InvalidValue,
+    BridgeLaunchFailed,
+    BridgeFailed,
+    BridgeParseFailed,
+    WriteFailed,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeFieldSetRequest {
+    pub class_stable_id: StableId,
+    pub member_stable_id: StableId,
+    pub field_name: String,
+    pub field_type_name: String,
+    pub is_static: bool,
+    pub instance_address: Option<String>,
+    pub target_address: Option<String>,
+    pub value_kind: RuntimeFieldValueKind,
+    pub serialized_value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeFieldSetResult {
+    pub class_stable_id: StableId,
+    pub member_stable_id: StableId,
+    pub field_name: String,
+    pub field_type_name: String,
+    pub is_static: bool,
+    pub address: Option<String>,
+    pub success: bool,
+    pub failure_kind: RuntimeFieldSetFailureKind,
+    pub error: Option<String>,
+    pub previous_value: Option<String>,
+    pub applied_value: Option<String>,
+}
+
 fn normalize_segment(segment: &str) -> String {
     segment.trim().replace(['|', '\\'], "_")
 }

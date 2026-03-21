@@ -150,3 +150,47 @@ export interface RuntimeMethodInvokeResult {
   exception: string | null;
   result: RuntimeMethodInvokeValue | null;
 }
+
+export type RuntimeFieldValueKind = 'boolean' | 'integer' | 'float' | 'string' | 'address';
+
+export type RuntimeFieldSetFailureKind =
+  | 'none'
+  | 'not-attached'
+  | 'metadata-unavailable'
+  | 'class-not-found'
+  | 'field-not-found'
+  | 'instance-required'
+  | 'address-mismatch'
+  | 'unsupported-type'
+  | 'invalid-value'
+  | 'bridge-launch-failed'
+  | 'bridge-failed'
+  | 'bridge-parse-failed'
+  | 'write-failed'
+  | 'unknown';
+
+export interface RuntimeFieldSetRequest {
+  classStableId: StableId;
+  memberStableId: StableId;
+  fieldName: string;
+  fieldTypeName: string;
+  isStatic: boolean;
+  instanceAddress: string | null;
+  targetAddress: string | null;
+  valueKind: RuntimeFieldValueKind;
+  serializedValue: string | null;
+}
+
+export interface RuntimeFieldSetResult {
+  classStableId: StableId;
+  memberStableId: StableId;
+  fieldName: string;
+  fieldTypeName: string;
+  isStatic: boolean;
+  address: string | null;
+  success: boolean;
+  failureKind: RuntimeFieldSetFailureKind;
+  error: string | null;
+  previousValue: string | null;
+  appliedValue: string | null;
+}
