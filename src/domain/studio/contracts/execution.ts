@@ -24,6 +24,7 @@ export interface NodeExecutionSnapshot {
   inputs: NodeExecutionInputMap;
   outputs: NodeExecutionOutputMap;
   issues?: ValidationIssue[];
+  nextControlPorts?: string[];
   errorMessage?: string;
   timing?: NodeExecutionTiming;
 }

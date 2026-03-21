@@ -92,6 +92,7 @@ export interface NodeExecutionResult {
   state: 'success' | 'error';
   outputs?: Record<string, unknown>;
   issues?: ValidationIssue[];
+  nextControlPorts?: string[];
 }
 
 export interface NodeExecutionContract {
@@ -151,6 +152,17 @@ export interface DisplayNodeDocumentState {
   showMeta: boolean;
 }
 
+export type IfOperator = 'is' | 'is-not' | 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'starts-with' | 'ends-with';
+export type IfScalarKind = 'boolean' | 'number' | 'string' | 'address' | 'unsupported';
+export type IfOperandMode = 'literal' | 'expression';
+
+export interface IfNodeDocumentState {
+  leftSource: ExpressionSource | null;
+  operator: IfOperator;
+  rightMode: IfOperandMode;
+  rightSource: ExpressionSource | null;
+}
+
 export interface EditorTargetDocumentItem {
   targetId: StableId;
   memberStableId: StableId;
@@ -170,6 +182,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isExpressionSourceLike(value: unknown): value is ExpressionSource {
   return isRecord(value) && typeof value.kind === 'string';
+}
+
+function isInputExpressionSourceLike(value: unknown): value is ExpressionSource {
+  return isExpressionSourceLike(value) && value.kind === 'input-expression';
+}
+
+function isAllowedIfRightSource(value: unknown): value is ExpressionSource {
+  return isExpressionSourceLike(value) && (value.kind === 'literal' || value.kind === 'input-expression');
+}
+
+function isIfOperator(value: unknown): value is IfOperator {
+  return value === 'is'
+    || value === 'is-not'
+    || value === 'eq'
+    || value === 'ne'
+    || value === 'gt'
+    || value === 'gte'
+    || value === 'lt'
+    || value === 'lte'
+    || value === 'contains'
+    || value === 'starts-with'
+    || value === 'ends-with';
 }
 
 function isClassBindingReference(value: unknown): value is ClassBindingReference {
@@ -274,6 +308,25 @@ export function parseDisplayNodeDocumentState(value: unknown): DisplayNodeDocume
       : 180,
     showSchema: typeof documentState.showSchema === 'boolean' ? documentState.showSchema : true,
     showMeta: typeof documentState.showMeta === 'boolean' ? documentState.showMeta : true,
+  };
+}
+
+export function parseIfNodeDocumentState(value: unknown): IfNodeDocumentState {
+  const documentState = isRecord(value) ? value : {};
+  const leftSource = isInputExpressionSourceLike(documentState.leftSource) ? documentState.leftSource : null;
+  const rightSource = isAllowedIfRightSource(documentState.rightSource) ? documentState.rightSource : null;
+  const inferredRightMode: IfOperandMode = rightSource?.kind === 'input-expression' ? 'expression' : 'literal';
+  const rightMode = documentState.rightMode === 'expression' || documentState.rightMode === 'literal'
+    ? documentState.rightMode
+    : inferredRightMode;
+
+  return {
+    leftSource,
+    operator: isIfOperator(documentState.operator) ? documentState.operator : 'eq',
+    rightMode: rightSource ? inferredRightMode : rightMode,
+    rightSource: rightMode === 'expression'
+      ? (rightSource?.kind === 'input-expression' ? rightSource : null)
+      : (rightSource?.kind === 'literal' ? rightSource : null),
   };
 }
 

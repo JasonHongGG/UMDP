@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
 import { resolveExpressionSource as resolveStudioExpressionSource } from './expression';
-import { createNodeExecutionContext, getIncomingJsonInputs, getOutgoingFlowEdges, validateNodeExecution } from './runtimeGraph';
+import { createNodeExecutionContext, getIncomingJsonInputs, getOutgoingFlowEdges, getOutgoingFlowEdgesForPorts, validateNodeExecution } from './runtimeGraph';
 import { StudioNodeDefinition } from './types';
 import type { StudioEdge } from './types';
 import type { StableId } from '../../domain/contracts/shared-identity';
@@ -97,6 +97,33 @@ describe('runtimeGraph helpers', () => {
     ];
 
     expect(getOutgoingFlowEdges('trigger-1', nodes, edges)).toEqual([edges[0]]);
+  });
+
+  it('filters outgoing flow edges by selected output ports when branch routing is requested', () => {
+    registerRuntimeGraphTestNodes();
+
+    const nodes = [{ id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} }];
+    const edges: StudioEdge[] = [
+      {
+        id: 'edge-1',
+        channel: 'control',
+        sourceNodeId: 'trigger-1',
+        sourcePortId: 'flow-out',
+        targetNodeId: 'next-1',
+        targetPortId: 'flow-in',
+      },
+      {
+        id: 'edge-2',
+        channel: 'control',
+        sourceNodeId: 'trigger-1',
+        sourcePortId: 'json-out',
+        targetNodeId: 'next-2',
+        targetPortId: 'flow-in',
+      },
+    ];
+
+    expect(getOutgoingFlowEdgesForPorts('trigger-1', ['flow-out'], nodes, edges)).toEqual([edges[0]]);
+    expect(getOutgoingFlowEdgesForPorts('trigger-1', [], nodes, edges)).toEqual([]);
   });
 
   it('builds incoming JSON inputs from execution snapshots', () => {

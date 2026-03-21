@@ -5,6 +5,7 @@ import ParametersNodeDef from './ParametersNode/ParametersNode';
 import CallFunctionNodeDef from './CallFunctionNode/CallFunctionNode';
 import DisplayNodeDef from './DisplayNode/DisplayNode';
 import EditorNodeDef from './EditorNode/EditorNode';
+import IfNodeDef from './IfNode/IfNode';
 
 export const studioNodeCatalog: StudioNodeDefinition[] = [
   TriggerNodeDef,
@@ -13,4 +14,5 @@ export const studioNodeCatalog: StudioNodeDefinition[] = [
   CallFunctionNodeDef,
   EditorNodeDef,
   DisplayNodeDef,
+  IfNodeDef,
 ];

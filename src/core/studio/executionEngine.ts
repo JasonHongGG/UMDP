@@ -1,5 +1,5 @@
 import {
-  getOutgoingFlowEdges,
+  getOutgoingFlowEdgesForPorts,
 } from './runtimeGraph';
 import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
 import type { ValidationIssue } from '../../domain/studio/contracts';
@@ -139,7 +139,7 @@ export function executeStudioFlow({
               publishSnapshot(snapshot);
 
               if (snapshot.status === 'success') {
-                getOutgoingFlowEdges(nodeId, nodes, edges).forEach((edge) => {
+                getOutgoingFlowEdgesForPorts(nodeId, snapshot.nextControlPorts, nodes, edges).forEach((edge) => {
                   runNode(edge.targetNodeId, 0);
                 });
               }

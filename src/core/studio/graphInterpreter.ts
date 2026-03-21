@@ -58,6 +58,7 @@ export function createMaterializedNodeSnapshot(
     queryRevision,
     inputs: {},
     outputs,
+    nextControlPorts: undefined,
     timing: {},
   };
 }
@@ -71,6 +72,7 @@ export function createExecutionNodeSnapshot(
   timing: NodeExecutionSnapshot['timing'],
   options?: {
     issues?: NodeExecutionSnapshot['issues'];
+    nextControlPorts?: NodeExecutionSnapshot['nextControlPorts'];
     errorMessage?: string;
     runId?: string;
     queryRevision?: number;
@@ -87,6 +89,7 @@ export function createExecutionNodeSnapshot(
     inputs,
     outputs,
     issues: options?.issues,
+    nextControlPorts: options?.nextControlPorts,
     errorMessage: options?.errorMessage,
     timing,
   };
@@ -237,6 +240,7 @@ export async function executePreparedNode(
         runId: options?.runId,
         queryRevision: options?.queryRevision,
         issues: resolvedResult.issues,
+          nextControlPorts: resolvedResult.nextControlPorts,
       },
     );
   } catch (error) {

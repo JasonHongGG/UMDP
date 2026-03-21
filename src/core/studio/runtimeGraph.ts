@@ -37,13 +37,25 @@ export function getNodeOutputPort(node: StudioNode | undefined, portId: string) 
 }
 
 export function getOutgoingFlowEdges(nodeId: string, nodes: StudioNode[], edges: StudioEdge[]) {
+  return getOutgoingFlowEdgesForPorts(nodeId, undefined, nodes, edges);
+}
+
+export function getOutgoingFlowEdgesForPorts(
+  nodeId: string,
+  allowedPortIds: string[] | undefined,
+  nodes: StudioNode[],
+  edges: StudioEdge[],
+) {
   const node = getStudioNodeById(nodeId, nodes);
   if (!node) {
     return [];
   }
 
+  const allowedPortSet = allowedPortIds ? new Set(allowedPortIds) : null;
   const flowPortIds = new Set(
-    getStudioNodePorts(node, 'output').filter((port) => port.type === 'flow').map((port) => port.id),
+    getStudioNodePorts(node, 'output')
+      .filter((port) => port.type === 'flow' && (!allowedPortSet || allowedPortSet.has(port.id)))
+      .map((port) => port.id),
   );
 
   return getOutgoingEdges(nodeId, edges).filter((edge) => edge.channel === 'control' && flowPortIds.has(edge.sourcePortId));

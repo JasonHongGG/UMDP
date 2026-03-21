@@ -120,6 +120,31 @@ export interface EditorNodeQuerySummary {
   invalidTargets: number;
 }
 
+export interface IfNodeOperatorOption {
+  value: import('./nodes').IfOperator;
+  label: string;
+}
+
+export interface IfNodeOperandPreview {
+  mode: import('./nodes').IfOperandMode;
+  source: import('./expression').ExpressionSource | null;
+  displayText: string | null;
+  value: unknown;
+  scalarKind: import('./nodes').IfScalarKind;
+  resolved: boolean;
+}
+
+export type IfNodeQueryState = {
+  kind: 'incomplete' | 'invalid' | 'resolved';
+  leftPreview: IfNodeOperandPreview;
+  rightPreview: IfNodeOperandPreview;
+  availableOperators: IfNodeOperatorOption[];
+  operatorCompatible: boolean;
+  predictedResult: boolean | null;
+  summary: string | null;
+  issues: NodeQueryIssue[];
+};
+
 export type EditorNodeQueryState =
   | {
     kind: 'missing-edge';
