@@ -5,6 +5,11 @@ import { createInputExpressionSource, createLiteralExpressionSource } from '../.
 import type { NodeInstance } from '../../domain/studio/contracts';
 import { parseClassNodeDataFromDocumentState } from './classNodeModel';
 
+const EXECUTION_RUNTIME_EXTRAS = {
+  abortSignal: null,
+  reportProgress: () => undefined,
+};
+
 const IMAGE_A = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
 const CLASS_PLAYER = createClassStableId({ imageStableId: IMAGE_A, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player' });
 const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void ()' });
@@ -102,6 +107,7 @@ describe('classNodeModel', () => {
           tags: [],
         }],
       }),
+      ...EXECUTION_RUNTIME_EXTRAS,
     });
 
     expect(issues).toEqual([]);
@@ -149,6 +155,7 @@ describe('classNodeModel', () => {
         statics: [],
         functions: [],
       }),
+      ...EXECUTION_RUNTIME_EXTRAS,
     });
 
     expect(issues).toMatchObject([
@@ -210,6 +217,7 @@ describe('classNodeModel', () => {
         statics: [],
         functions: [],
       }),
+      ...EXECUTION_RUNTIME_EXTRAS,
     });
 
     expect(issues).toEqual([]);

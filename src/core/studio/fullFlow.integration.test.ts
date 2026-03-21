@@ -398,4 +398,71 @@ describe('studio full flow integration', () => {
       },
     });
   });
+
+  it('runs trigger -> wait -> display with in-node countdown progress before continuing flow', async () => {
+    vi.useFakeTimers();
+
+    const nodes: StudioNode[] = [
+      { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
+      {
+        id: 'wait-1',
+        type: 'wait',
+        position: { x: 180, y: 0 },
+        data: {
+          delaySeconds: 0.2,
+        },
+      },
+      {
+        id: 'display-1',
+        type: 'display',
+        position: { x: 360, y: 0 },
+        data: {
+          expandedByDefault: false,
+          truncateAt: 180,
+          showSchema: true,
+          showMeta: true,
+        },
+      },
+    ];
+
+    const snapshots: Record<string, NodeExecutionSnapshot> = {};
+    const waitProgressHistory: string[] = [];
+
+    executeStudioFlow({
+      documentId: 'doc-wait',
+      startNodeId: 'trigger-1',
+      nodes,
+      edges: [
+        { id: 'edge-trigger-wait', channel: 'control', sourceNodeId: 'trigger-1', sourcePortId: 'flow-out', targetNodeId: 'wait-1', targetPortId: 'flow-in' },
+        { id: 'edge-wait-display-flow', channel: 'control', sourceNodeId: 'wait-1', sourcePortId: 'flow-out', targetNodeId: 'display-1', targetPortId: 'flow-in' },
+        { id: 'edge-trigger-display-data', channel: 'data', sourceNodeId: 'trigger-1', sourcePortId: 'flow-out', targetNodeId: 'display-1', targetPortId: 'payload-in' },
+      ],
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: (snapshot) => {
+        snapshots[snapshot.nodeId] = snapshot;
+        if (snapshot.nodeId === 'wait-1' && snapshot.progress?.displayText) {
+          waitProgressHistory.push(snapshot.progress.displayText);
+        }
+      },
+      stepDelayMs: 25,
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(snapshots['wait-1']?.status).toBe('running');
+    expect(snapshots['display-1']).toBeUndefined();
+
+    await vi.runAllTimersAsync();
+
+    expect(waitProgressHistory.length).toBeGreaterThan(0);
+    expect(snapshots['wait-1']).toMatchObject({
+      status: 'success',
+      phase: 'execute',
+    });
+    expect(snapshots['display-1']).toMatchObject({
+      status: 'error',
+      originKind: 'runtime',
+      phase: 'execute',
+    });
+  });
 });

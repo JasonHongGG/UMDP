@@ -39,6 +39,8 @@ export function executeStudioFlow({
 }: ExecuteStudioFlowOptions) {
   const timers: Array<ReturnType<typeof setTimeout>> = [];
   const snapshots: Record<string, NodeExecutionSnapshot> = {};
+  const abortController = new AbortController();
+  let disposed = false;
   const runId = `run-${Date.now()}`;
 
   const getPrimaryIssueMessage = (issues: ValidationIssue[] | undefined, fallback: string) => {
@@ -47,13 +49,35 @@ export function executeStudioFlow({
   };
 
   const schedule = (callback: () => void, delay: number) => {
+    if (disposed) {
+      return;
+    }
+
     const timer = setTimeout(callback, delay);
     timers.push(timer);
   };
 
   const publishSnapshot = (snapshot: NodeExecutionSnapshot) => {
+    if (disposed) {
+      return;
+    }
+
     snapshots[snapshot.nodeId] = snapshot;
     onNodeSnapshot(snapshot);
+  };
+
+  const publishNodeProgress = (nodeId: string, progress: NodeExecutionSnapshot['progress'] | null) => {
+    const previousSnapshot = snapshots[nodeId];
+    if (!previousSnapshot) {
+      return;
+    }
+
+    publishSnapshot({
+      ...previousSnapshot,
+      status: 'running',
+      phase: 'execute',
+      progress: progress ?? undefined,
+    });
   };
 
   const environment: GraphInterpreterEnvironment = {
@@ -64,6 +88,8 @@ export function executeStudioFlow({
     runId,
     resolveStaticFieldAddress,
     getClassInfoCatalogByBinding,
+    abortSignal: abortController.signal,
+    reportNodeProgress: publishNodeProgress,
   };
 
   const materializePassiveJsonNode = async (nodeId: string, resolving = new Set<string>()) => {
@@ -96,12 +122,20 @@ export function executeStudioFlow({
   const runNode = (nodeId: string, delay: number) => {
     schedule(() => {
       void (async () => {
+        if (disposed) {
+          return;
+        }
+
         const prepared = await prepareNodeExecution(nodeId, environment, {
           resolvePassiveDependencies: true,
           materializeNode: materializePassiveJsonNode,
         });
         const startedAt = Date.now();
         const incoming = prepared?.inputs ?? {};
+
+        if (disposed) {
+          return;
+        }
 
         onNodeStateChange(nodeId, 'running');
         publishSnapshot({
@@ -117,6 +151,10 @@ export function executeStudioFlow({
 
         schedule(() => {
           void (async () => {
+            if (disposed) {
+              return;
+            }
+
             if (!prepared) {
               onNodeStateChange(nodeId, 'error');
               publishSnapshot({
@@ -129,6 +167,7 @@ export function executeStudioFlow({
                 outputs: {},
                 errorMessage: 'Node not found.',
                 timing: createExecutionTiming(startedAt, Date.now()),
+                progress: undefined,
               });
               return;
             }
@@ -155,12 +194,17 @@ export function executeStudioFlow({
                 outputs: {},
                 errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
                 timing: createExecutionTiming(startedAt, Date.now()),
+                progress: undefined,
               });
             }
           })();
         }, stepDelayMs);
       })().catch((error) => {
         const startedAt = Date.now();
+        if (disposed) {
+          return;
+        }
+
         onNodeStateChange(nodeId, 'error');
         publishSnapshot({
           nodeId,
@@ -172,6 +216,7 @@ export function executeStudioFlow({
           outputs: {},
           errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
           timing: createExecutionTiming(startedAt, Date.now()),
+          progress: undefined,
         });
       });
     }, delay);
@@ -181,6 +226,8 @@ export function executeStudioFlow({
   runNode(startNodeId, 0);
 
   return () => {
+    disposed = true;
+    abortController.abort();
     timers.forEach((timer) => clearTimeout(timer));
   };
 }

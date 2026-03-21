@@ -86,6 +86,8 @@ export interface NodeExecutionContext {
   resolvedInputs: Record<string, unknown[]>;
   controlInputs: string[];
   getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
+  abortSignal: AbortSignal | null;
+  reportProgress: (progress: import('./execution').NodeExecutionProgress | null) => void;
 }
 
 export interface NodeExecutionResult {

@@ -58,6 +58,8 @@ function createExecutionContext(overrides: Partial<Parameters<NonNullable<typeof
     },
     controlInputs: [],
     getClassInfoCatalogByBinding: () => null,
+    abortSignal: null,
+    reportProgress: () => undefined,
     ...overrides,
   };
 }

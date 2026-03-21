@@ -19,6 +19,8 @@ export interface GraphInterpreterEnvironment {
   runId?: string;
   resolveStaticFieldAddress?: (classStableId: string, memberStableId: string) => string | null;
   getClassInfoCatalogByBinding?: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
+  abortSignal?: AbortSignal;
+  reportNodeProgress?: (nodeId: string, progress: NodeExecutionSnapshot['progress'] | null) => void;
 }
 
 export interface PreparedNodeExecution {
@@ -161,6 +163,8 @@ export async function prepareNodeExecution(
     definition,
     environment.resolveStaticFieldAddress,
     environment.getClassInfoCatalogByBinding,
+    environment.abortSignal,
+    (progress) => environment.reportNodeProgress?.(nodeId, progress),
   );
 
   if (!context) {

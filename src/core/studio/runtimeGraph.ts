@@ -164,6 +164,8 @@ export function createNodeExecutionContext(
   definition?: StudioNodeDefinition,
   resolveStaticFieldAddress?: ResolveStaticFieldAddress,
   getClassInfoCatalogByBinding?: GetClassInfoCatalogByBinding,
+  abortSignal?: AbortSignal,
+  reportProgress?: (progress: NodeExecutionSnapshot['progress'] | null) => void,
 ): NodeExecutionContext | null {
   const node = getStudioNodeById(nodeId, nodes);
   if (!node) {
@@ -192,6 +194,8 @@ export function createNodeExecutionContext(
     ),
     controlInputs: getIncomingControlNodeIds(nodeId, edges),
     getClassInfoCatalogByBinding: (binding) => getClassInfoCatalogByBinding?.(binding) ?? null,
+    abortSignal: abortSignal ?? null,
+    reportProgress: (progress) => reportProgress?.(progress) ?? undefined,
   };
 }
 

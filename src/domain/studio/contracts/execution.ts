@@ -8,6 +8,14 @@ export type NodeExecutionPhase = 'materialize' | 'running' | 'execute';
 export type NodeExecutionOutputMap = Record<string, WorkflowJsonEnvelope<any>>;
 export type NodeExecutionInputMap = Record<string, WorkflowJsonEnvelope[]>;
 
+export interface NodeExecutionProgress {
+  kind: string;
+  label?: string;
+  totalMs?: number;
+  remainingMs?: number;
+  displayText?: string;
+}
+
 export interface NodeExecutionTiming {
   startedAt?: number;
   completedAt?: number;
@@ -27,4 +35,5 @@ export interface NodeExecutionSnapshot {
   nextControlPorts?: string[];
   errorMessage?: string;
   timing?: NodeExecutionTiming;
+  progress?: NodeExecutionProgress;
 }

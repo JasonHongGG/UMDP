@@ -47,6 +47,7 @@ export type {
   NodeExecutionOriginKind,
   NodeExecutionOutputMap,
   NodeExecutionPhase,
+  NodeExecutionProgress,
   NodeExecutionSnapshot,
   NodeExecutionStatus,
   NodeExecutionTiming,
