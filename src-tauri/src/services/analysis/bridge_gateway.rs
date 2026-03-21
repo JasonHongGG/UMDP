@@ -120,6 +120,10 @@ impl<TTransport> ProcessBridgeGateway<TTransport>
 where
     TTransport: BridgeTransport,
 {
+    pub fn new(transport: TTransport) -> Self {
+        Self { transport }
+    }
+
     fn execute_json<T>(&self, app: &AppHandle, request: BridgeRequest) -> Result<T, String>
     where
         T: serde::de::DeserializeOwned,

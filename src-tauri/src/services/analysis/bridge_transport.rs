@@ -1,5 +1,6 @@
 use crate::domain::bridge_protocol::BridgeOperation;
 use crate::services::analysis::executable_resolver::find_bundled_executable;
+use crate::state::AppState;
 use serde::de::DeserializeOwned;
 use std::process::Command;
 use tauri::AppHandle;
@@ -31,6 +32,27 @@ impl BridgeTransport for ProcessBridgeTransport {
         }
 
         Ok(output.stdout)
+    }
+}
+
+pub struct AppBridgeTransport<'a> {
+    state: &'a AppState,
+}
+
+impl<'a> AppBridgeTransport<'a> {
+    pub fn new(state: &'a AppState) -> Self {
+        Self { state }
+    }
+}
+
+impl BridgeTransport for AppBridgeTransport<'_> {
+    fn execute_raw(&self, app: &AppHandle, request: &BridgeRequest) -> Result<Vec<u8>, String> {
+        if request.executable_name == "UnityMonoBridge.exe" {
+            let executable = find_bundled_executable(app, request.executable_name)?;
+            return self.state.bridge.execute_runtime_request(executable, &request.args);
+        }
+
+        ProcessBridgeTransport.execute_raw(app, request)
     }
 }
 

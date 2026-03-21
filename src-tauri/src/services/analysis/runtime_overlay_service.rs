@@ -3,6 +3,7 @@ use crate::domain::analysis_models::{
     RuntimeOverlaySnapshot, RuntimeResolvedFieldDescriptor, StaticFieldDescriptor,
 };
 use crate::services::analysis::bridge_gateway::{current_timestamp, BridgeGateway, ProcessBridgeGateway};
+use crate::services::analysis::bridge_transport::AppBridgeTransport;
 use crate::services::analysis::runtime_session_service::{
     ensure_attached_session, execute_runtime_operation, resolve_class_descriptor,
 };
@@ -18,7 +19,7 @@ pub fn get_runtime_static_fields(
     let descriptor = resolve_class_descriptor(state, class_stable_id)?;
 
     execute_runtime_operation(state, || {
-        let gateway = ProcessBridgeGateway::default();
+        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
         let response = gateway.load_runtime_overlay(app, attached.pid, &descriptor, None)?;
 
         let overlay = RuntimeClassOverlayDescriptor {
@@ -77,7 +78,7 @@ pub fn get_runtime_instance_fields(
     let descriptor = resolve_class_descriptor(state, class_stable_id)?;
 
     execute_runtime_operation(state, || {
-        let gateway = ProcessBridgeGateway::default();
+        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
         let response = gateway.load_runtime_overlay(app, attached.pid, &descriptor, Some(instance_address))?;
 
         Ok(RuntimeInstanceFieldSnapshot {

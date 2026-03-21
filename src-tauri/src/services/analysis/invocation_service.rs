@@ -3,6 +3,7 @@ use crate::domain::analysis_models::{
     RuntimeMethodInvokeResult, RuntimeMethodInvokeValue,
 };
 use crate::services::analysis::bridge_gateway::{BridgeGateway, ProcessBridgeGateway};
+use crate::services::analysis::bridge_transport::AppBridgeTransport;
 use crate::services::analysis::runtime_session_service::{
     classify_invoke_bridge_error, ensure_attached_session, ensure_metadata_snapshot,
     execute_runtime_operation,
@@ -111,7 +112,7 @@ pub fn invoke_runtime_method(
     }
 
     let response = match execute_runtime_operation(state, || {
-        let gateway = ProcessBridgeGateway::default();
+        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
         gateway.invoke_runtime_method(
             app,
             attached.pid,

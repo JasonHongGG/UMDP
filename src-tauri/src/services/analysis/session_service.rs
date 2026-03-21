@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use sysinfo::System;
 
 pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
+    state.bridge.reset();
+
     let mut sys = System::new_all();
     sys.refresh_processes();
 

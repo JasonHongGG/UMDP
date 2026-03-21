@@ -2,6 +2,7 @@ use crate::domain::analysis_models::{
     RuntimeFieldSetFailureKind, RuntimeFieldSetRequest, RuntimeFieldSetResult,
 };
 use crate::services::analysis::bridge_gateway::{BridgeGateway, ProcessBridgeGateway};
+use crate::services::analysis::bridge_transport::AppBridgeTransport;
 use crate::services::analysis::runtime_session_service::{
     classify_field_set_bridge_error, ensure_attached_session, execute_runtime_operation,
     resolve_class_descriptor,
@@ -82,7 +83,7 @@ pub fn set_runtime_field_value(
     }
 
     let response = match execute_runtime_operation(state, || {
-        let gateway = ProcessBridgeGateway::default();
+        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
         gateway.set_runtime_field_value(app, attached.pid, &descriptor, &request)
     }) {
         Ok(response) => response,

@@ -1,8 +1,10 @@
+use crate::services::analysis::executable_resolver::find_bundled_executable;
 use crate::domain::analysis_models::{
     AnalysisSnapshot, ClassDescriptor, ProcessSession, RuntimeFieldSetFailureKind,
     RuntimeInvokeFailureKind,
 };
 use crate::state::AppState;
+use tauri::AppHandle;
 
 pub fn ensure_attached_session(state: &AppState) -> Result<ProcessSession, String> {
     state
@@ -43,6 +45,13 @@ where
     }
 
     result
+}
+
+pub fn ensure_bridge_session_started(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    let executable = find_bundled_executable(app, "UnityMonoBridge.exe")?;
+    state.bridge.ensure_runtime_session(executable)?;
+    state.workspace.mark_runtime_bridge_connected();
+    Ok(())
 }
 
 fn is_bridge_parse_error(error: &str) -> bool {
