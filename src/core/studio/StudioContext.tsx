@@ -1,10 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphDocument } from '../../domain/studio/contracts';
+import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 import { validateConnection } from './connectionPolicy';
 import { executeStudioFlow } from './executionEngine';
 import { ExpressionDragProvider } from './drag/ExpressionDragContext';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
-import { globalNodeRegistry } from './NodeRegistry';
 import {
   getNodeInputBindingStates,
   getNodeOutputPreview,
@@ -380,7 +380,8 @@ export function useStudio() {
 }
 
 export function StudioProvider({ children, runtimeData }: { children: React.ReactNode; runtimeData: StudioRuntimeDataState }) {
-  const graphStore = useStudioGraphStore();
+  const catalog = getRegisteredStudioNodeCatalog();
+  const graphStore = useStudioGraphStore(catalog);
   const { nodes, edges, document, connectPorts } = graphStore;
   const uiValue = useStudioUiState({ nodes, edges, connectPorts });
   const runtimeValue = useStudioRuntimeState(document, nodes, edges, runtimeData);
@@ -388,14 +389,14 @@ export function StudioProvider({ children, runtimeData }: { children: React.Reac
 
   useEffect(() => {
     for (const node of nodes) {
-      const nodeDef = globalNodeRegistry.get(node.type);
+      const nodeDef = catalog.get(node.type);
       nodeDef?.observeGraphNode?.(node as never, { nodes, edges, runtimeData });
     }
-  }, [edges, nodes, runtimeData]);
+  }, [catalog, edges, nodes, runtimeData]);
 
   useEffect(() => {
     for (const node of nodes) {
-      const nodeDef = globalNodeRegistry.get(node.type);
+      const nodeDef = catalog.get(node.type);
       if (!nodeDef?.reconcileData) {
         continue;
       }
@@ -407,7 +408,7 @@ export function StudioProvider({ children, runtimeData }: { children: React.Reac
 
       graphStore.updateNodeData(node.id, patch);
     }
-  }, [edges, graphStore, nodes, runtimeData]);
+  }, [catalog, edges, graphStore, nodes, runtimeData]);
 
   return (
     <StudioRuntimeDataProvider value={runtimeData}>

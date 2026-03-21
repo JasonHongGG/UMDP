@@ -10,5 +10,16 @@ pub fn fetch_system_processes() -> Vec<ProcessInfo> {
 
 #[tauri::command]
 pub fn attach_to_process(state: State<'_, AppState>, pid: u32, name: String) -> Result<ProcessSession, String> {
-    session_service::attach_to_process(&state, pid, name)
+    state.workspace.set_attaching();
+
+    match session_service::attach_to_process(&state, pid, name) {
+        Ok(session) => {
+            state.workspace.set_attached_without_snapshot(session.clone());
+            Ok(session)
+        }
+        Err(error) => {
+            state.workspace.set_bridge_error(error.clone());
+            Err(error)
+        }
+    }
 }

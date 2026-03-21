@@ -1,9 +1,10 @@
-import { getNodePortsByDirection, globalNodeRegistry } from './NodeRegistry';
+import { getNodePortsByDirection } from './NodeRegistry';
 import { materializeNodeQuerySnapshot } from './graphInterpreter';
 import type { IPort, StudioEdge, StudioNode } from './types';
 import type { NodeQueryIssue } from '../../domain/studio/contracts';
 import { getClassInfoPayloadFromValue } from '../../nodes/CallFunctionNode/callFunctionNodeModel';
 import type { StudioNodeQueryContext } from './queryTypes';
+import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 
 export type { StudioNodeQueryContext } from './queryTypes';
 
@@ -34,7 +35,7 @@ export function getNodeQuerySnapshot(nodeId: string, context: StudioNodeQueryCon
 
 export function getNodeQueryState<T>(nodeId: string, context: StudioNodeQueryContext): T | null {
   const node = getNodeById(nodeId, context.nodes);
-  const nodeDef = node ? globalNodeRegistry.get(node.type) : null;
+  const nodeDef = node ? getRegisteredStudioNodeCatalog().get(node.type) : null;
   if (!node || !nodeDef?.buildQueryState) {
     return null;
   }
@@ -75,7 +76,8 @@ function getInputPortIssues(port: IPort, sources: InputPortBindingSource[]): Nod
 
 export function getNodeInputBindingStates(nodeId: string, context: StudioNodeQueryContext): InputPortBindingState[] {
   const node = getNodeById(nodeId, context.nodes);
-  const nodeDef = node ? globalNodeRegistry.get(node.type) : null;
+  const catalog = getRegisteredStudioNodeCatalog();
+  const nodeDef = node ? catalog.get(node.type) : null;
   if (!node || !nodeDef) {
     return [];
   }
@@ -88,7 +90,7 @@ export function getNodeInputBindingStates(nodeId: string, context: StudioNodeQue
     );
     const sources = boundEdges.map<InputPortBindingSource>((edge) => {
       const sourceNode = getNodeById(edge.sourceNodeId, context.nodes);
-      const sourceNodeDef = sourceNode ? globalNodeRegistry.get(sourceNode.type) : null;
+      const sourceNodeDef = sourceNode ? catalog.get(sourceNode.type) : null;
       const sourcePort = sourceNodeDef ? getNodePortsByDirection(sourceNodeDef, 'output').find((candidate) => candidate.id === edge.sourcePortId) ?? null : null;
 
       return {

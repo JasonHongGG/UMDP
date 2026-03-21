@@ -1,39 +1,7 @@
 import type { NodeInstance } from '../../domain/studio/contracts';
+import { defaultStudioNodeCatalog, StudioNodeCatalog } from './catalog/StudioNodeCatalog';
 import { BaseNodeData, INodeDefinition, IPort, StudioNode, StudioNodeDefinition, StudioNodeRuntimeState } from './types';
 import { resolveJsonSchemaReference } from './contracts';
-
-function clonePorts(ports: IPort[]) {
-  return ports.map((port) => ({ ...port }));
-}
-
-class NodeRegistry {
-  private registry = new Map<string, StudioNodeDefinition>();
-
-  public register(nodeDef: StudioNodeDefinition) {
-   if (this.registry.has(nodeDef.manifest.type)) {
-     console.warn(`Node type ${nodeDef.manifest.type} is already registered. Overwriting.`);
-    }
-   this.registry.set(nodeDef.manifest.type, nodeDef);
-  }
-
-  public get(typeId: string): StudioNodeDefinition | undefined {
-    return this.registry.get(typeId);
-  }
-
-  public getAll(): StudioNodeDefinition[] {
-    return Array.from(this.registry.values());
-  }
-
-  public registerMany(nodeDefs: StudioNodeDefinition[]) {
-    nodeDefs.forEach((nodeDef) => this.register(nodeDef));
-  }
-
-  public clear() {
-    this.registry.clear();
-  }
-}
-
-export const globalNodeRegistry = new NodeRegistry();
 
 export function defineStudioNode<T extends BaseNodeData>(nodeDef: INodeDefinition<T>): StudioNodeDefinition {
   return nodeDef as unknown as StudioNodeDefinition;
@@ -89,17 +57,16 @@ export function dehydrateStudioNodeData<T extends BaseNodeData>(nodeDef: INodeDe
   };
 }
 
-export function initializeStudioNodeRegistry(nodeDefs: StudioNodeDefinition[]) {
-  globalNodeRegistry.clear();
-  globalNodeRegistry.registerMany(nodeDefs);
+export function initializeStudioNodeRegistry(nodeDefs: StudioNodeDefinition[], catalog: StudioNodeCatalog = defaultStudioNodeCatalog) {
+  catalog.replaceAll(nodeDefs);
 }
 
 export function getNodePortsByDirection(nodeDef: StudioNodeDefinition, direction: 'input' | 'output') {
   return clonePortsFromManifest(nodeDef, direction);
 }
 
-export function getStudioNodePorts(node: StudioNode, direction: 'input' | 'output') {
-  const nodeDef = globalNodeRegistry.get(node.type);
+export function getStudioNodePorts(node: StudioNode, direction: 'input' | 'output', catalog: StudioNodeCatalog = defaultStudioNodeCatalog) {
+  const nodeDef = catalog.get(node.type);
   if (!nodeDef) {
     return [];
   }
@@ -107,10 +74,10 @@ export function getStudioNodePorts(node: StudioNode, direction: 'input' | 'outpu
   return getNodePortsByDirection(nodeDef, direction);
 }
 
-export function getStudioNodePort(node: StudioNode | undefined, direction: 'input' | 'output', portId: string) {
+export function getStudioNodePort(node: StudioNode | undefined, direction: 'input' | 'output', portId: string, catalog: StudioNodeCatalog = defaultStudioNodeCatalog) {
   if (!node) {
     return undefined;
   }
 
-  return getStudioNodePorts(node, direction).find((port) => port.id === portId);
+  return getStudioNodePorts(node, direction, catalog).find((port) => port.id === portId);
 }

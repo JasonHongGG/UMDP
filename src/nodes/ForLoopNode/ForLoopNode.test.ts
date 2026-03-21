@@ -75,8 +75,8 @@ describe('ForLoopNode', () => {
     expect(parseForLoopExecutionState(null)).toEqual({});
   });
 
-  it('routes to done immediately when count is zero', () => {
-    const result = ForLoopNodeDef.executionContract!.execute({
+  it('routes to done immediately when count is zero', async () => {
+    const result = await ForLoopNodeDef.executionContract!.execute({
       documentId: 'doc-1',
       nodeId: 'loop-1',
       nodeType: 'for-loop',
@@ -104,8 +104,8 @@ describe('ForLoopNode', () => {
     });
   });
 
-  it('emits iteration payloads and advances runtime state while looping', () => {
-    const first = ForLoopNodeDef.executionContract!.execute({
+  it('emits iteration payloads and advances runtime state while looping', async () => {
+    const first = await ForLoopNodeDef.executionContract!.execute({
       documentId: 'doc-1',
       nodeId: 'loop-1',
       nodeType: 'for-loop',
@@ -131,14 +131,15 @@ describe('ForLoopNode', () => {
       nextControlPorts: ['loop-out'],
       nextRuntimeState: { currentIndex: 0, totalCount: 3 },
     });
-    expect(first.outputs?.['iteration-out'].payload).toEqual({
+    const firstIterationPayload = (first.outputs?.['iteration-out'] as { payload?: unknown } | undefined)?.payload;
+    expect(firstIterationPayload).toEqual({
       index: 0,
       totalCount: 3,
       isFirstIteration: true,
       isLastIteration: false,
     });
 
-    const second = ForLoopNodeDef.executionContract!.execute({
+    const second = await ForLoopNodeDef.executionContract!.execute({
       documentId: 'doc-1',
       nodeId: 'loop-1',
       nodeType: 'for-loop',
@@ -165,7 +166,7 @@ describe('ForLoopNode', () => {
       nextRuntimeState: { currentIndex: 1, totalCount: 3 },
     });
 
-    const done = ForLoopNodeDef.executionContract!.execute({
+    const done = await ForLoopNodeDef.executionContract!.execute({
       documentId: 'doc-1',
       nodeId: 'loop-1',
       nodeType: 'for-loop',

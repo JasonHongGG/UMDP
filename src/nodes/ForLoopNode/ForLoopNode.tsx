@@ -52,7 +52,7 @@ function resolveCountForQuery(node: import('../../core/studio/types').StudioNode
     return parsed.valid ? parsed.value : null;
   }
 
-  if (!source.sourceNodeId) {
+  if (source.kind !== 'input-expression' || !source.sourceNodeId) {
     return null;
   }
 

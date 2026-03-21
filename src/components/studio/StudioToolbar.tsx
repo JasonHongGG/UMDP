@@ -56,7 +56,7 @@ export function StudioToolbar() {
   };
 
   const handleClear = () => {
-    const shouldClear = window.confirm('Clear the current workflow canvas? This will keep your autosave history but remove the current graph.');
+    const shouldClear = window.confirm('Clear the current workflow canvas and discard the local saved/autosaved drafts?');
     if (!shouldClear) {
       return;
     }

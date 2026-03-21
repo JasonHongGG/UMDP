@@ -1,16 +1,30 @@
 import { Target, X, Square, Minus, Cpu } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopNavigation } from './TopNavigation';
+import type { WorkspaceLifecycleState } from '../../shared/contracts';
+import { getWorkspaceLifecycleLabel, getWorkspaceLifecycleTone } from '../../app/shell/workspaceLifecycle';
 
 interface TopBarProps {
     attachedProcess: string | null;
     onOpenSelector: () => void;
     activePage: 'inspector' | 'studio';
     onPageChange: (page: 'inspector' | 'studio') => void;
+    workspace: WorkspaceLifecycleState;
 }
 
-export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChange }: TopBarProps) {
+export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChange, workspace }: TopBarProps) {
     const window = getCurrentWindow();
+    const lifecycleLabel = getWorkspaceLifecycleLabel(workspace);
+    const lifecycleTone = getWorkspaceLifecycleTone(workspace);
+    const lifecycleClassName = lifecycleTone === 'ready'
+        ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]'
+        : lifecycleTone === 'loading'
+            ? 'text-amber-300'
+            : lifecycleTone === 'error'
+                ? 'text-rose-400'
+                : lifecycleTone === 'warning'
+                    ? 'text-amber-300'
+                    : 'text-slate-400';
 
     const handleMinimize = () => {
         window.minimize();
@@ -40,13 +54,14 @@ export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChan
                 </div>
 
                 <div data-tauri-drag-region className="flex flex-col justify-center">
-                    <h2 data-tauri-drag-region className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Target Process</h2>
+                    <h2 data-tauri-drag-region className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Workspace</h2>
                     <div data-tauri-drag-region className="text-sm font-semibold tracking-wide text-white flex items-center gap-2">
                         {attachedProcess ? (
                             <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{attachedProcess}</span>
                         ) : (
                             <span className="text-rose-400/80 pointer-events-none">No Process Attached</span>
                         )}
+                        <span className={`text-[10px] uppercase tracking-wider ${lifecycleClassName}`}>{lifecycleLabel}</span>
                     </div>
                 </div>
             </div>

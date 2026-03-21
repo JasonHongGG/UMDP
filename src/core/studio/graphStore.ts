@@ -1,19 +1,40 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { GraphDocument, NodeInstance } from '../../domain/studio/contracts';
-import { createStudioNodeInitialData, dehydrateStudioNodeData, getStudioNodePort, globalNodeRegistry, hydrateStudioNodeData } from './NodeRegistry';
+import type { GraphDocument } from '../../domain/studio/contracts';
+import { createStudioNodeInitialData, hydrateStudioNodeData } from './NodeRegistry';
+import type { StudioNodeCatalog } from './catalog/StudioNodeCatalog';
+import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
+import {
+  buildNodeInstance,
+  connectionKeyToEdge,
+  deriveStudioGraphCounters,
+  type DuplicateNodesOptions,
+  duplicateStudioGraphSelection,
+  instanceToCanvasNode,
+  isStudioGraphDocumentDirty,
+  MAX_STUDIO_GRAPH_HISTORY_ENTRIES,
+  pushStudioGraphHistoryEntry,
+  resolveSourcePort,
+} from './document/StudioDocumentEngine';
+export {
+  deriveStudioGraphCounters,
+  duplicateStudioGraphSelection,
+  isStudioGraphDocumentDirty,
+  MAX_STUDIO_GRAPH_HISTORY_ENTRIES,
+  pushStudioGraphHistoryEntry,
+} from './document/StudioDocumentEngine';
 import { initialStudioGraphState, reduceStudioGraphDocument, StudioGraphAction, studioGraphReducer } from './graphReducer';
 import {
   cloneGraphDocument,
   createEmptyGraphDocument,
-  readStoredGraphDocument,
   serializeGraphDocument,
-  STUDIO_WORKFLOW_AUTOSAVE_KEY,
-  STUDIO_WORKFLOW_MANUAL_SAVE_KEY,
-  writeStoredGraphDocument,
 } from './persistence';
+import {
+  readStudioWorkflowPersistenceSnapshot,
+  readStudioWorkflowSlot,
+  resetStudioWorkflowPersistence,
+  writeStudioWorkflowSlot,
+} from './persistencePolicy';
 import { BaseNodeData, ConnectPortsOptions, getConnectionChannelForPortType, NodeTransform, StudioEdge, StudioNode, StudioNodeDefinition } from './types';
-
-export const MAX_STUDIO_GRAPH_HISTORY_ENTRIES = 100;
 
 const EMPTY_WORKFLOW_SNAPSHOT = serializeGraphDocument(createEmptyGraphDocument());
 
@@ -21,9 +42,7 @@ export interface UpdateNodePositionOptions {
   trackHistory?: boolean;
 }
 
-export interface DuplicateNodesOptions {
-  offset?: { x: number; y: number };
-}
+export type { DuplicateNodesOptions } from './document/StudioDocumentEngine';
 
 export interface StudioGraphStore {
   nodes: StudioNode[];
@@ -57,177 +76,7 @@ export interface StudioGraphStore {
   clearWorkflow: () => void;
 }
 
-export function deriveStudioGraphCounters(document: GraphDocument) {
-  const nextNodeCounter = document.nodes.reduce((highest, node) => {
-    const match = node.id.match(/-(\d+)$/);
-    if (!match) {
-      return highest;
-    }
-
-    return Math.max(highest, Number(match[1]) + 1);
-  }, 1);
-
-  const nextEdgeCounter = [...document.controlConnections, ...document.dataConnections].reduce((highest, edge) => {
-    const match = edge.id.match(/^edge-(\d+)$/);
-    if (!match) {
-      return highest;
-    }
-
-    return Math.max(highest, Number(match[1]) + 1);
-  }, 1);
-
-  return {
-    nextNodeCounter,
-    nextEdgeCounter,
-  };
-}
-
-export function isStudioGraphDocumentDirty(document: GraphDocument, savedDocumentSnapshot: string | null) {
-  const currentSerializedDocument = serializeGraphDocument(document);
-  if (savedDocumentSnapshot === null) {
-    return currentSerializedDocument !== EMPTY_WORKFLOW_SNAPSHOT;
-  }
-
-  return currentSerializedDocument !== savedDocumentSnapshot;
-}
-
-export function pushStudioGraphHistoryEntry(history: GraphDocument[], document: GraphDocument, limit = MAX_STUDIO_GRAPH_HISTORY_ENTRIES) {
-  const next = [...history, cloneGraphDocument(document)];
-  if (next.length > limit) {
-    return next.slice(next.length - limit);
-  }
-
-  return next;
-}
-
-export function duplicateStudioGraphSelection(
-  document: GraphDocument,
-  selectedNodeIds: string[],
-  getNextNodeId: (nodeType: string) => string,
-  getNextEdgeId: () => string,
-  options?: DuplicateNodesOptions,
-) {
-  const selectedSet = new Set(selectedNodeIds);
-  const selectedNodes = document.nodes.filter((node) => selectedSet.has(node.id));
-
-  if (selectedNodes.length === 0) {
-    return {
-      document,
-      duplicatedNodeIds: [] as string[],
-    };
-  }
-
-  const offset = options?.offset ?? { x: 40, y: 40 };
-  const idMap = new Map<string, string>();
-  const duplicatedNodes = selectedNodes.map((node) => {
-    const duplicatedNode = JSON.parse(JSON.stringify(node)) as NodeInstance;
-    duplicatedNode.id = getNextNodeId(node.nodeType);
-    duplicatedNode.position = {
-      x: node.position.x + offset.x,
-      y: node.position.y + offset.y,
-    };
-    idMap.set(node.id, duplicatedNode.id);
-    return duplicatedNode;
-  });
-
-  const duplicateControlConnection = (connection: GraphDocument['controlConnections'][number]) => ({
-    ...JSON.parse(JSON.stringify(connection)),
-    id: getNextEdgeId(),
-    source: {
-      ...connection.source,
-      nodeId: idMap.get(connection.source.nodeId) ?? connection.source.nodeId,
-    },
-    target: {
-      ...connection.target,
-      nodeId: idMap.get(connection.target.nodeId) ?? connection.target.nodeId,
-    },
-  });
-  const duplicateDataConnection = (connection: GraphDocument['dataConnections'][number]) => ({
-    ...JSON.parse(JSON.stringify(connection)),
-    id: getNextEdgeId(),
-    source: {
-      ...connection.source,
-      nodeId: idMap.get(connection.source.nodeId) ?? connection.source.nodeId,
-    },
-    target: {
-      ...connection.target,
-      nodeId: idMap.get(connection.target.nodeId) ?? connection.target.nodeId,
-    },
-  });
-
-  const duplicatedControlConnections = document.controlConnections
-    .filter((connection) => selectedSet.has(connection.source.nodeId) && selectedSet.has(connection.target.nodeId))
-    .map(duplicateControlConnection);
-  const duplicatedDataConnections = document.dataConnections
-    .filter((connection) => selectedSet.has(connection.source.nodeId) && selectedSet.has(connection.target.nodeId))
-    .map(duplicateDataConnection);
-
-  return {
-    document: {
-      ...document,
-      nodes: [...document.nodes, ...duplicatedNodes],
-      controlConnections: [...document.controlConnections, ...duplicatedControlConnections],
-      dataConnections: [...document.dataConnections, ...duplicatedDataConnections],
-    },
-    duplicatedNodeIds: duplicatedNodes.map((node) => node.id),
-  };
-}
-
-function connectionKeyToEdge(channel: StudioEdge['channel'], connection: GraphDocument['controlConnections'][number] | GraphDocument['dataConnections'][number]): StudioEdge {
-  return {
-    id: connection.id,
-    channel,
-    sourceNodeId: connection.source.nodeId,
-    sourcePortId: connection.source.connectionKey,
-    targetNodeId: connection.target.nodeId,
-    targetPortId: connection.target.connectionKey,
-  };
-}
-
-function instanceToCanvasNode(instance: NodeInstance): StudioNode | null {
-  const def = globalNodeRegistry.get(instance.nodeType);
-  if (!def) {
-    return null;
-  }
-
-  return {
-    id: instance.id,
-    type: instance.nodeType,
-    position: instance.position,
-    data: hydrateStudioNodeData(def, instance),
-  };
-}
-
-function replaceNodeInstance(document: GraphDocument, instance: NodeInstance): GraphDocument {
-  return {
-    ...document,
-    nodes: document.nodes.map((node) => node.id === instance.id ? instance : node),
-  };
-}
-
-function buildNodeInstance(def: StudioNodeDefinition, id: string, position: NodeTransform, data: BaseNodeData): NodeInstance {
-  const baseInstance: NodeInstance = {
-    id,
-    nodeType: def.manifest.type,
-    typeVersion: def.manifest.typeVersion,
-    position,
-    displayName: data.nodeName?.trim() || undefined,
-    parameters: {},
-    bindings: {},
-    documentState: {},
-  };
-  const runtimeState = dehydrateStudioNodeData(def, data, baseInstance);
-
-  return {
-    ...baseInstance,
-    displayName: runtimeState.displayName,
-    parameters: runtimeState.parameters,
-    bindings: runtimeState.bindings,
-    documentState: runtimeState.documentState,
-  };
-}
-
-export function useStudioGraphStore(): StudioGraphStore {
+export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredStudioNodeCatalog()): StudioGraphStore {
   const [graphState, dispatch] = useReducer(studioGraphReducer, initialStudioGraphState);
   const [pastDocuments, setPastDocuments] = useState<GraphDocument[]>([]);
   const [futureDocuments, setFutureDocuments] = useState<GraphDocument[]>([]);
@@ -242,7 +91,7 @@ export function useStudioGraphStore(): StudioGraphStore {
   const edgeCounter = useRef(1);
 
   const nodes = useMemo<StudioNode[]>(() => graphState.document.nodes
-    .map((node) => instanceToCanvasNode(node))
+    .map((node) => instanceToCanvasNode(node, catalog))
     .filter((node): node is StudioNode => node !== null), [graphState.document.nodes]);
   const edges = useMemo<StudioEdge[]>(() => ([
     ...graphState.document.controlConnections.map((connection) => connectionKeyToEdge('control', connection)),
@@ -293,14 +142,15 @@ export function useStudioGraphStore(): StudioGraphStore {
   }, [syncCountersFromDocument]);
 
   useEffect(() => {
-    const manualRecord = readStoredGraphDocument(STUDIO_WORKFLOW_MANUAL_SAVE_KEY);
+    const { manualSave, autosave } = readStudioWorkflowPersistenceSnapshot();
+    const manualRecord = manualSave;
     if (manualRecord) {
       setHasSavedWorkflow(true);
       setLastSavedAt(manualRecord.savedAt);
       setSavedDocumentSnapshot(serializeGraphDocument(manualRecord.document));
     }
 
-    const autosaveRecord = readStoredGraphDocument(STUDIO_WORKFLOW_AUTOSAVE_KEY);
+    const autosaveRecord = autosave;
     if (autosaveRecord) {
       replaceDocumentState(autosaveRecord.document, {
         resetHistory: true,
@@ -320,7 +170,7 @@ export function useStudioGraphStore(): StudioGraphStore {
     }
 
     const timeout = window.setTimeout(() => {
-      const savedAt = writeStoredGraphDocument(STUDIO_WORKFLOW_AUTOSAVE_KEY, graphState.document);
+      const savedAt = writeStudioWorkflowSlot('autosave', graphState.document);
       if (savedAt) {
         setLastAutosavedAt(savedAt);
       }
@@ -330,7 +180,7 @@ export function useStudioGraphStore(): StudioGraphStore {
   }, [graphState.document]);
 
   const addNode = useCallback((typeId: string, position: NodeTransform, dataOverrides?: Partial<BaseNodeData>) => {
-    const def = globalNodeRegistry.get(typeId);
+    const def = catalog.get(typeId);
     if (!def) {
       return null;
     }
@@ -340,7 +190,7 @@ export function useStudioGraphStore(): StudioGraphStore {
 
     applyGraphAction({ type: 'add-node', node: newNode });
     return newNode.id;
-  }, [applyGraphAction]);
+  }, [applyGraphAction, catalog]);
 
   const updateNodePosition = useCallback((id: string, position: NodeTransform, options?: UpdateNodePositionOptions) => {
     applyGraphAction({ type: 'update-node-position', nodeId: id, position }, {
@@ -397,7 +247,7 @@ export function useStudioGraphStore(): StudioGraphStore {
       return;
     }
 
-    const def = globalNodeRegistry.get(instance.nodeType);
+    const def = catalog.get(instance.nodeType);
     if (!def) {
       return;
     }
@@ -409,7 +259,7 @@ export function useStudioGraphStore(): StudioGraphStore {
     };
     const nextInstance = buildNodeInstance(def, instance.id, instance.position, nextData);
     applyGraphAction({ type: 'update-node-instance', nodeId: id, node: nextInstance });
-  }, [applyGraphAction, graphState.document.nodes]);
+  }, [applyGraphAction, catalog, graphState.document.nodes]);
 
   const deleteNode = useCallback((id: string) => {
     applyGraphAction({ type: 'delete-node', nodeId: id });
@@ -448,8 +298,7 @@ export function useStudioGraphStore(): StudioGraphStore {
   }, [graphState.document, pushDocumentIntoHistory]);
 
   const connectPorts = useCallback((sourceNodeId: string, sourcePortId: string, targetNodeId: string, targetPortId: string, options?: ConnectPortsOptions) => {
-    const sourceNode = nodes.find((node) => node.id === sourceNodeId);
-    const sourcePort = getStudioNodePort(sourceNode, 'output', sourcePortId);
+    const sourcePort = resolveSourcePort(nodes, catalog, sourceNodeId, sourcePortId);
     if (!sourcePort) {
       return;
     }
@@ -466,7 +315,7 @@ export function useStudioGraphStore(): StudioGraphStore {
         targetPortId,
       },
     });
-  }, [applyGraphAction, nodes]);
+  }, [applyGraphAction, catalog, nodes]);
 
   const disconnectEdge = useCallback((id: string) => {
     applyGraphAction({ type: 'disconnect-edge', edgeId: id });
@@ -499,7 +348,7 @@ export function useStudioGraphStore(): StudioGraphStore {
   }, [futureDocuments, graphState.document, pushDocumentIntoHistory, replaceDocumentState]);
 
   const saveWorkflow = useCallback(() => {
-    const savedAt = writeStoredGraphDocument(STUDIO_WORKFLOW_MANUAL_SAVE_KEY, graphState.document);
+    const savedAt = writeStudioWorkflowSlot('manual-save', graphState.document);
     if (!savedAt) {
       return false;
     }
@@ -511,7 +360,7 @@ export function useStudioGraphStore(): StudioGraphStore {
   }, [currentSerializedDocument, graphState.document]);
 
   const loadSavedWorkflow = useCallback(() => {
-    const record = readStoredGraphDocument(STUDIO_WORKFLOW_MANUAL_SAVE_KEY);
+    const record = readStudioWorkflowSlot('manual-save');
     if (!record) {
       return false;
     }
@@ -527,6 +376,11 @@ export function useStudioGraphStore(): StudioGraphStore {
   }, [replaceDocumentState]);
 
   const clearWorkflow = useCallback(() => {
+    resetStudioWorkflowPersistence();
+    setHasSavedWorkflow(false);
+    setLastSavedAt(null);
+    setLastAutosavedAt(null);
+    setSavedDocumentSnapshot(null);
     replaceDocumentState(createEmptyGraphDocument(), { resetHistory: true, loadedAt: Date.now() });
   }, [replaceDocumentState]);
 

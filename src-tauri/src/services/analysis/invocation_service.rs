@@ -1,31 +1,10 @@
 use crate::domain::analysis_models::{
-    MethodDescriptor, RuntimeInvokeArgumentKind, RuntimeInvokeFailureKind,
-    RuntimeMethodInvokeArgument, RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult,
-    RuntimeMethodInvokeValue,
+    MethodDescriptor, RuntimeInvokeFailureKind, RuntimeMethodInvokeRequest,
+    RuntimeMethodInvokeResult, RuntimeMethodInvokeValue,
 };
-use crate::services::analysis::executable_resolver::find_bundled_executable;
+use crate::services::analysis::bridge_gateway::invoke_runtime_method as invoke_bridge_method;
 use crate::state::AppState;
-use serde::Deserialize;
-use std::process::Command;
 use tauri::AppHandle;
-
-#[derive(Debug, Deserialize)]
-struct HelperInvokeValue {
-    kind: String,
-    value: Option<String>,
-    object_address: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperInvokeResponse {
-    success: bool,
-    method_name: String,
-    method_signature: String,
-    return_type: String,
-    error: Option<String>,
-    exception: Option<String>,
-    result: Option<HelperInvokeValue>,
-}
 
 fn build_failure_result(
     request: &RuntimeMethodInvokeRequest,
@@ -45,20 +24,6 @@ fn build_failure_result(
         error: Some(error.into()),
         exception,
         result: None,
-    }
-}
-
-fn push_argument(command: &mut Command, argument: &RuntimeMethodInvokeArgument) {
-    let kind = match argument.value_kind {
-        RuntimeInvokeArgumentKind::Null => "null",
-        RuntimeInvokeArgumentKind::Boolean => "boolean",
-        RuntimeInvokeArgumentKind::Number => "number",
-        RuntimeInvokeArgumentKind::String => "string",
-    };
-
-    command.arg("--arg-kind").arg(kind);
-    if let Some(value) = &argument.value {
-        command.arg("--arg-value").arg(value);
     }
 }
 
@@ -141,82 +106,30 @@ pub fn invoke_runtime_method(
         );
     }
 
-    let helper_exe = match find_bundled_executable(app, "UnityMonoBridge.exe") {
-        Ok(path) => path,
-        Err(error) => {
-            return build_failure_result(
-                &request,
-                RuntimeInvokeFailureKind::BridgeLaunchFailed,
-                format!("Failed to resolve runtime bridge: {error}"),
-                None,
-                Some(&method),
-            )
-        }
-    };
-    let mut command = Command::new(&helper_exe);
-    command
-        .arg("--operation")
-        .arg("invoke")
-        .arg("--pid")
-        .arg(attached.pid.to_string())
-        .arg("--image")
-        .arg(&descriptor.legacy_image_id)
-        .arg("--namespace")
-        .arg(&descriptor.namespace)
-        .arg("--class")
-        .arg(&descriptor.name)
-        .arg("--method-name")
-        .arg(&method.name)
-        .arg("--method-signature")
-        .arg(&method.signature);
-
-    if let Some(instance_address) = &request.instance_address {
-        command.arg("--instance").arg(instance_address);
-    }
-
-    for argument in &request.arguments {
-        push_argument(&mut command, argument);
-    }
-
-    let output = command
-        .output()
-        .map_err(|error| format!("Failed to launch runtime bridge: {error}"));
-    let output = match output {
-        Ok(output) => output,
-        Err(error) => {
-            return build_failure_result(
-                &request,
-                RuntimeInvokeFailureKind::BridgeLaunchFailed,
-                error,
-                None,
-                Some(&method),
-            )
-        }
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return build_failure_result(
-            &request,
-            RuntimeInvokeFailureKind::BridgeFailed,
-            format!("Runtime bridge failed: {}", stderr.trim()),
-            None,
-            Some(&method),
-        );
-    }
-
-    let response = serde_json::from_slice::<HelperInvokeResponse>(&output.stdout)
-        .map_err(|error| format!("Failed to parse runtime bridge response: {error}"));
-    let response = match response {
+    let response = match invoke_bridge_method(
+        app,
+        attached.pid,
+        &descriptor,
+        &method,
+        request.instance_address.as_deref(),
+        &request.arguments,
+    ) {
         Ok(response) => response,
         Err(error) => {
+            let failure_kind = if error.contains("parse") {
+                RuntimeInvokeFailureKind::BridgeParseFailed
+            } else if error.contains("resolve") || error.contains("launch") {
+                RuntimeInvokeFailureKind::BridgeLaunchFailed
+            } else {
+                RuntimeInvokeFailureKind::BridgeFailed
+            };
             return build_failure_result(
                 &request,
-                RuntimeInvokeFailureKind::BridgeParseFailed,
+                failure_kind,
                 error,
                 None,
                 Some(&method),
-            )
+            );
         }
     };
 

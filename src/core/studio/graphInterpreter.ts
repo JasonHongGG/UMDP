@@ -1,4 +1,4 @@
-import { getStudioNodePorts, globalNodeRegistry } from './NodeRegistry';
+import { getStudioNodePorts } from './NodeRegistry';
 import {
   createNodeExecutionContext,
   getIncomingEdges,
@@ -10,6 +10,7 @@ import type { StudioNodeQueryContext } from './queryTypes';
 import type { NodeExecutionSnapshot, StudioEdge, StudioNode, StudioNodeDefinition } from './types';
 import type { NodeExecutionContext, ValidationIssue } from '../../domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
+import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 
 export interface GraphInterpreterEnvironment {
   documentId: string;
@@ -101,8 +102,9 @@ export function createExecutionNodeSnapshot(
 }
 
 export function canMaterializePassiveJsonNode(node: StudioNode) {
-  const hasFlowInputs = getStudioNodePorts(node, 'input').some((port) => port.type === 'flow');
-  const hasJsonOutputs = getStudioNodePorts(node, 'output').some((port) => port.type === 'json');
+  const catalog = getRegisteredStudioNodeCatalog();
+  const hasFlowInputs = getStudioNodePorts(node, 'input', catalog).some((port) => port.type === 'flow');
+  const hasJsonOutputs = getStudioNodePorts(node, 'output', catalog).some((port) => port.type === 'json');
 
   return !hasFlowInputs && hasJsonOutputs;
 }
@@ -152,7 +154,7 @@ export async function prepareNodeExecution(
     );
   }
 
-  const definition = globalNodeRegistry.get(node.type);
+  const definition = getRegisteredStudioNodeCatalog().get(node.type);
   if (!definition) {
     return null;
   }
@@ -301,7 +303,7 @@ export function materializeNodeQuerySnapshot(
     return acc;
   }, {});
 
-  const nodeDef = globalNodeRegistry.get(node.type);
+  const nodeDef = getRegisteredStudioNodeCatalog().get(node.type);
   const snapshots = {
     ...context.nodeSnapshots,
     ...dependencySnapshots,

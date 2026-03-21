@@ -3,7 +3,7 @@ import type { GraphDocument, NodeInstance } from '../../domain/studio/contracts'
 export const STUDIO_WORKFLOW_AUTOSAVE_KEY = 'unity-mono-studio.workflow.autosave.v1';
 export const STUDIO_WORKFLOW_MANUAL_SAVE_KEY = 'unity-mono-studio.workflow.manual-save.v1';
 
-interface StoredGraphDocumentRecord {
+export interface StoredGraphDocumentRecord {
   savedAt: number;
   document: GraphDocument;
 }
@@ -173,4 +173,12 @@ export function writeStoredGraphDocument(storageKey: string, document: GraphDocu
 
   window.localStorage.setItem(storageKey, JSON.stringify(record));
   return record.savedAt;
+}
+
+export function clearStoredGraphDocument(storageKey: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.removeItem(storageKey);
 }

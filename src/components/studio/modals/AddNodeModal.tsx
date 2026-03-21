@@ -2,12 +2,13 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Layers3, Search, X } from 'lucide-react';
 import { createEmptyClassInfoSelection, filterStudioClassCatalog } from '../../../domain/studio/editor';
 import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
-import { globalNodeRegistry } from '../../../core/studio/NodeRegistry';
+import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 import { useStudioRuntimeData } from '../../../core/studio/runtimeData';
 
 type ModalMode = 'nodes' | 'class-picker';
 
 export function AddNodeModal() {
+  const catalog = getRegisteredStudioNodeCatalog();
   const { addNode } = useStudioGraph();
   const { isAddModalOpen, closeAddModal, addModalPosition, transform } = useStudioUi();
   const { classes, classCatalog } = useStudioRuntimeData();
@@ -23,7 +24,7 @@ export function AddNodeModal() {
     }
   }, [isAddModalOpen]);
 
-  const availableNodes = useMemo(() => globalNodeRegistry.getAll(), []);
+  const availableNodes = useMemo(() => catalog.getAll(), [catalog]);
 
   const filteredNodes = useMemo(() => {
     if (!searchQuery) return availableNodes;

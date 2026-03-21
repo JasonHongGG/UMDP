@@ -13,7 +13,19 @@ pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> R
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
-        metadata_query_service::load_all_metadata(&app_handle, &state)
+        let session = state.analysis.process_session();
+        state.workspace.set_snapshot_loading(session.clone());
+
+        match metadata_query_service::load_all_metadata(&app_handle, &state) {
+            Ok(snapshot) => {
+                state.workspace.set_ready(session);
+                Ok(snapshot)
+            }
+            Err(error) => {
+                state.workspace.set_bridge_error(error.clone());
+                Err(error)
+            }
+        }
     })
     .await
     .map_err(join_error_message)?

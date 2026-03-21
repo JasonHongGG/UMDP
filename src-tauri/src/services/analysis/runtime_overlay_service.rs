@@ -2,44 +2,9 @@ use crate::domain::analysis_models::{
     create_field_stable_id, FieldDescriptor, RuntimeClassOverlayDescriptor, RuntimeInstanceFieldSnapshot,
     RuntimeOverlaySnapshot, RuntimeResolvedFieldDescriptor, StaticFieldDescriptor,
 };
-use crate::services::analysis::executable_resolver::find_bundled_executable;
+use crate::services::analysis::bridge_gateway::{current_timestamp, load_runtime_overlay};
 use crate::state::AppState;
-use serde::Deserialize;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
-
-#[derive(Debug, Deserialize)]
-struct HelperRuntimeStaticFields {
-    static_fields: Vec<HelperStaticField>,
-    fields: Vec<HelperField>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperField {
-    address: Option<String>,
-    value: Option<String>,
-    offset: Option<String>,
-    name: String,
-    field_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperStaticField {
-    address: Option<String>,
-    value: Option<String>,
-    name: String,
-    field_type: String,
-}
-
-fn current_timestamp() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    now.to_string()
-}
 
 fn resolve_attached_session(state: &AppState) -> Result<crate::domain::analysis_models::ProcessSession, String> {
     state
@@ -61,41 +26,6 @@ fn resolve_metadata_descriptor(state: &AppState, class_stable_id: &str) -> Resul
         .ok_or_else(|| format!("Class details not found for {class_stable_id}"))
 }
 
-fn run_runtime_bridge(
-    app: &AppHandle,
-    pid: u32,
-    descriptor: &crate::domain::analysis_models::ClassDescriptor,
-    instance_address: Option<&str>,
-) -> Result<HelperRuntimeStaticFields, String> {
-    let helper_exe = find_bundled_executable(app, "UnityMonoBridge.exe")?;
-    let mut command = Command::new(&helper_exe);
-    command
-        .arg("--pid")
-        .arg(pid.to_string())
-        .arg("--image")
-        .arg(&descriptor.legacy_image_id)
-        .arg("--namespace")
-        .arg(&descriptor.namespace)
-        .arg("--class")
-        .arg(&descriptor.name);
-
-    if let Some(address) = instance_address {
-        command.arg("--instance").arg(address);
-    }
-
-    let output = command
-        .output()
-        .map_err(|error| format!("Failed to launch runtime bridge: {error}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Runtime bridge failed: {}", stderr.trim()));
-    }
-
-    serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Failed to parse runtime bridge response: {error}"))
-}
-
 pub fn get_runtime_static_fields(
     app: &AppHandle,
     state: &AppState,
@@ -103,7 +33,7 @@ pub fn get_runtime_static_fields(
 ) -> Result<RuntimeOverlaySnapshot, String> {
     let attached = resolve_attached_session(state)?;
     let descriptor = resolve_metadata_descriptor(state, class_stable_id)?;
-    let response = run_runtime_bridge(app, attached.pid, &descriptor, None)?;
+    let response = load_runtime_overlay(app, attached.pid, &descriptor, None)?;
 
     let overlay = RuntimeClassOverlayDescriptor {
         class_stable_id: descriptor.stable_id.clone(),
@@ -158,7 +88,7 @@ pub fn get_runtime_instance_fields(
 ) -> Result<RuntimeInstanceFieldSnapshot, String> {
     let attached = resolve_attached_session(state)?;
     let descriptor = resolve_metadata_descriptor(state, class_stable_id)?;
-    let response = run_runtime_bridge(app, attached.pid, &descriptor, Some(instance_address))?;
+    let response = load_runtime_overlay(app, attached.pid, &descriptor, Some(instance_address))?;
 
     Ok(RuntimeInstanceFieldSnapshot {
         class_stable_id: descriptor.stable_id.clone(),

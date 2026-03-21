@@ -3,19 +3,21 @@ export type {
   ClassDescriptor,
   FieldDescriptor,
   ImageDescriptor,
+  InstanceReferencePayload,
+  InstanceReferenceSourceKind,
   MethodDescriptor,
   ProcessInfo,
   ProcessSession,
   RuntimeClassOverlayDescriptor,
+  RuntimeFlavor,
+  RuntimeInstanceFieldSnapshot,
+  RuntimeInvokeFailureKind,
   RuntimeMethodInvokeArgument,
   RuntimeMethodInvokeRequest,
   RuntimeMethodInvokeResult,
   RuntimeMethodInvokeValue,
-  RuntimeInstanceFieldSnapshot,
-  RuntimeFlavor,
-  RuntimeInvokeFailureKind,
   RuntimeOverlaySnapshot,
   RuntimeResolvedFieldDescriptor,
   StaticFieldDescriptor,
-} from './domain/analysis/contracts/canonical';
-export type { InstanceReferencePayload, InstanceReferenceSourceKind } from './domain/studio/contracts';
+} from './shared/contracts';
+

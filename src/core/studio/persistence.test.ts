@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearStoredGraphDocument,
   cloneGraphDocument,
   createEmptyGraphDocument,
   isGraphDocument,
@@ -8,6 +9,13 @@ import {
   serializeGraphDocument,
   writeStoredGraphDocument,
 } from './persistence';
+import {
+  bootstrapStudioPersistencePolicy,
+  readStudioWorkflowPersistenceSnapshot,
+  readStudioWorkflowSlot,
+  resetStudioWorkflowPersistence,
+  writeStudioWorkflowSlot,
+} from './persistencePolicy';
 
 describe('studio persistence', () => {
   beforeEach(() => {
@@ -165,5 +173,50 @@ describe('studio persistence', () => {
     });
 
     nowSpy.mockRestore();
+  });
+
+  it('clears stored workflow records from localStorage', () => {
+    const document = createEmptyGraphDocument();
+    writeStoredGraphDocument('studio.test.workflow', document);
+
+    clearStoredGraphDocument('studio.test.workflow');
+
+    expect(readStoredGraphDocument('studio.test.workflow')).toBeNull();
+  });
+
+  it('boots v2 persistence by removing legacy v1 slots', () => {
+    window.localStorage.setItem('unity-mono-studio.workflow.autosave.v1', '{"legacy":true}');
+    window.localStorage.setItem('unity-mono-studio.workflow.manual-save.v1', '{"legacy":true}');
+
+    bootstrapStudioPersistencePolicy();
+
+    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v1')).toBeNull();
+    expect(window.localStorage.getItem('unity-mono-studio.workflow.manual-save.v1')).toBeNull();
+  });
+
+  it('reads and writes v2 workflow slots through the persistence policy', () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    const document = createEmptyGraphDocument();
+    document.id = 'workflow-v2';
+
+    const savedAt = writeStudioWorkflowSlot('manual-save', document);
+    const manualRecord = readStudioWorkflowSlot('manual-save');
+    const snapshot = readStudioWorkflowPersistenceSnapshot();
+
+    expect(savedAt).toBe(1_800_000_000_000);
+    expect(manualRecord?.document.id).toBe('workflow-v2');
+    expect(snapshot.manualSave?.savedAt).toBe(1_800_000_000_000);
+
+    nowSpy.mockRestore();
+  });
+
+  it('resets v2 workflow slots through the persistence policy', () => {
+    writeStudioWorkflowSlot('autosave', createEmptyGraphDocument());
+    writeStudioWorkflowSlot('manual-save', createEmptyGraphDocument());
+
+    resetStudioWorkflowPersistence();
+
+    expect(readStudioWorkflowSlot('autosave')).toBeNull();
+    expect(readStudioWorkflowSlot('manual-save')).toBeNull();
   });
 });

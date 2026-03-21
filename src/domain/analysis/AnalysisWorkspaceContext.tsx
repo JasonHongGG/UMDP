@@ -1,14 +1,9 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createStudioRuntimeDataState, type StudioRuntimeDataState } from '../../core/studio/runtimeData';
 import type {
   AnalysisSnapshot,
-  ProcessInfo,
   ProcessSession,
   RuntimeClassOverlayDescriptor,
-  RuntimeInstanceFieldSnapshot,
-  RuntimeOverlaySnapshot,
 } from './contracts';
 import {
   buildStudioClassCatalog,
@@ -22,6 +17,9 @@ import {
 import type { StableId } from '../contracts/shared-identity';
 import { formatHexAddress } from '../../core/addressFormat';
 import type { ResolvedMemberRuntimeValue } from '../../core/studio/contracts';
+import { useAnalysisRepository } from './hooks/useAnalysisRepository';
+import { useAnalysisRuntimeState } from './hooks/useAnalysisRuntimeState';
+import { useAnalysisSessionState } from './hooks/useAnalysisSessionState';
 import type {
   AnalysisClassInfo,
   AnalysisClassSummary,
@@ -126,21 +124,10 @@ interface AnalysisWorkspaceContextValue {
 const AnalysisWorkspaceContext = createContext<AnalysisWorkspaceContextValue | null>(null);
 
 export function AnalysisWorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [processSession, setProcessSession] = useState<ProcessSession | null>(null);
-  const [attachError, setAttachError] = useState<string | null>(null);
-  const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
-  const [runtimeOverlays, setRuntimeOverlays] = useState<Record<string, RuntimeClassOverlayDescriptor>>({});
-  const [runtimeInstanceFieldSnapshots, setRuntimeInstanceFieldSnapshots] = useState<Record<string, RuntimeInstanceFieldSnapshot>>({});
   const [selectedImageStableId, setSelectedImageStableId] = useState<StableId | null>(null);
-  const [loadingImages, setLoadingImages] = useState(false);
 
   const [tabs, setTabs] = useState<InspectorTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
-
-  const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
-  const [loadingRuntimeByKey, setLoadingRuntimeByKey] = useState<Record<string, boolean>>({});
-  const [runtimeInstanceFieldErrorByKey, setRuntimeInstanceFieldErrorByKey] = useState<Record<string, string | null>>({});
-  const [loadingRuntimeInstanceByKey, setLoadingRuntimeInstanceByKey] = useState<Record<string, boolean>>({});
 
   const [activePage, setActivePage] = useState<ActivePage>('inspector');
   const [pendingClassNode, setPendingClassNode] = useState<PendingClassNodeRequest | null>(null);
@@ -163,20 +150,12 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   const [referenceResults, setReferenceResults] = useState<ClassReferenceResult[]>([]);
   const [isReferenceSearching, setIsReferenceSearching] = useState(false);
 
-  const fetchingRuntimeRef = useRef<Set<string>>(new Set());
-  const fetchingRuntimeInstanceRef = useRef<Set<string>>(new Set());
+  const repository = useAnalysisRepository();
 
   const resetWorkspace = useCallback(() => {
-    setAnalysisSnapshot(null);
-    setRuntimeOverlays({});
-    setRuntimeInstanceFieldSnapshots({});
     setSelectedImageStableId(null);
     setTabs([]);
     setActiveTabIndex(-1);
-    setRuntimeFieldErrorByKey({});
-    setLoadingRuntimeByKey({});
-    setRuntimeInstanceFieldErrorByKey({});
-    setLoadingRuntimeInstanceByKey({});
     setPendingClassNode(null);
     setGlobalSearchQuery('');
     setGlobalSearchResults([]);
@@ -187,46 +166,23 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     setPendingScrollClassStableId(null);
   }, []);
 
-  const fetchMetadata = useCallback(async (session: ProcessSession | null) => {
-    setLoadingImages(true);
-    try {
-      const snapshot = await invoke<AnalysisSnapshot>('load_all_metadata');
-      setAnalysisSnapshot({
-        ...snapshot,
-        process: session,
-      });
-    } catch (error) {
-      console.error('Failed to load metadata', error);
-    } finally {
-      setLoadingImages(false);
-    }
-  }, []);
+  const {
+    processSession,
+    attachError,
+    analysisSnapshot,
+    loadingImages,
+  } = useAnalysisSessionState({ repository, onResetWorkspace: resetWorkspace });
 
-  useEffect(() => {
-    const unlisten = listen<ProcessInfo>('process-selected', async (event) => {
-      setAttachError(null);
-      setLoadingImages(true);
-      try {
-        const session = await invoke<ProcessSession>('attach_to_process', {
-          pid: event.payload.pid,
-          name: event.payload.name,
-        });
-
-        setProcessSession(session);
-        resetWorkspace();
-        await fetchMetadata(session);
-      } catch (error) {
-        setProcessSession(null);
-        resetWorkspace();
-        setAttachError(String(error));
-        setLoadingImages(false);
-      }
-    });
-
-    return () => {
-      unlisten.then((dispose) => dispose());
-    };
-  }, [fetchMetadata, resetWorkspace]);
+  const {
+    runtimeOverlays,
+    runtimeFieldErrorByKey,
+    loadingRuntimeByKey,
+    runtimeInstanceFieldErrorByKey,
+    loadingRuntimeInstanceByKey,
+    runtimeMemberValuesByClassAndAddress,
+    ensureRuntimeOverlayLoaded,
+    ensureRuntimeInstanceFieldsLoaded,
+  } = useAnalysisRuntimeState({ repository, processSession, analysisSnapshot });
 
   const openTabForClass = useCallback((entry: InspectorTab) => {
     setTabs((previous) => {
@@ -402,104 +358,6 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
       setSelectedImageStableId(null);
     }
   }, [images, selectedImageStableId]);
-
-  const ensureRuntimeOverlayLoaded = useCallback((classStableId: StableId) => {
-    if (!processSession || !analysisSnapshot) {
-      return;
-    }
-
-    if (runtimeOverlays[classStableId] || fetchingRuntimeRef.current.has(classStableId)) {
-      return;
-    }
-
-    const descriptor = analysisSnapshot.classes[classStableId];
-    if (!descriptor) {
-      return;
-    }
-
-    fetchingRuntimeRef.current.add(classStableId);
-    setLoadingRuntimeByKey((current) => ({ ...current, [classStableId]: true }));
-
-    invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', {
-      classStableId,
-    })
-      .then((snapshot) => {
-        setRuntimeOverlays((current) => ({
-          ...current,
-          [classStableId]: snapshot.classes[classStableId],
-        }));
-        setRuntimeFieldErrorByKey((current) => ({ ...current, [classStableId]: null }));
-      })
-      .catch((error) => {
-        setRuntimeFieldErrorByKey((current) => ({ ...current, [classStableId]: String(error) }));
-      })
-      .finally(() => {
-        fetchingRuntimeRef.current.delete(classStableId);
-        setLoadingRuntimeByKey((current) => ({ ...current, [classStableId]: false }));
-      });
-  }, [analysisSnapshot, processSession, runtimeOverlays]);
-
-  const ensureRuntimeInstanceFieldsLoaded = useCallback((classStableId: StableId, instanceAddress: string) => {
-    if (!processSession || !analysisSnapshot) {
-      return;
-    }
-
-    const normalizedAddress = formatHexAddress(instanceAddress);
-    if (!normalizedAddress) {
-      return;
-    }
-
-    const descriptor = analysisSnapshot.classes[classStableId];
-    if (!descriptor) {
-      return;
-    }
-
-    const requestKey = `${classStableId}::${normalizedAddress}`;
-    if (runtimeInstanceFieldSnapshots[requestKey] || fetchingRuntimeInstanceRef.current.has(requestKey)) {
-      return;
-    }
-
-    fetchingRuntimeInstanceRef.current.add(requestKey);
-    setLoadingRuntimeInstanceByKey((current) => ({ ...current, [requestKey]: true }));
-
-    invoke<RuntimeInstanceFieldSnapshot>('get_runtime_instance_fields', {
-      classStableId,
-      instanceAddress: normalizedAddress,
-    })
-      .then((snapshot) => {
-        setRuntimeInstanceFieldSnapshots((current) => ({
-          ...current,
-          [requestKey]: snapshot,
-        }));
-        setRuntimeInstanceFieldErrorByKey((current) => ({ ...current, [requestKey]: null }));
-      })
-      .catch((error) => {
-        setRuntimeInstanceFieldErrorByKey((current) => ({ ...current, [requestKey]: String(error) }));
-      })
-      .finally(() => {
-        fetchingRuntimeInstanceRef.current.delete(requestKey);
-        setLoadingRuntimeInstanceByKey((current) => ({ ...current, [requestKey]: false }));
-      });
-  }, [analysisSnapshot, processSession, runtimeInstanceFieldSnapshots]);
-
-  const runtimeMemberValuesByClassAndAddress = useMemo(() => {
-    return Object.values(runtimeInstanceFieldSnapshots).reduce<Record<string, Record<string, Record<string, ResolvedMemberRuntimeValue>>>>((acc, snapshot) => {
-      const normalizedAddress = formatHexAddress(snapshot.instanceAddress);
-      if (!normalizedAddress) {
-        return acc;
-      }
-
-      if (!acc[snapshot.classStableId]) {
-        acc[snapshot.classStableId] = {};
-      }
-
-      acc[snapshot.classStableId]![normalizedAddress] = Object.fromEntries(snapshot.fields.map((field) => [field.stableId, {
-        address: formatHexAddress(field.address),
-        value: field.value,
-      }]));
-      return acc;
-    }, {});
-  }, [runtimeInstanceFieldSnapshots]);
 
   useEffect(() => {
     if (!activeTab) {

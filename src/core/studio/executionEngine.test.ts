@@ -598,6 +598,7 @@ describe('executeStudioFlow', () => {
   it('persists per-run node runtime state across loop re-entry and clears after completion', async () => {
     vi.useFakeTimers();
 
+    const loopPayloads: unknown[] = [];
     const loopBodySpy = vi.fn(() => ({ state: 'success' as const, outputs: {}, nextControlPorts: ['flow-out'] }));
     const doneSpy = vi.fn(() => ({ state: 'success' as const, outputs: {} }));
 
@@ -640,7 +641,8 @@ describe('executeStudioFlow', () => {
       executionContract: {
         validate: () => [],
         execute: ({ resolvedInputs }) => {
-          loopBodySpy(resolvedInputs['iteration-in']?.[0] ?? null);
+          loopPayloads.push(resolvedInputs['iteration-in']?.[0] ?? null);
+          loopBodySpy();
           return { state: 'success' as const, outputs: {}, nextControlPorts: ['flow-out'] };
         },
       },
@@ -702,13 +704,13 @@ describe('executeStudioFlow', () => {
     await vi.runAllTimersAsync();
 
     expect(loopBodySpy).toHaveBeenCalledTimes(3);
-    expect(loopBodySpy.mock.calls.map(([payload]) => payload)).toEqual([
+    expect(loopPayloads).toEqual([
       { index: 0, totalCount: 3, isFirstIteration: true, isLastIteration: false },
       { index: 1, totalCount: 3, isFirstIteration: false, isLastIteration: false },
       { index: 2, totalCount: 3, isFirstIteration: false, isLastIteration: true },
     ]);
     expect(doneSpy).toHaveBeenCalledTimes(1);
     expect(loopSnapshots.some((snapshot) => snapshot.nextRuntimeState?.currentIndex === 2)).toBe(true);
-    expect(loopSnapshots.at(-1)?.nextRuntimeState).toEqual({});
+    expect(loopSnapshots[loopSnapshots.length - 1]?.nextRuntimeState).toEqual({});
   });
 });

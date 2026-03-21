@@ -1,9 +1,11 @@
 import React from 'react';
 import { useStudioGraph } from '../../../core/studio/StudioContext';
-import { getNodePortsByDirection, globalNodeRegistry } from '../../../core/studio/NodeRegistry';
+import { getNodePortsByDirection } from '../../../core/studio/NodeRegistry';
+import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 import { NodeWrapper } from './NodeWrapper';
 
 export function NodeLayer() {
+  const catalog = getRegisteredStudioNodeCatalog();
   const { nodes } = useStudioGraph();
 
   return (
@@ -11,7 +13,7 @@ export function NodeLayer() {
     // but the individual NodeWrapper re-enables pointer events.
     <div className="absolute inset-0 pointer-events-none w-full h-full">
       {nodes.map(node => {
-        const def = globalNodeRegistry.get(node.type);
+        const def = catalog.get(node.type);
         if (!def) return null;
 
         const Component = def.CanvasComponent;

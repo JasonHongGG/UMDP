@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
 import { useStudioGraph, useStudioQuery, useStudioUi } from '../../../../core/studio/StudioContext';
 import { BaseNodeData, IPort, StudioNode } from '../../../../core/studio/types';
-import { getNodePortsByDirection, getStudioNodePort, globalNodeRegistry } from '../../../../core/studio/NodeRegistry';
+import { getNodePortsByDirection, getStudioNodePort } from '../../../../core/studio/NodeRegistry';
 import { beginPointerExpressionDrag } from '../../../../core/studio/drag/expressionPointerDrag';
 import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
 import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
 import type { CallFunctionClassInfoQueryState } from '../../../../domain/studio/contracts';
+import { getRegisteredStudioNodeCatalog } from '../../../../core/studio/catalog/studioNodeCatalogRuntime';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -115,6 +116,7 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 };
 
 export function EditNodeModal() {
+  const catalog = getRegisteredStudioNodeCatalog();
   const { nodes, edges, updateNodeData } = useStudioGraph();
   const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
   const query = useStudioQuery();
@@ -124,7 +126,7 @@ export function EditNodeModal() {
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const node = useMemo(() => nodes.find(n => n.id === editingNodeId), [nodes, editingNodeId]);
-  const nodeDef = useMemo(() => node ? globalNodeRegistry.get(node.type) : null, [node]);
+  const nodeDef = useMemo(() => node ? catalog.get(node.type) : null, [catalog, node]);
   const resolvedNodeName = useMemo(() => {
     if (!node || !nodeDef) {
       return '';
@@ -344,7 +346,7 @@ export function EditNodeModal() {
                       }
 
                       return bindingState.sources.map((source, sourceIndex) => {
-                        const sourceNodeDef = source.sourceNode ? globalNodeRegistry.get(source.sourceNode.type) : null;
+                        const sourceNodeDef = source.sourceNode ? catalog.get(source.sourceNode.type) : null;
                         const resolvedPayload = source.payload ?? { _notice: bindingState.issues[0]?.message ?? 'No payload preview available. Connect and execute to view structural data.' };
 
                         return (

@@ -7,6 +7,7 @@ import { parseClassNodeDataFromDocumentState } from './classNodeModel';
 
 const EXECUTION_RUNTIME_EXTRAS = {
   abortSignal: null,
+  runtimeState: {},
   reportProgress: () => undefined,
 };
 
