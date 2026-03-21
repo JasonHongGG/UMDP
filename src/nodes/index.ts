@@ -6,6 +6,7 @@ import CallFunctionNodeDef from './CallFunctionNode/CallFunctionNode';
 import DisplayNodeDef from './DisplayNode/DisplayNode';
 import EditorNodeDef from './EditorNode/EditorNode';
 import IfNodeDef from './IfNode/IfNode';
+import ForLoopNodeDef from './ForLoopNode/ForLoopNode';
 import WaitNodeDef from './WaitNode/WaitNode';
 
 export const studioNodeCatalog: StudioNodeDefinition[] = [
@@ -16,5 +17,6 @@ export const studioNodeCatalog: StudioNodeDefinition[] = [
   EditorNodeDef,
   DisplayNodeDef,
   IfNodeDef,
+  ForLoopNodeDef,
   WaitNodeDef,
 ];

@@ -16,6 +16,7 @@ export interface GraphInterpreterEnvironment {
   nodes: StudioNode[];
   edges: StudioEdge[];
   snapshots: Record<string, NodeExecutionSnapshot>;
+  nodeRuntimeStateById?: Record<string, Record<string, unknown>>;
   runId?: string;
   resolveStaticFieldAddress?: (classStableId: string, memberStableId: string) => string | null;
   getClassInfoCatalogByBinding?: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null;
@@ -75,6 +76,7 @@ export function createExecutionNodeSnapshot(
   options?: {
     issues?: NodeExecutionSnapshot['issues'];
     nextControlPorts?: NodeExecutionSnapshot['nextControlPorts'];
+    nextRuntimeState?: NodeExecutionSnapshot['nextRuntimeState'];
     errorMessage?: string;
     runId?: string;
     queryRevision?: number;
@@ -92,6 +94,7 @@ export function createExecutionNodeSnapshot(
     outputs,
     issues: options?.issues,
     nextControlPorts: options?.nextControlPorts,
+    nextRuntimeState: options?.nextRuntimeState,
     errorMessage: options?.errorMessage,
     timing,
   };
@@ -161,6 +164,7 @@ export async function prepareNodeExecution(
     environment.edges,
     environment.snapshots,
     definition,
+    environment.nodeRuntimeStateById?.[nodeId],
     environment.resolveStaticFieldAddress,
     environment.getClassInfoCatalogByBinding,
     environment.abortSignal,
@@ -228,6 +232,7 @@ export async function executePreparedNode(
           queryRevision: options?.queryRevision,
           issues: resolvedResult.issues,
           errorMessage: getPrimaryIssueMessage(resolvedResult.issues, 'Node execution failed.'),
+          nextRuntimeState: resolvedResult.nextRuntimeState,
         },
       );
     }
@@ -244,7 +249,8 @@ export async function executePreparedNode(
         runId: options?.runId,
         queryRevision: options?.queryRevision,
         issues: resolvedResult.issues,
-          nextControlPorts: resolvedResult.nextControlPorts,
+        nextControlPorts: resolvedResult.nextControlPorts,
+        nextRuntimeState: resolvedResult.nextRuntimeState,
       },
     );
   } catch (error) {

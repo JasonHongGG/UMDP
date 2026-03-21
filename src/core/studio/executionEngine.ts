@@ -39,6 +39,7 @@ export function executeStudioFlow({
 }: ExecuteStudioFlowOptions) {
   const timers: Array<ReturnType<typeof setTimeout>> = [];
   const snapshots: Record<string, NodeExecutionSnapshot> = {};
+  const nodeRuntimeStateById: Record<string, Record<string, unknown>> = {};
   const abortController = new AbortController();
   let disposed = false;
   const runId = `run-${Date.now()}`;
@@ -85,6 +86,7 @@ export function executeStudioFlow({
     nodes,
     edges,
     snapshots,
+    nodeRuntimeStateById,
     runId,
     resolveStaticFieldAddress,
     getClassInfoCatalogByBinding,
@@ -174,6 +176,13 @@ export function executeStudioFlow({
 
             try {
               const snapshot = await executePreparedNode(prepared, 'runtime', { runId, phase: 'execute' });
+              if (snapshot.status === 'success') {
+                if (snapshot.nextRuntimeState) {
+                  nodeRuntimeStateById[nodeId] = snapshot.nextRuntimeState;
+                } else {
+                  delete nodeRuntimeStateById[nodeId];
+                }
+              }
               onNodeStateChange(nodeId, snapshot.status === 'success' ? 'success' : 'error');
               publishSnapshot(snapshot);
 

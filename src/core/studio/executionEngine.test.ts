@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createLiteralExpressionSource } from './expression';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
 import { executeStudioFlow } from './executionEngine';
-import { StudioNodeDefinition } from './types';
+import { NodeExecutionSnapshot, StudioNodeDefinition } from './types';
+import ForLoopNodeDef from '../../nodes/ForLoopNode/ForLoopNode';
 
 describe('executeStudioFlow', () => {
   afterEach(() => {
@@ -591,5 +593,122 @@ describe('executeStudioFlow', () => {
     await vi.runAllTimersAsync();
 
     expect(downstreamSpy).not.toHaveBeenCalled();
+  });
+
+  it('persists per-run node runtime state across loop re-entry and clears after completion', async () => {
+    vi.useFakeTimers();
+
+    const loopBodySpy = vi.fn(() => ({ state: 'success' as const, outputs: {}, nextControlPorts: ['flow-out'] }));
+    const doneSpy = vi.fn(() => ({ state: 'success' as const, outputs: {} }));
+
+    const triggerNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'trigger',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Trigger',
+        description: 'Flow start',
+        category: 'Test',
+        inputs: [],
+        outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: () => ({ state: 'success', outputs: {} }),
+      },
+      CanvasComponent: () => null,
+    };
+
+    const loopBodyNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'loop-body',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Loop Body',
+        description: 'Loop body test node',
+        category: 'Test',
+        inputs: [
+          { key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' },
+          { key: 'iteration-in', displayName: 'Iteration In', direction: 'input', channel: 'data', cardinality: 'single', dataType: GENERIC_JSON_SCHEMA.id },
+        ],
+        outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: ({ resolvedInputs }) => {
+          loopBodySpy(resolvedInputs['iteration-in']?.[0] ?? null);
+          return { state: 'success' as const, outputs: {}, nextControlPorts: ['flow-out'] };
+        },
+      },
+      CanvasComponent: () => null,
+    };
+
+    const doneNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'done-sink',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Done Sink',
+        description: 'Done sink',
+        category: 'Test',
+        inputs: [{ key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' }],
+        outputs: [],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: () => {
+          doneSpy();
+          return { state: 'success' as const, outputs: {} };
+        },
+      },
+      CanvasComponent: () => null,
+    };
+
+    initializeStudioNodeRegistry([triggerNode, ForLoopNodeDef, loopBodyNode, doneNode]);
+
+    const loopSnapshots: NodeExecutionSnapshot[] = [];
+
+    executeStudioFlow({
+      startNodeId: 'trigger-1',
+      nodes: [
+        { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
+        { id: 'for-loop-1', type: 'for-loop', position: { x: 120, y: 0 }, data: { countSource: createLiteralExpressionSource('3', 'number') } },
+        { id: 'loop-body-1', type: 'loop-body', position: { x: 240, y: 0 }, data: {} },
+        { id: 'done-1', type: 'done-sink', position: { x: 240, y: 120 }, data: {} },
+      ],
+      edges: [
+        { id: 'edge-trigger-loop', channel: 'control', sourceNodeId: 'trigger-1', sourcePortId: 'flow-out', targetNodeId: 'for-loop-1', targetPortId: 'flow-in' },
+        { id: 'edge-loop-body', channel: 'control', sourceNodeId: 'for-loop-1', sourcePortId: 'loop-out', targetNodeId: 'loop-body-1', targetPortId: 'flow-in' },
+        { id: 'edge-loop-iteration', channel: 'data', sourceNodeId: 'for-loop-1', sourcePortId: 'iteration-out', targetNodeId: 'loop-body-1', targetPortId: 'iteration-in' },
+        { id: 'edge-body-loop', channel: 'control', sourceNodeId: 'loop-body-1', sourcePortId: 'flow-out', targetNodeId: 'for-loop-1', targetPortId: 'flow-in' },
+        { id: 'edge-loop-done', channel: 'control', sourceNodeId: 'for-loop-1', sourcePortId: 'done-out', targetNodeId: 'done-1', targetPortId: 'flow-in' },
+      ],
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: (snapshot) => {
+        if (snapshot.nodeId === 'for-loop-1') {
+          loopSnapshots.push(snapshot);
+        }
+      },
+      stepDelayMs: 25,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(loopBodySpy).toHaveBeenCalledTimes(3);
+    expect(loopBodySpy.mock.calls.map(([payload]) => payload)).toEqual([
+      { index: 0, totalCount: 3, isFirstIteration: true, isLastIteration: false },
+      { index: 1, totalCount: 3, isFirstIteration: false, isLastIteration: false },
+      { index: 2, totalCount: 3, isFirstIteration: false, isLastIteration: true },
+    ]);
+    expect(doneSpy).toHaveBeenCalledTimes(1);
+    expect(loopSnapshots.some((snapshot) => snapshot.nextRuntimeState?.currentIndex === 2)).toBe(true);
+    expect(loopSnapshots.at(-1)?.nextRuntimeState).toEqual({});
   });
 });

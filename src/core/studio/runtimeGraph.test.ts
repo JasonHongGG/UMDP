@@ -205,6 +205,29 @@ describe('runtimeGraph helpers', () => {
     expect(validateNodeExecution(registeredContext!, definition)).toEqual([{ severity: 'error', code: 'dependency.missing', message: 'Missing dependency.' }]);
   });
 
+  it('exposes per-run runtime state on the execution context when provided', () => {
+    registerRuntimeGraphTestNodes();
+
+    const node = {
+      id: 'target-1',
+      type: 'target',
+      position: { x: 0, y: 0 },
+      data: {},
+    };
+
+    const context = createNodeExecutionContext(
+      'studio-document',
+      'target-1',
+      [node],
+      [],
+      {},
+      undefined,
+      { currentIndex: 2, totalCount: 5 },
+    );
+
+    expect(context?.runtimeState).toEqual({ currentIndex: 2, totalCount: 5 });
+  });
+
   it('resolves static expressions to static field addresses', () => {
     const source: StaticExpressionSource = {
       kind: 'static-expression',

@@ -82,6 +82,7 @@ export interface NodeExecutionContext {
   bindings: Record<string, ExpressionSource | ExpressionSource[]>;
   resolvedBindings: Record<string, unknown | unknown[]>;
   documentState: Record<string, unknown>;
+  runtimeState: Record<string, unknown>;
   inputBindings: Record<string, ExpressionSource[]>;
   resolvedInputs: Record<string, unknown[]>;
   controlInputs: string[];
@@ -95,6 +96,7 @@ export interface NodeExecutionResult {
   outputs?: Record<string, unknown>;
   issues?: ValidationIssue[];
   nextControlPorts?: string[];
+  nextRuntimeState?: Record<string, unknown>;
 }
 
 export interface NodeExecutionContract {
@@ -165,6 +167,10 @@ export interface IfNodeDocumentState {
   rightSource: ExpressionSource | null;
 }
 
+export interface ForLoopNodeDocumentState {
+  countSource: ExpressionSource | null;
+}
+
 export interface EditorTargetDocumentItem {
   targetId: StableId;
   memberStableId: StableId;
@@ -191,6 +197,10 @@ function isInputExpressionSourceLike(value: unknown): value is ExpressionSource 
 }
 
 function isAllowedIfRightSource(value: unknown): value is ExpressionSource {
+  return isExpressionSourceLike(value) && (value.kind === 'literal' || value.kind === 'input-expression');
+}
+
+function isAllowedForLoopCountSource(value: unknown): value is ExpressionSource {
   return isExpressionSourceLike(value) && (value.kind === 'literal' || value.kind === 'input-expression');
 }
 
@@ -329,6 +339,14 @@ export function parseIfNodeDocumentState(value: unknown): IfNodeDocumentState {
     rightSource: rightMode === 'expression'
       ? (rightSource?.kind === 'input-expression' ? rightSource : null)
       : (rightSource?.kind === 'literal' ? rightSource : null),
+  };
+}
+
+export function parseForLoopNodeDocumentState(value: unknown): ForLoopNodeDocumentState {
+  const documentState = isRecord(value) ? value : {};
+
+  return {
+    countSource: isAllowedForLoopCountSource(documentState.countSource) ? documentState.countSource : null,
   };
 }
 

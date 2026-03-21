@@ -33,6 +33,7 @@ export interface NodeExecutionSnapshot {
   outputs: NodeExecutionOutputMap;
   issues?: ValidationIssue[];
   nextControlPorts?: string[];
+  nextRuntimeState?: Record<string, unknown>;
   errorMessage?: string;
   timing?: NodeExecutionTiming;
   progress?: NodeExecutionProgress;

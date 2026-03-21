@@ -162,6 +162,7 @@ export function createNodeExecutionContext(
   edges: StudioEdge[],
   snapshots: Record<string, NodeExecutionSnapshot>,
   definition?: StudioNodeDefinition,
+  executionState?: Record<string, unknown>,
   resolveStaticFieldAddress?: ResolveStaticFieldAddress,
   getClassInfoCatalogByBinding?: GetClassInfoCatalogByBinding,
   abortSignal?: AbortSignal,
@@ -188,6 +189,7 @@ export function createNodeExecutionContext(
       })]),
     ),
     documentState: runtimeState.documentState,
+    runtimeState: executionState ?? {},
     inputBindings: getIncomingInputBindings(nodeId, nodes, edges),
     resolvedInputs: Object.fromEntries(
       Object.entries(incoming).map(([key, envelopes]) => [key, envelopes.map((envelope) => envelope.payload)]),
