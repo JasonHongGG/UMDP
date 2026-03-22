@@ -4,7 +4,8 @@ import type { ClassBinding, ClassInfoCatalog } from '../editor';
 
 export type NodeFamily = 'control' | 'runtime' | 'data';
 export type ExpressionSupportMode = 'disabled' | 'optional' | 'required';
-export type ParameterValueType = 'string' | 'number' | 'boolean' | 'json' | 'class-binding' | 'selection' | 'collection';
+export type ParameterValueType = 'string' | 'number' | 'integer' | 'float' | 'boolean' | 'json' | 'class-binding' | 'selection' | 'collection';
+export type ParameterScalarValueType = 'string' | 'integer' | 'float' | 'boolean';
 export type ConnectionChannel = 'control' | 'data';
 export type ConnectionDirection = 'input' | 'output';
 export type NodePreviewMode = 'supported' | 'degraded' | 'execute-only';
@@ -146,6 +147,7 @@ export interface ClassNodeDocumentState {
 export interface ParameterSymbolDefinition {
   stableId: StableId;
   name: string;
+  valueType: ParameterScalarValueType;
   valueSource: ExpressionSource;
 }
 
@@ -253,6 +255,13 @@ function isClassExportSelection(value: unknown): value is ClassExportSelection {
     && value.methodStableIds.every((item) => typeof item === 'string');
 }
 
+function isParameterScalarValueType(value: unknown): value is ParameterScalarValueType {
+  return value === 'string'
+    || value === 'integer'
+    || value === 'float'
+    || value === 'boolean';
+}
+
 export function parseTriggerNodeDocumentState(value: unknown): TriggerNodeDocumentState {
   return isRecord(value) && value.mode === 'manual'
     ? { mode: 'manual' }
@@ -279,13 +288,19 @@ export function parseParameterNodeDocumentState(value: unknown): ParameterNodeDo
         return [];
       }
 
-      if (typeof entry.stableId !== 'string' || typeof entry.name !== 'string' || !isExpressionSourceLike(entry.valueSource)) {
+      if (
+        typeof entry.stableId !== 'string'
+        || typeof entry.name !== 'string'
+        || !isParameterScalarValueType(entry.valueType)
+        || !isExpressionSourceLike(entry.valueSource)
+      ) {
         return [];
       }
 
       return [{
         stableId: entry.stableId as StableId,
         name: entry.name,
+        valueType: entry.valueType,
         valueSource: entry.valueSource,
       }];
     })

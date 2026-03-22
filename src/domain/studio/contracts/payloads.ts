@@ -1,5 +1,6 @@
 import type { ExpressionSource } from './expression';
 import type { RuntimeInvokeFailureKind } from '../../analysis/contracts';
+import type { ParameterScalarValueType } from './nodes';
 
 export type WorkflowJsonValue =
   | null
@@ -24,8 +25,8 @@ export interface WorkflowJsonEnvelope<TPayload = WorkflowJsonValue> {
 }
 
 export interface ParameterDefinitionValue {
-  type: string;
-  value: string;
+  type: ParameterScalarValueType;
+  value: WorkflowJsonValue;
   source?: ExpressionSource;
 }
 

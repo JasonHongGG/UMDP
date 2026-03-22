@@ -35,6 +35,7 @@ export type {
   ParameterDefinitionPayload,
   ParameterDefinitionValue,
   ParameterNodeDocumentState,
+  ParameterScalarValueType,
   StaticExpressionSource,
   TriggerNodeDocumentState,
   ValidationIssue,

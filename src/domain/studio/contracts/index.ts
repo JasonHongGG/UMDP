@@ -46,6 +46,8 @@ export type {
   NodePreviewMode,
   ParameterDefinition,
   ParameterNodeDocumentState,
+  ParameterValueType,
+  ParameterScalarValueType,
   ParameterSymbolDefinition,
   TriggerNodeDocumentState,
   ValidationIssue,

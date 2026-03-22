@@ -28,7 +28,7 @@ describe('release gate integration', () => {
         position: { x: 180, y: 0 },
         data: {
           nodeName: 'Params',
-          parameters: [{ id: parameterId, name: 'speed', source: createLiteralExpressionSource('2.5', 'number') }],
+          parameters: [{ id: parameterId, name: 'speed', type: 'float', source: createLiteralExpressionSource('2.5', 'number') }],
         },
       },
       { id: 'display-1', type: 'display', position: { x: 360, y: 0 }, data: { truncateAt: 180, expandedByDefault: false, showMeta: false, showSchema: false } },

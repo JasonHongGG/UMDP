@@ -13,6 +13,7 @@ import type {
   NodeExecutionStatus,
   NodeManifest,
   ParameterDefinitionPayload,
+  ParameterValueType,
   ValidationIssue,
   WorkflowJsonEnvelope,
   WorkflowJsonValue,
@@ -37,6 +38,7 @@ export type {
   NodeExecutionTiming,
   ParameterDefinitionPayload,
   ParameterDefinitionValue,
+  ParameterValueType,
   WorkflowJsonEnvelope,
   WorkflowJsonValue,
 } from '../../domain/studio/contracts';
@@ -99,8 +101,6 @@ export interface INodeComponentProps<T extends BaseNodeData> {
   inputs: IPort[];
   outputs: IPort[];
 }
-
-export type ParameterValueType = 'string';
 
 export interface StudioNodeRuntimeState {
   displayName?: string;
