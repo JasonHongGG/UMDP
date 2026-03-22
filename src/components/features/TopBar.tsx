@@ -16,9 +16,6 @@ interface TopBarProps {
 
 export function TopBar({ onOpenSelector, activePage, onPageChange, workspace }: TopBarProps) {
     const hasAttachedProcess = Boolean(workspace.processSession);
-    const attachedProcessLabel = workspace.processSession
-        ? `${workspace.processSession.processName} (${workspace.processSession.pid})`
-        : 'No Process Attached';
 
     const handleMinimize = () => {
         minimizeCurrentWindow().catch(() => undefined);
@@ -44,11 +41,11 @@ export function TopBar({ onOpenSelector, activePage, onPageChange, workspace }: 
 
                 <div data-tauri-drag-region className="flex flex-col justify-center">
                     <h2 data-tauri-drag-region className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Workspace</h2>
-                    {attachedProcessLabel ? (
-                            <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{attachedProcessLabel}</span>
-                        ) : (
-                            <span className="text-rose-400/80 pointer-events-none">No Process Attached</span>
-                        )}
+                    {workspace.processSession ? (
+                        <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{`${workspace.processSession.processName} (${workspace.processSession.pid})`}</span>
+                    ) : (
+                        <span className="text-rose-400/80 pointer-events-none">No Process Attached</span>
+                    )}
                 </div>
             </div>
 
