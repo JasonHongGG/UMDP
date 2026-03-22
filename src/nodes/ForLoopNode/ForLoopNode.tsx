@@ -21,6 +21,7 @@ import {
   resolveLoopCountCandidate,
   type ForLoopNodeData,
 } from './forLoopNodeModel';
+import ForLoopNodeEditor from './ForLoopNodeEditor';
 
 const FOR_LOOP_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In', 'Enter the loop or re-enter from the loop body.', { direction: 'input', required: false, cardinality: 'multiple' }),
@@ -278,6 +279,7 @@ const ForLoopNodeDefinition: INodeDefinition<ForLoopNodeData> = {
     execute: executeForLoopNode,
   },
   CanvasComponent: ForLoopNodeCanvas,
+  EditComponent: ForLoopNodeEditor,
 };
 
 export const ForLoopNodeDef = defineStudioNode(ForLoopNodeDefinition);
