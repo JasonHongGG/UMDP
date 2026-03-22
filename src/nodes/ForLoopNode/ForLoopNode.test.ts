@@ -17,6 +17,15 @@ describe('ForLoopNode', () => {
     });
   });
 
+  it('allows flow-in to accept both entry and loop-back control connections', () => {
+    expect(ForLoopNodeDef.manifest.inputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'flow-in',
+        cardinality: 'multiple',
+      }),
+    ]));
+  });
+
   it('hydrates from persisted document state', () => {
     const hydrated = parseForLoopNodeDataFromDocumentState({ nodeName: 'Existing Loop' }, {
       id: 'for-loop-1',

@@ -23,7 +23,7 @@ import {
 } from './forLoopNodeModel';
 
 const FOR_LOOP_INPUTS: IPort[] = [
-  createFlowPort('flow-in', 'Flow In', 'Enter the loop or re-enter from the loop body.', { direction: 'input', required: false }),
+  createFlowPort('flow-in', 'Flow In', 'Enter the loop or re-enter from the loop body.', { direction: 'input', required: false, cardinality: 'multiple' }),
 ];
 
 const FOR_LOOP_OUTPUTS: IPort[] = [

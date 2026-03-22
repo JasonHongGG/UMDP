@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { validateConnection } from './connectionPolicy';
 import { CALL_FUNCTION_RESULT_SCHEMA, GENERIC_JSON_SCHEMA, INSTANCE_REFERENCE_SCHEMA } from './contracts';
+import ForLoopNodeDef from '../../nodes/ForLoopNode/ForLoopNode';
 
 function registerConnectionTestNodes() {
   initializeStudioNodeRegistry([
@@ -237,6 +238,70 @@ describe('connectionPolicy', () => {
       sourcePortId: 'json-out',
       targetNodeId: 'target-many-1',
       targetPortId: 'json-in',
+    }]);
+
+    expect(result).toEqual({
+      valid: true,
+      replaceEdgeIds: [],
+    });
+  });
+
+  it('keeps the initial trigger edge when a loop body reconnects into for-loop flow-in', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'trigger',
+          typeVersion: 1,
+          family: 'control',
+          displayName: 'Trigger',
+          description: 'Test trigger node',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+      ForLoopNodeDef,
+      {
+        manifest: {
+          type: 'loop-body',
+          typeVersion: 1,
+          family: 'control',
+          displayName: 'Loop Body',
+          description: 'Loop body test node',
+          category: 'Test',
+          inputs: [{ key: 'flow-in', displayName: 'Flow In', direction: 'input', channel: 'control', cardinality: 'single' }],
+          outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
+
+    const result = validateConnection({
+      nodeId: 'loop-body-1',
+      portId: 'flow-out',
+      portType: 'flow',
+      handleType: 'source',
+    }, {
+      nodeId: 'for-loop-1',
+      portId: 'flow-in',
+      portType: 'flow',
+      handleType: 'target',
+    }, [
+      { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
+      { id: 'for-loop-1', type: 'for-loop', position: { x: 120, y: 0 }, data: {} },
+      { id: 'loop-body-1', type: 'loop-body', position: { x: 240, y: 0 }, data: {} },
+    ], [{
+      id: 'edge-trigger-loop',
+      channel: 'control',
+      sourceNodeId: 'trigger-1',
+      sourcePortId: 'flow-out',
+      targetNodeId: 'for-loop-1',
+      targetPortId: 'flow-in',
     }]);
 
     expect(result).toEqual({
