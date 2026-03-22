@@ -425,7 +425,7 @@ export function EditNodeModal() {
                         updateData={handleUpdateData}
                       />
                     ) : null}
-                    {hasParameterSchema ? (
+                    {!EditComponent && hasParameterSchema ? (
                       <NodeParameterEditor
                         nodeId={node.id}
                         data={node.data}

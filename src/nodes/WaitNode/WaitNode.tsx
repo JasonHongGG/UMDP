@@ -6,6 +6,7 @@ import { useStudioRuntime } from '../../core/studio/StudioContext';
 import type { INodeComponentProps, INodeDefinition, IPort } from '../../core/studio/types';
 import { Port } from '../../components/studio/canvas/Port';
 import { formatWaitCountdownLabel, createWaitNodeData, createWaitNodeRuntimeState, clampWaitDelaySeconds, getWaitSubtitle, type WaitNodeData } from './waitNodeModel';
+import WaitNodeEditor from './WaitNodeEditor';
 
 const WAIT_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In', 'Control input for runtime execution.', { direction: 'input', required: false }),
@@ -233,6 +234,7 @@ const WaitNodeDefinition: INodeDefinition<WaitNodeData> = {
     },
   },
   CanvasComponent: WaitNodeCanvas,
+  EditComponent: WaitNodeEditor,
 };
 
 export const WaitNodeDef = defineStudioNode(WaitNodeDefinition);
