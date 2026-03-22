@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Type } from 'lucide-react';
+import { Plus, Trash2, Type, Tag, Settings2, Hash, Text, ToggleLeft, Box } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Select } from '../../components/common/Select';
 import { BaseNodeData, INodeComponentProps, INodeDefinition, INodeEditProps, IPort, NodeExecutionOutputMap } from '../../core/studio/types';
 import { createJsonPort, createParameterDefinitionsEnvelope, PARAMETER_DEFINITIONS_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
@@ -150,78 +152,115 @@ interface ParameterValueInputProps {
   onChange: (source: ExpressionSource) => void;
 }
 
+const AnimatedToggle = ({ isOn, onToggle }: { isOn: boolean; onToggle: () => void }) => (
+  <div
+    className={`relative flex h-6 w-11 cursor-pointer items-center rounded-full p-1 transition-colors duration-300 ${isOn ? 'bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'bg-slate-700/50'}`}
+    onClick={onToggle}
+  >
+    <motion.div
+      layout
+      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      className={`h-4 w-4 rounded-full bg-white shadow-sm`}
+      style={{ marginLeft: isOn ? 'auto' : 0 }}
+    />
+  </div>
+);
+
 const ParameterValueInput: React.FC<ParameterValueInputProps> = ({ entry, onChange }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
   const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
   const validation = entry.source.kind === 'literal' ? coerceParameterValue(entry.type, entry.source.raw) : null;
-  const inputClassName = `w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors ${validation && !validation.ok ? 'border-red-500/50 bg-red-500/5 text-red-100 placeholder:text-red-300/50 focus:border-red-400' : 'border-slate-700 bg-slate-950 text-slate-200 placeholder:text-slate-500 focus:border-cyan-500'}`;
+  
+  const isDropZoneActive = isDragOver || isCustomDragOver;
+  
+  const inputClassBase = "w-full rounded-lg border px-3 py-2 text-sm outline-none transition-all duration-300";
+  const inputStateClass = validation && !validation.ok 
+    ? "border-red-500/50 bg-red-500/5 text-red-100 placeholder:text-red-300/50 focus:border-red-400 focus:shadow-[0_0_10px_rgba(239,68,68,0.2)]" 
+    : "border-slate-700/60 bg-slate-900/50 text-slate-200 placeholder:text-slate-500 focus:border-cyan-400/80 focus:bg-slate-800 focus:shadow-[0_0_15px_rgba(6,182,212,0.15)]";
 
   const handleLiteralChange = (raw: string) => {
     onChange(createParameterLiteralSource(entry.type, raw));
   };
 
   return (
-    <div
-      className={`rounded-lg border transition-all ${(isDragOver || isCustomDragOver) ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_18px_rgba(6,182,212,0.18)]' : 'border-slate-800 bg-transparent'}`}
-      onMouseEnter={() => {
-        if (activeExpressionDrag) {
-          setIsCustomDragOver(true);
-        }
-      }}
-      onMouseLeave={() => setIsCustomDragOver(false)}
-      onMouseUpCapture={(event) => {
-        if (!activeExpressionDrag) {
-          return;
-        }
+    <div className="relative group/input">
+      <div
+        className={`relative overflow-hidden rounded-lg border transition-all duration-300 ${isDropZoneActive ? 'border-dashed border-cyan-400 bg-cyan-500/10 shadow-[0_0_20px_rgba(6,182,212,0.2)] scale-[1.02]' : 'border-transparent bg-transparent'}`}
+        onMouseEnter={() => {
+          if (activeExpressionDrag) setIsCustomDragOver(true);
+        }}
+        onMouseLeave={() => setIsCustomDragOver(false)}
+        onMouseUpCapture={(event) => {
+          if (!activeExpressionDrag) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setIsCustomDragOver(false);
+          onChange(activeExpressionDrag.source);
+          endExpressionDrag();
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          setIsDragOver(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragOver(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setIsDragOver(false);
+          setIsCustomDragOver(false);
+          const expressionSource = readExpressionDragData(event.dataTransfer);
+          if (expressionSource) {
+            onChange(expressionSource);
+          }
+        }}
+      >
+        {isDropZoneActive && (
+          <div className="absolute inset-0 flex items-center justify-center bg-cyan-500/10 backdrop-blur-[2px] z-10 rounded-lg">
+            <span className="text-sm font-medium text-cyan-300 tracking-wide drop-shadow-md">Drop Expression</span>
+          </div>
+        )}
+        
+        {entry.type === 'boolean' && entry.source.kind === 'literal' ? (
+           <div className={`h-[42px] flex items-center px-3 rounded-lg border ${validation && !validation.ok ? 'border-red-500/50 bg-red-500/5' : 'border-slate-700/60 bg-slate-900/50 hover:border-slate-600 transition-colors duration-300'}`}>
+             <div className="flex-1 text-sm text-slate-300 font-medium">
+                {validation && validation.ok && typeof validation.value === 'boolean' && validation.value ? 'True' : 'False'}
+             </div>
+             <AnimatedToggle 
+               isOn={validation && validation.ok && typeof validation.value === 'boolean' ? validation.value : false} 
+               onToggle={() => {
+                 const current = validation && validation.ok && typeof validation.value === 'boolean' ? validation.value : false;
+                 handleLiteralChange(current ? 'false' : 'true');
+               }} 
+             />
+           </div>
+        ) : (
+          <input
+            type="text"
+            value={getExpressionSourceDisplayValue(entry.source)}
+            placeholder={getParameterValuePlaceholder(entry.type)}
+            onChange={(event) => handleLiteralChange(event.target.value)}
+            readOnly={Boolean(activeExpressionDrag)}
+            className={`${inputClassBase} ${inputStateClass} h-[42px]`}
+          />
+        )}
+      </div>
 
-        event.preventDefault();
-        event.stopPropagation();
-        setIsCustomDragOver(false);
-        onChange(activeExpressionDrag.source);
-        endExpressionDrag();
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-        setIsDragOver(true);
-      }}
-      onDragLeave={(event) => {
-        event.preventDefault();
-        setIsDragOver(false);
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        setIsDragOver(false);
-        setIsCustomDragOver(false);
-        const expressionSource = readExpressionDragData(event.dataTransfer);
-        if (expressionSource) {
-          onChange(expressionSource);
-        }
-      }}
-    >
-      {entry.type === 'boolean' && entry.source.kind === 'literal' ? (
-        <select
-          value={validation && validation.ok && typeof validation.value === 'boolean' ? String(validation.value) : 'false'}
-          onChange={(event) => handleLiteralChange(event.target.value)}
-          className={inputClassName}
-        >
-          <option value="false">false</option>
-          <option value="true">true</option>
-        </select>
-      ) : (
-        <input
-          type="text"
-          value={getExpressionSourceDisplayValue(entry.source)}
-          placeholder={getParameterValuePlaceholder(entry.type)}
-          onChange={(event) => handleLiteralChange(event.target.value)}
-          readOnly={Boolean(activeExpressionDrag)}
-          className={inputClassName}
-        />
-      )}
-      {validation && !validation.ok ? (
-        <div className="px-3 pb-2 text-[11px] text-red-300">{validation.message}</div>
-      ) : null}
+      <AnimatePresence>
+        {validation && !validation.ok && (
+          <motion.div 
+            initial={{ opacity: 0, y: -5, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -5, height: 0 }}
+            className="px-3 pt-1.5 text-[11px] text-red-400 font-medium"
+          >
+            {validation.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -235,78 +274,147 @@ const ParametersNodeEditor: React.FC<INodeEditProps<ParametersNodeData>> = ({ da
     updateParameters(data.parameters.map((entry) => entry.id === parameterId ? mutate(entry) : entry));
   };
 
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'string': return <Text size={14} className="text-cyan-400" />;
+      case 'integer':
+      case 'float': return <Hash size={14} className="text-amber-400" />;
+      case 'boolean': return <ToggleLeft size={14} className="text-emerald-400" />;
+      default: return <Box size={14} className="text-slate-400" />;
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-slate-200">Parameter Definitions</div>
-          <div className="text-xs text-slate-500">定義下游可重用的 typed parameters。</div>
+    <div className="flex flex-col h-full bg-[#0f172a] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/5">
+      {/* Header */}
+      <div className="relative overflow-hidden bg-slate-900 border-b border-slate-800/80 px-5 py-4 shrink-0">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-amber-500/5 to-transparent opacity-50 pointer-events-none" />
+        <div className="relative flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/10 border border-cyan-500/30 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+              <Settings2 size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-100 tracking-wide">Parameters</h3>
+              <p className="text-xs text-slate-400 mt-0.5">定義下游可重用的 typed parameters。</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateParameters([...data.parameters, createDefaultParameter()])}
+            className="group relative flex items-center gap-1.5 rounded-lg bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-400 transition-all hover:bg-cyan-500/20 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.25)] ring-1 ring-cyan-500/30 overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-full group-hover:translate-x-full duration-1000 transition-transform ease-out pointer-events-none" />
+            <Plus size={15} className="group-hover:rotate-90 transition-transform duration-300" /> 
+            <span>Add Param</span>
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => updateParameters([...data.parameters, createDefaultParameter()])}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15"
-        >
-          <Plus size={14} /> Add Param
-        </button>
       </div>
 
-      {data.parameters.map((entry, index) => (
-        <div key={entry.id} className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Param {index + 1}</span>
-            <button
-              type="button"
-              disabled={data.parameters.length <= 1}
-              onClick={() => updateParameters(data.parameters.filter((candidate) => candidate.id !== entry.id))}
-              className="inline-flex items-center gap-1 text-xs text-slate-500 transition-colors hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Trash2 size={12} /> Remove
-            </button>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1.4fr)]">
-            <label className="block">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Name</div>
-              <input
-                type="text"
-                value={entry.name}
-                placeholder={`para${index + 1}`}
-                onChange={(event) => updateParameter(entry.id, (candidate) => ({ ...candidate, name: event.target.value }))}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-cyan-500"
-              />
-            </label>
-
-            <label className="block">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Type</div>
-              <select
-                value={entry.type}
-                onChange={(event) => updateParameter(entry.id, (candidate) => {
-                  const nextType = event.target.value as ParameterScalarValueType;
-                  return {
-                    ...candidate,
-                    type: nextType,
-                    source: normalizeParameterValueSource(candidate.source, nextType),
-                  };
-                })}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500"
+      {/* Editor Content Area */}
+      <div className="flex-1 overflow-y-auto p-5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+        <div className="space-y-4">
+          <AnimatePresence mode="popLayout">
+            {data.parameters.map((entry, index) => (
+              <motion.div 
+                key={entry.id} 
+                initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                className="group/card relative rounded-xl border border-slate-700/50 bg-slate-900/40 backdrop-blur-sm p-4 transition-all hover:border-slate-600/80 hover:bg-slate-900/60 hover:shadow-lg"
               >
-                {PARAMETER_SCALAR_VALUE_TYPES.map((valueType) => (
-                  <option key={valueType} value={valueType}>{valueType}</option>
-                ))}
-              </select>
-            </label>
+                {/* Visual Accent Line removed */}
 
-            <label className="block">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Value</div>
-              <ParameterValueInput
-                entry={entry}
-                onChange={(source) => updateParameter(entry.id, (candidate) => ({ ...candidate, source }))}
-              />
-            </label>
-          </div>
+                <div className="mb-4 flex items-center justify-between pl-1">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-5 h-5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-400">{index + 1}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">Parameter</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={data.parameters.length <= 1}
+                    onClick={() => updateParameters(data.parameters.filter((candidate) => candidate.id !== entry.id))}
+                    className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 transition-all hover:bg-red-500/10 hover:text-red-400 disabled:opacity-20 disabled:cursor-not-allowed group/btn focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                    title="Remove Parameter"
+                  >
+                    <Trash2 size={14} className="group-hover/btn:scale-110 transition-transform" />
+                  </button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_160px_minmax(0,1.8fr)] items-start">
+                  {/* Name field */}
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 pl-1">
+                      <Tag size={12} className="text-cyan-500/70" /> Name
+                    </label>
+                    <input
+                      type="text"
+                      value={entry.name}
+                      placeholder={`para${index + 1}`}
+                      onChange={(event) => updateParameter(entry.id, (candidate) => ({ ...candidate, name: event.target.value }))}
+                      className="h-[42px] w-full rounded-lg border border-slate-700/60 bg-slate-900/50 px-3 text-sm text-slate-200 outline-none transition-all duration-300 placeholder:text-slate-600 focus:border-cyan-400/80 focus:bg-slate-800 focus:shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                    />
+                  </div>
+
+                  {/* Type field */}
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 pl-1">
+                      <Box size={12} className="text-amber-500/70" /> Type
+                    </label>
+                    <Select
+                      value={entry.type}
+                      onChange={(value) => updateParameter(entry.id, (candidate) => {
+                        const nextType = value as ParameterScalarValueType;
+                        return {
+                          ...candidate,
+                          type: nextType,
+                          source: normalizeParameterValueSource(candidate.source, nextType),
+                        };
+                      })}
+                      options={PARAMETER_SCALAR_VALUE_TYPES.map((valueType) => ({
+                        label: (
+                          <div className="flex items-center gap-2">
+                            {getTypeIcon(valueType)}
+                            <span className="capitalize">{valueType}</span>
+                          </div>
+                        ),
+                        value: valueType
+                      }))}
+                      className="h-[42px] !rounded-lg bg-slate-900/50 border-slate-700/60 hover:border-slate-600 focus:border-cyan-400/80 focus:bg-slate-800 shadow-none text-slate-200"
+                    />
+                  </div>
+
+                  {/* Value field */}
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 pl-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-violet-400/70 mt-[1px]" />
+                      Value
+                    </label>
+                    <ParameterValueInput
+                      entry={entry}
+                      onChange={(source) => updateParameter(entry.id, (candidate) => ({ ...candidate, source }))}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          
+          {/* Subtle Add Button at the bottom if list is long */}
+          {data.parameters.length > 3 && (
+            <motion.div layout>
+              <button
+                type="button"
+                onClick={() => updateParameters([...data.parameters, createDefaultParameter()])}
+                className="w-full py-3.5 mt-2 rounded-xl border border-dashed border-slate-700/60 hover:border-cyan-500/40 text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all duration-300 flex items-center justify-center gap-2 group text-sm font-medium"
+              >
+                <Plus size={16} className="group-hover:scale-110 transition-transform" /> Add Another Parameter
+              </button>
+            </motion.div>
+          )}
         </div>
-      ))}
+      </div>
     </div>
   );
 };
