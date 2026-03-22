@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Repeat, Hash, Variable, Zap, Link2, Info, Activity } from 'lucide-react';
+import { Repeat, Hash, Link2, Info, Activity } from 'lucide-react';
+import { useStudioQuery } from '../../core/studio/StudioContext';
 import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
 import { createLiteralExpressionSource, getExpressionSourceDisplayValue, readExpressionDragData } from '../../core/studio/expression';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { ExpressionSource } from '../../domain/studio/contracts';
-import type { ForLoopNodeData } from './forLoopNodeModel';
+import { FOR_LOOP_COUNT_INPUT_PORT_ID, type ForLoopNodeData } from './forLoopNodeModel';
 
 /* ─── Constants ────────────────────────────────────────────────── */
 
@@ -39,6 +40,20 @@ function parseNumber(raw?: string): number {
   const p = Number(raw);
   if (!Number.isFinite(p) || p < 0) return 1;
   return Math.round(p);
+}
+
+function parseStrictLoopCount(raw: string) {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return { valid: false as const };
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    return { valid: false as const };
+  }
+
+  return { valid: true as const, value: parsed };
 }
 
 /* ─── UI Components ────────────────────────────────────────────── */
@@ -226,13 +241,15 @@ function PresetRow({ current, onSelect, disabled }: { current: number; onSelect:
 /* ─── Main Input / Drop Zone Component ───────────────────────────── */
 
 function DynamicValueInput({
-  source, localPrecise, onPreciseChange, onCommitPrecise, onAcceptExpression,
+  source, localPrecise, onPreciseChange, onCommitPrecise, onAcceptExpression, isLocked, linkedSourceLabel,
 }: {
   source: ExpressionSource | null;
   localPrecise: string;
   onPreciseChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCommitPrecise: () => void;
   onAcceptExpression: (s: ExpressionSource | null) => void;
+  isLocked: boolean;
+  linkedSourceLabel: string | null;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
@@ -241,6 +258,7 @@ function DynamicValueInput({
   const isHighlighted = isDragOver || isCustomDragOver;
 
   const acceptSource = (src: ExpressionSource | null) => {
+    if (isLocked) return;
     if (src && src.kind !== 'input-expression') return;
     onAcceptExpression(src);
   };
@@ -291,20 +309,30 @@ function DynamicValueInput({
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15 }}
               className="flex items-center gap-3 w-full group cursor-pointer bg-slate-900/60 border border-slate-700/70 p-1.5 pr-3 rounded-xl shadow-inner relative z-10"
-              onClick={() => onAcceptExpression(null)}
+              onClick={() => {
+                if (!isLocked) {
+                  onAcceptExpression(null);
+                }
+              }}
             >
               <div className="p-2 rounded-lg flex items-center justify-center transition-all group-hover:scale-105 bg-cyan-500/10 text-cyan-400">
                 <Link2 size={16} />
               </div>
               <div className="flex-1 overflow-hidden pointer-events-none">
-                <span className="text-[9px] uppercase font-bold text-cyan-500/80 block mb-0.5">Linked Variable</span>
+                <span className="text-[9px] uppercase font-bold text-cyan-500/80 block mb-0.5">{isLocked ? 'Loop Cnt Input' : 'Linked Variable'}</span>
                 <span className="text-sm font-semibold text-slate-200 truncate block transition-colors group-hover:text-white">
-                  {getExpressionSourceDisplayValue(source)}
+                  {linkedSourceLabel ?? getExpressionSourceDisplayValue(source)}
                 </span>
               </div>
-              <div className="px-2 py-1 rounded bg-slate-800/50 text-[10px] text-slate-400 font-medium uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
-                Remove
-              </div>
+              {isLocked ? (
+                <div className="px-2 py-1 rounded bg-cyan-500/10 text-[10px] text-cyan-300 font-medium uppercase tracking-wider">
+                  Synced
+                </div>
+              ) : (
+                <div className="px-2 py-1 rounded bg-slate-800/50 text-[10px] text-slate-400 font-medium uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
+                  Remove
+                </div>
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -339,6 +367,16 @@ function DynamicValueInput({
 export const ForLoopNodeEditor: React.FC<INodeEditProps<ForLoopNodeData>> = ({
   nodeId, data, updateData,
 }) => {
+  const query = useStudioQuery();
+  const countInputBinding = useMemo(
+    () => query.getNodeInputBindingStates(nodeId).find((binding) => binding.port.id === FOR_LOOP_COUNT_INPUT_PORT_ID) ?? null,
+    [nodeId, query],
+  );
+  const countInputSource = countInputBinding?.sources[0] ?? null;
+  const isCountInputBound = (countInputBinding?.sources.length ?? 0) > 0;
+  const countInputLabel = countInputSource
+    ? `${countInputSource.sourceNode?.data.nodeName?.trim() || countInputSource.edge.sourceNodeId}.${countInputSource.sourcePort?.label || countInputSource.edge.sourcePortId}`
+    : null;
   const isExpression = data.countSource?.kind === 'input-expression';
   const literalRaw = data.countSource?.kind === 'literal' ? data.countSource.raw : '1';
   const literalCount = parseNumber(literalRaw);
@@ -359,15 +397,19 @@ export const ForLoopNodeEditor: React.FC<INodeEditProps<ForLoopNodeData>> = ({
   };
 
   const commitPrecise = () => {
-    const parsed = parseInt(localPrecise, 10);
-    if (Number.isFinite(parsed) && parsed >= 0) {
-      setLiteralCount(parsed);
+    const parsed = parseStrictLoopCount(localPrecise);
+    if (parsed.valid) {
+      setLiteralCount(parsed.value);
     } else {
       setLocalPrecise(String(literalCount));
     }
   };
 
   const setExpressionSource = (source: ExpressionSource | null) => {
+    if (isCountInputBound) {
+      return;
+    }
+
     if (source) {
       updateData({ countSource: source });
     } else {
@@ -413,7 +455,17 @@ export const ForLoopNodeEditor: React.FC<INodeEditProps<ForLoopNodeData>> = ({
           source={data.countSource} localPrecise={localPrecise}
           onPreciseChange={handlePreciseChange} onCommitPrecise={commitPrecise}
           onAcceptExpression={setExpressionSource}
+          isLocked={isCountInputBound}
+          linkedSourceLabel={countInputLabel}
         />
+        {isCountInputBound ? (
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-2.5 text-xs text-cyan-100/90 flex items-start gap-2">
+            <Activity size={14} className="mt-0.5 shrink-0 text-cyan-300" />
+            <span>
+              Loop Cnt is currently driven by the connected graph input. Disconnect that edge to restore manual loop-count editing in this panel.
+            </span>
+          </div>
+        ) : null}
       </motion.div>
 
       <motion.div layout className="rounded-xl border border-slate-800/50 bg-slate-900/20 p-3.5 flex items-start gap-3 relative overflow-hidden">
@@ -421,7 +473,7 @@ export const ForLoopNodeEditor: React.FC<INodeEditProps<ForLoopNodeData>> = ({
         <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400/70 shrink-0 mt-0.5"><Info size={14} /></div>
         <div className="flex-1 min-w-0">
           <span className="text-xs text-slate-400 leading-relaxed">
-            Repeats downstream execution for this exact number of cycles, before finally continuing to the 'Done' output point. Drag and drop any variable into the precise value input to make loop iteration dynamic.
+            Repeats downstream execution for this exact number of cycles, before finally continuing to the 'Done' output point. Drag and drop any variable into the precise value input, or wire a numeric value into Loop Cnt to keep the panel synchronized with the graph.
           </span>
         </div>
       </motion.div>

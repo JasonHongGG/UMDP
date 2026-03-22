@@ -1,11 +1,20 @@
-import { createLiteralExpressionSource, getExpressionSourceDisplayValue, resolveExpressionSource } from '../../core/studio/expression';
-import type { BaseNodeData, StudioNodeRuntimeState } from '../../core/studio/types';
-import type { NodeExecutionSnapshot, NodeInstance } from '../../domain/studio/contracts';
 import {
+  createLiteralExpressionSource,
+  getExpressionSourceDisplayValue,
+  resolveExpressionSource,
+} from '../../core/studio/expression';
+import type { BaseNodeData, StudioNodeRuntimeState } from '../../core/studio/types';
+import type { NodeExecutionContext, NodeExecutionSnapshot, NodeInstance } from '../../domain/studio/contracts';
+import {
+  type InputExpressionSource,
+  type ExpressionValueType,
   parseForLoopNodeDocumentState,
   type ExpressionSource,
   type ForLoopNodeDocumentState,
 } from '../../domain/studio/contracts';
+
+export const FOR_LOOP_COUNT_INPUT_PORT_ID = 'count-in';
+export const FOR_LOOP_COUNT_VALUE_TYPE: ExpressionValueType = 'number';
 
 export interface ForLoopNodeData extends BaseNodeData {
   countSource: ExpressionSource | null;
@@ -70,13 +79,53 @@ export function parseForLoopExecutionState(value: unknown): ForLoopExecutionStat
   };
 }
 
+function getForLoopInputDisplayText(sourceNodeId: string, sourcePortId: string, sourceNodeName?: string) {
+  const sourceLabel = sourceNodeName?.trim() || sourceNodeId;
+  return `${sourceLabel}.${sourcePortId}`;
+}
+
+export function createForLoopCountInputExpressionSource(
+  sourceNodeId: string,
+  sourcePortId: string,
+  sourceNodeName?: string,
+): InputExpressionSource {
+  return {
+    kind: 'input-expression',
+    expression: `={{ $node["${sourceNodeId}"].json["${sourcePortId}"] }}`,
+    bindingSlot: FOR_LOOP_COUNT_INPUT_PORT_ID,
+    sourceNodeId,
+    sourcePath: [],
+    displayText: getForLoopInputDisplayText(sourceNodeId, sourcePortId, sourceNodeName),
+    valueTypeHint: FOR_LOOP_COUNT_VALUE_TYPE,
+  };
+}
+
+export function isForLoopCountInputExpressionSource(source: ExpressionSource | null | undefined) {
+  return source?.kind === 'input-expression'
+    && source.bindingSlot === FOR_LOOP_COUNT_INPUT_PORT_ID
+    && source.sourcePath.length === 0;
+}
+
+export function areForLoopCountSourcesEqual(left: ExpressionSource | null | undefined, right: ExpressionSource | null | undefined) {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+export function getResolvedForLoopCountInput(context: Pick<NodeExecutionContext, 'resolvedInputs'>) {
+  return context.resolvedInputs[FOR_LOOP_COUNT_INPUT_PORT_ID]?.[0];
+}
+
 export function resolveLoopCountCandidate(
   source: ExpressionSource | null,
   context: {
     snapshots?: Record<string, NodeExecutionSnapshot>;
     resolvedBinding?: unknown;
+    resolvedInput?: unknown;
   },
 ) {
+  if (context.resolvedInput !== undefined) {
+    return context.resolvedInput;
+  }
+
   if (!source) {
     return undefined;
   }
@@ -89,6 +138,10 @@ export function resolveLoopCountCandidate(
 }
 
 export function parseLoopCountValue(candidate: unknown, options?: { allowUndefined?: boolean }) {
+  if (options?.allowUndefined && candidate === undefined) {
+    return { valid: false as const, reason: 'missing' as const };
+  }
+
   if (candidate === undefined || candidate === null) {
     return { valid: false as const, reason: 'missing' as const };
   }

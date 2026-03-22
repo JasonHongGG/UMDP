@@ -3,7 +3,9 @@ import { createInputExpressionSource, createLiteralExpressionSource } from '../.
 import ForLoopNodeDef from './ForLoopNode';
 import {
   buildForLoopIterationPayload,
+  createForLoopCountInputExpressionSource,
   createForLoopNodeData,
+  FOR_LOOP_COUNT_INPUT_PORT_ID,
   parseForLoopExecutionState,
   parseForLoopNodeDataFromDocumentState,
   parseLoopCountValue,
@@ -22,6 +24,16 @@ describe('ForLoopNode', () => {
       expect.objectContaining({
         key: 'flow-in',
         cardinality: 'multiple',
+      }),
+    ]));
+  });
+
+  it('exposes a dedicated count-in json input', () => {
+    expect(ForLoopNodeDef.manifest.inputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: FOR_LOOP_COUNT_INPUT_PORT_ID,
+        channel: 'data',
+        cardinality: 'single',
       }),
     ]));
   });
@@ -61,6 +73,69 @@ describe('ForLoopNode', () => {
     expect(parseLoopCountValue('1.5')).toEqual({ valid: false, reason: 'not-an-integer' });
     expect(parseLoopCountValue('-1')).toEqual({ valid: false, reason: 'negative' });
     expect(parseLoopCountValue('abc')).toEqual({ valid: false, reason: 'not-a-number' });
+  });
+
+  it('synchronizes countSource from a connected count-in edge', () => {
+    const patch = ForLoopNodeDef.reconcileData?.({
+      id: 'for-loop-1',
+      type: 'for-loop',
+      position: { x: 0, y: 0 },
+      data: {
+        ...createForLoopNodeData(),
+        countSource: createLiteralExpressionSource('2', 'number'),
+      },
+    }, {
+      nodes: [
+        {
+          id: 'for-loop-1',
+          type: 'for-loop',
+          position: { x: 0, y: 0 },
+          data: createForLoopNodeData(),
+        },
+        {
+          id: 'value-1',
+          type: 'value',
+          position: { x: 120, y: 0 },
+          data: { nodeName: 'Loop Source' },
+        },
+      ],
+      edges: [{
+        id: 'edge-count',
+        channel: 'data',
+        sourceNodeId: 'value-1',
+        sourcePortId: 'value-out',
+        targetNodeId: 'for-loop-1',
+        targetPortId: FOR_LOOP_COUNT_INPUT_PORT_ID,
+      }],
+      runtimeData: {},
+    } as never);
+
+    expect(patch).toEqual({
+      countSource: createForLoopCountInputExpressionSource('value-1', 'value-out', 'Loop Source'),
+    });
+  });
+
+  it('clears synchronized countSource when count-in disconnects', () => {
+    const patch = ForLoopNodeDef.reconcileData?.({
+      id: 'for-loop-1',
+      type: 'for-loop',
+      position: { x: 0, y: 0 },
+      data: {
+        ...createForLoopNodeData(),
+        countSource: createForLoopCountInputExpressionSource('value-1', 'value-out', 'Loop Source'),
+      },
+    }, {
+      nodes: [{
+        id: 'for-loop-1',
+        type: 'for-loop',
+        position: { x: 0, y: 0 },
+        data: createForLoopNodeData(),
+      }],
+      edges: [],
+      runtimeData: {},
+    } as never);
+
+    expect(patch).toEqual({ countSource: null });
   });
 
   it('builds an iteration payload with first and last flags', () => {
@@ -110,6 +185,45 @@ describe('ForLoopNode', () => {
       state: 'success',
       nextControlPorts: ['done-out'],
       nextRuntimeState: {},
+    });
+  });
+
+  it('executes from an inbound count-in value even before countSource has been synchronized', async () => {
+    const result = await ForLoopNodeDef.executionContract!.execute({
+      documentId: 'doc-1',
+      nodeId: 'loop-1',
+      nodeType: 'for-loop',
+      parameters: {},
+      bindings: {},
+      resolvedBindings: {},
+      documentState: {
+        countSource: null,
+      },
+      runtimeState: {},
+      inputBindings: {
+        [FOR_LOOP_COUNT_INPUT_PORT_ID]: [{
+          kind: 'input-expression',
+          expression: '={{ $node["value-1"].json["value-out"] }}',
+          bindingSlot: FOR_LOOP_COUNT_INPUT_PORT_ID,
+          sourceNodeId: 'value-1',
+          sourcePath: [],
+          displayText: 'Loop Source.value-out',
+          valueTypeHint: 'number',
+        }],
+      },
+      resolvedInputs: {
+        [FOR_LOOP_COUNT_INPUT_PORT_ID]: [4],
+      },
+      controlInputs: [],
+      getClassInfoCatalogByBinding: () => null,
+      abortSignal: null,
+      reportProgress: () => undefined,
+    });
+
+    expect(result).toMatchObject({
+      state: 'success',
+      nextControlPorts: ['loop-out'],
+      nextRuntimeState: { currentIndex: 0, totalCount: 4 },
     });
   });
 

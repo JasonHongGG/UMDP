@@ -5,16 +5,22 @@ import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { resolveExpressionSource } from '../../core/studio/expression';
 import { useStudioRuntime } from '../../core/studio/StudioContext';
+import type { StudioNodeLifecycleContext } from '../../core/studio/nodeCapabilities';
 import type { INodeComponentProps, INodeDefinition, IPort } from '../../core/studio/types';
 import { Port } from '../../components/studio/canvas/Port';
 import type { NodeExecutionContext, NodeExecutionOutputMap, ValidationIssue } from '../../domain/studio/contracts';
 import { parseForLoopNodeDocumentState } from '../../domain/studio/contracts';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import {
+  areForLoopCountSourcesEqual,
   buildForLoopIterationPayload,
+  createForLoopCountInputExpressionSource,
   createForLoopNodeData,
   createForLoopNodeRuntimeState,
+  FOR_LOOP_COUNT_INPUT_PORT_ID,
   getForLoopSubtitle,
+  getResolvedForLoopCountInput,
+  isForLoopCountInputExpressionSource,
   parseForLoopExecutionState,
   parseForLoopNodeDataFromDocumentState,
   parseLoopCountValue,
@@ -25,6 +31,7 @@ import ForLoopNodeEditor from './ForLoopNodeEditor';
 
 const FOR_LOOP_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In', 'Enter the loop or re-enter from the loop body.', { direction: 'input', required: false, cardinality: 'multiple' }),
+  createJsonPort(FOR_LOOP_COUNT_INPUT_PORT_ID, 'Loop Cnt', GENERIC_JSON_SCHEMA, 'Numeric loop count input. When connected it auto-synchronizes the panel expression source.', { direction: 'input' }),
 ];
 
 const FOR_LOOP_OUTPUTS: IPort[] = [
@@ -42,14 +49,72 @@ function createIssue(code: string, message: string, severity: ValidationIssue['s
   };
 }
 
+function getForLoopResolvedCountCandidate(source: ForLoopNodeData['countSource'], context: {
+  snapshots?: Record<string, import('../../core/studio/types').NodeExecutionSnapshot>;
+  resolvedBinding?: unknown;
+  resolvedInput?: unknown;
+}) {
+  return resolveLoopCountCandidate(source, {
+    snapshots: context.snapshots,
+    resolvedBinding: context.resolvedBinding,
+    resolvedInput: context.resolvedInput,
+  });
+}
+
+function getForLoopCountInputEdge(
+  nodeId: string,
+  edges: StudioNodeLifecycleContext['edges'] | StudioNodeQueryContext['edges'],
+) {
+  return edges.find(
+    (edge) => edge.channel === 'data' && edge.targetNodeId === nodeId && edge.targetPortId === FOR_LOOP_COUNT_INPUT_PORT_ID,
+  ) ?? null;
+}
+
+function resolveForLoopSynchronizedSource(
+  node: import('../../core/studio/types').StudioNode<ForLoopNodeData>,
+  context: Pick<StudioNodeLifecycleContext | StudioNodeQueryContext, 'nodes' | 'edges'>,
+) {
+  const countInputEdge = getForLoopCountInputEdge(node.id, context.edges);
+  if (!countInputEdge) {
+    return null;
+  }
+
+  const sourceNode = context.nodes.find((candidate) => candidate.id === countInputEdge.sourceNodeId);
+  return createForLoopCountInputExpressionSource(
+    countInputEdge.sourceNodeId,
+    countInputEdge.sourcePortId,
+    sourceNode?.data.nodeName,
+  );
+}
+
+function reconcileForLoopNodeData(
+  node: import('../../core/studio/types').StudioNode<ForLoopNodeData>,
+  context: StudioNodeLifecycleContext,
+): Partial<ForLoopNodeData> | null {
+  const synchronizedSource = resolveForLoopSynchronizedSource(node, context);
+
+  if (synchronizedSource) {
+    return areForLoopCountSourcesEqual(node.data.countSource, synchronizedSource)
+      ? null
+      : { countSource: synchronizedSource };
+  }
+
+  if (isForLoopCountInputExpressionSource(node.data.countSource)) {
+    return { countSource: null };
+  }
+
+  return null;
+}
+
 function resolveCountForQuery(node: import('../../core/studio/types').StudioNode<ForLoopNodeData>, context: StudioNodeQueryContext) {
-  const source = node.data.countSource;
+  const source = resolveForLoopSynchronizedSource(node, context) ?? node.data.countSource;
+  const countInputEdge = getForLoopCountInputEdge(node.id, context.edges);
   if (!source) {
     return null;
   }
 
   if (source.kind === 'literal') {
-    const parsed = parseLoopCountValue(resolveLoopCountCandidate(source, {}));
+    const parsed = parseLoopCountValue(getForLoopResolvedCountCandidate(source, {}));
     return parsed.valid ? parsed.value : null;
   }
 
@@ -59,13 +124,15 @@ function resolveCountForQuery(node: import('../../core/studio/types').StudioNode
 
   const snapshot = materializeNodeQuerySnapshot(source.sourceNodeId, context, new Set<string>());
   const resolved = snapshot
-    ? resolveExpressionSource(source, {
-      snapshots: {
-        ...context.nodeSnapshots,
-        [snapshot.nodeId]: snapshot,
-      },
-      resolveStaticFieldAddress: context.runtimeData.classCatalog.resolveStaticFieldAddress,
-    })
+    ? countInputEdge && source.bindingSlot === FOR_LOOP_COUNT_INPUT_PORT_ID
+      ? snapshot.outputs[countInputEdge.sourcePortId]?.payload
+      : resolveExpressionSource(source, {
+        snapshots: {
+          ...context.nodeSnapshots,
+          [snapshot.nodeId]: snapshot,
+        },
+        resolveStaticFieldAddress: context.runtimeData.classCatalog.resolveStaticFieldAddress,
+      })
     : undefined;
   const parsed = parseLoopCountValue(resolved, { allowUndefined: true });
   return parsed.valid ? parsed.value : null;
@@ -74,24 +141,30 @@ function resolveCountForQuery(node: import('../../core/studio/types').StudioNode
 function validateForLoopNode(context: NodeExecutionContext) {
   const issues: ValidationIssue[] = [];
   const state = parseForLoopNodeDocumentState(context.documentState);
+  const resolvedCountInput = getResolvedForLoopCountInput(context);
+  const hasCountInputBinding = (context.inputBindings[FOR_LOOP_COUNT_INPUT_PORT_ID]?.length ?? 0) > 0;
 
-  if (!state.countSource) {
-    issues.push(createIssue('for-loop.count.missing', 'For Loop node requires a loop count literal or input expression.'));
+  if (!state.countSource && !hasCountInputBinding && resolvedCountInput === undefined) {
+    issues.push(createIssue('for-loop.count.missing', 'For Loop node requires a loop count literal or an inbound Loop Cnt value.'));
     return issues;
   }
 
-  const candidate = resolveLoopCountCandidate(state.countSource, {
+  const candidate = getForLoopResolvedCountCandidate(state.countSource, {
     resolvedBinding: context.resolvedBindings.countSource,
+    resolvedInput: resolvedCountInput,
   });
-  const parsed = parseLoopCountValue(candidate, { allowUndefined: state.countSource.kind !== 'literal' });
+  const parsed = parseLoopCountValue(candidate, {
+    allowUndefined: resolvedCountInput === undefined && state.countSource?.kind !== 'literal',
+  });
   if (!parsed.valid) {
+    const sourceLabel = hasCountInputBinding ? 'Loop Cnt input' : 'loop count';
     const message = parsed.reason === 'missing'
-      ? 'Loop count could not be resolved.'
+      ? `${sourceLabel} could not be resolved.`
       : parsed.reason === 'not-a-number'
-        ? 'Loop count must resolve to a finite number.'
+        ? `${sourceLabel} must resolve to a finite number.`
         : parsed.reason === 'not-an-integer'
-          ? 'Loop count must be an integer.'
-          : 'Loop count must be zero or greater.';
+          ? `${sourceLabel} must be an integer.`
+          : `${sourceLabel} must be zero or greater.`;
     issues.push(createIssue(`for-loop.count.${parsed.reason}`, message));
   }
 
@@ -109,8 +182,9 @@ function executeForLoopNode(context: NodeExecutionContext) {
   }
 
   const state = parseForLoopNodeDocumentState(context.documentState);
-  const candidate = resolveLoopCountCandidate(state.countSource, {
+  const candidate = getForLoopResolvedCountCandidate(state.countSource, {
     resolvedBinding: context.resolvedBindings.countSource,
+    resolvedInput: getResolvedForLoopCountInput(context),
   });
   const parsedCount = parseLoopCountValue(candidate);
 
@@ -263,7 +337,7 @@ const ForLoopNodeDefinition: INodeDefinition<ForLoopNodeData> = {
       ui: {
         section: 'Loop',
         placeholder: '1',
-        helperText: 'Literal integer or dragged input expression. Loop body must reconnect to Flow In to continue the next iteration.',
+        helperText: 'Literal integer or dragged input expression. A connected Loop Cnt input automatically syncs this binding. Loop body must reconnect to Flow In to continue the next iteration.',
       },
     }],
   },
@@ -273,6 +347,7 @@ const ForLoopNodeDefinition: INodeDefinition<ForLoopNodeData> = {
   dehydrateData: (data) => createForLoopNodeRuntimeState(data),
   createRuntimeState: (node) => createForLoopNodeRuntimeState(node.data),
   resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+  reconcileData: reconcileForLoopNodeData,
   buildQueryOutputs: buildForLoopQueryOutputs,
   executionContract: {
     validate: validateForLoopNode,
