@@ -154,7 +154,7 @@ int RunFixtureValidation(const std::filesystem::path& fixture_directory)
 {
     const bridge::RuntimeClassOverlayResponse overlay_response{
         .static_fields = { bridge::FieldRow{ "speed", "System.Single", std::string("0x1000"), std::string("1.5"), std::nullopt } },
-        .fields = { bridge::FieldRow{ "health", "System.Int32", std::nullopt, std::nullopt, std::string("0x20") } },
+        .fields = { bridge::FieldRow{ "health", "System.Int32", std::string("0x2020"), std::string("150"), std::string("0x20") } },
     };
 
     const bridge::RuntimeMethodInvokeResponse invoke_response{

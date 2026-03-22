@@ -1,1 +1,1 @@
-{"static_fields":[{"name":"speed","field_type":"System.Single","address":"0x1000","value":"1.5"}],"fields":[{"name":"health","field_type":"System.Int32","offset":"0x20"}]}
+{"static_fields":[{"name":"speed","field_type":"System.Single","offset":null,"address":"0x1000","value":"1.5"}],"fields":[{"name":"health","field_type":"System.Int32","offset":"0x20","address":"0x2020","value":"150"}]}

@@ -54,15 +54,14 @@ void WriteFieldRows(std::ostringstream& output, const std::vector<bridge::FieldR
                << "\"name\":\"" << JsonEscape(row.name) << "\"," 
                << "\"field_type\":\"" << JsonEscape(row.field_type) << "\"";
 
+        output << ",\"offset\":";
+        WriteOptionalString(output, row.offset);
+
         if (include_runtime_values) {
             output << ",\"address\":";
             WriteOptionalString(output, row.address);
             output << ",\"value\":";
             WriteOptionalString(output, row.value);
-        }
-        else {
-            output << ",\"offset\":";
-            WriteOptionalString(output, row.offset);
         }
 
         output << '}';
@@ -112,7 +111,7 @@ std::string SerializeResponse(const RuntimeClassOverlayResponse& response)
     output << "{\"static_fields\":[";
     WriteFieldRows(output, response.static_fields, true);
     output << "],\"fields\":[";
-    WriteFieldRows(output, response.fields, false);
+    WriteFieldRows(output, response.fields, true);
     output << "]}";
     return output.str();
 }

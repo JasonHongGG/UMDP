@@ -180,6 +180,52 @@ describe('studio contracts', () => {
     });
   });
 
+  it('coerces resolved runtime member values using the field type', () => {
+    const envelope = createClassInfoEnvelope(
+      {
+        imageStableId: IMAGE_A,
+        classStableId: CLASS_PLAYER,
+        fullName: 'Gameplay.PlayerController',
+        name: 'PlayerController',
+        namespace: 'Gameplay',
+        imageName: 'Assembly-CSharp.dll',
+      },
+      {
+        members: [
+          { id: MEMBER_HEALTH, label: 'health', name: 'health', typeName: 'System.Int32', offset: '0x10', address: null, value: null, isStatic: false },
+          { id: MEMBER_SPEED, label: 'speed', name: 'speed', typeName: 'System.Single', offset: '0x14', address: null, value: null, isStatic: false },
+        ],
+        statics: [],
+        functions: [],
+      },
+      {
+        members: [MEMBER_HEALTH, MEMBER_SPEED],
+        statics: [],
+        functions: [],
+      },
+      '0x12345678',
+      {
+        [MEMBER_HEALTH]: { address: '0x12345688', value: '150' },
+        [MEMBER_SPEED]: { address: '0x1234568C', value: '2.5' },
+      },
+    );
+
+    expect(envelope.payload).toMatchObject({
+      members: [
+        {
+          name: 'health',
+          address: '0x12345688',
+          value: 150,
+        },
+        {
+          name: 'speed',
+          address: '0x1234568C',
+          value: 2.5,
+        },
+      ],
+    });
+  });
+
   it('tolerates malformed persisted functions without parameter arrays', () => {
     const envelope = createClassInfoEnvelope(
       {
