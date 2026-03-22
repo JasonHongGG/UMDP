@@ -35,10 +35,9 @@ describe('TopBar', () => {
     container.remove();
   });
 
-  it('shows workspace lifecycle, runtime session, and contract version badges', async () => {
+  it('shows the attached process name and pid without restoring runtime and contract badges', async () => {
     await act(async () => {
       root.render(createElement(TopBar, {
-        attachedProcess: 'Unity.exe (1337)',
         onOpenSelector: () => undefined,
         activePage: 'studio',
         onPageChange: () => undefined,
@@ -61,18 +60,13 @@ describe('TopBar', () => {
             bridgeConnected: true,
           },
         },
-        contractVersions: {
-          tauriCommandVersion: 1,
-          bridgeProtocolVersion: 2,
-          analysisSchemaVersion: 1,
-          workflowSchemaVersion: 1,
-        },
       }));
     });
 
+    expect(container.textContent).toContain('Workspace');
+    expect(container.textContent).toContain('Unity Mono Studio');
     expect(container.textContent).toContain('Unity.exe (1337)');
-    expect(container.textContent).toContain('Ready');
-    expect(container.textContent).toContain('Runtime ready');
-    expect(container.textContent).toContain('Contracts T1/B2/A1/W1');
+    expect(container.textContent).not.toContain('Runtime ready');
+    expect(container.textContent).not.toContain('Contracts T1/B2/A1/W1');
   });
 });

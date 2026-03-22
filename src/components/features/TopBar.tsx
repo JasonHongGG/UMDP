@@ -1,7 +1,6 @@
 import { Target, X, Square, Minus, Cpu } from 'lucide-react';
 import { TopNavigation } from './TopNavigation';
-import type { SystemContractVersions, WorkspaceLifecycleState } from '../../shared/contracts';
-import { getWorkspaceLifecycleLabel, getWorkspaceLifecycleTone } from '../../app/shell/workspaceLifecycle';
+import type { WorkspaceLifecycleState } from '../../shared/contracts';
 import {
     closeCurrentWindow,
     minimizeCurrentWindow,
@@ -9,27 +8,17 @@ import {
 } from '../../infrastructure/tauri/TauriWindowGateway';
 
 interface TopBarProps {
-    attachedProcess: string | null;
     onOpenSelector: () => void;
     activePage: 'inspector' | 'studio';
     onPageChange: (page: 'inspector' | 'studio') => void;
     workspace: WorkspaceLifecycleState;
-    contractVersions: SystemContractVersions | null;
 }
 
-export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChange, workspace, contractVersions }: TopBarProps) {
-    const lifecycleLabel = getWorkspaceLifecycleLabel(workspace);
-    const lifecycleTone = getWorkspaceLifecycleTone(workspace);
-    const runtimeSessionLabel = workspace.runtimeSession.status.replace(/-/g, ' ');
-    const lifecycleClassName = lifecycleTone === 'ready'
-        ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]'
-        : lifecycleTone === 'loading'
-            ? 'text-amber-300'
-            : lifecycleTone === 'error'
-                ? 'text-rose-400'
-                : lifecycleTone === 'warning'
-                    ? 'text-amber-300'
-                    : 'text-slate-400';
+export function TopBar({ onOpenSelector, activePage, onPageChange, workspace }: TopBarProps) {
+    const hasAttachedProcess = Boolean(workspace.processSession);
+    const attachedProcessLabel = workspace.processSession
+        ? `${workspace.processSession.processName} (${workspace.processSession.pid})`
+        : 'No Process Attached';
 
     const handleMinimize = () => {
         minimizeCurrentWindow().catch(() => undefined);
@@ -47,31 +36,19 @@ export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChan
         <div data-tauri-drag-region className="flex items-center justify-between px-5 py-3 bg-[#05080c] border-b border-[#1c2838] shadow-[0_4px_15px_rgba(0,0,0,0.4)] z-30 relative shrink-0 text-slate-200">
             <div data-tauri-drag-region className="flex items-center gap-3 relative z-10">
                 <div data-tauri-drag-region className="relative flex items-center justify-center w-8 h-8">
-                    {/* Glowing pulse behind icon */}
-                    <div className={`absolute inset-0 rounded-full blur-[6px] opacity-40 transition-colors duration-500 ${attachedProcess ? 'bg-cyan-500 animate-[pulse_2s_ease-in-out_infinite]' : 'bg-rose-500 opacity-20'}`} />
-                    <div className={`relative z-10 transition-colors duration-500 ${attachedProcess ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'text-rose-400/50'}`}>
+                    <div className={`absolute inset-0 rounded-full blur-[6px] opacity-40 transition-colors duration-500 ${hasAttachedProcess ? 'bg-cyan-500 animate-[pulse_2s_ease-in-out_infinite]' : 'bg-rose-500 opacity-20'}`} />
+                    <div className={`relative z-10 transition-colors duration-500 ${hasAttachedProcess ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'text-rose-400/50'}`}>
                         <Target size={16} strokeWidth={2.5} className="pointer-events-none" />
                     </div>
                 </div>
 
                 <div data-tauri-drag-region className="flex flex-col justify-center">
                     <h2 data-tauri-drag-region className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Workspace</h2>
-                    <div data-tauri-drag-region className="text-sm font-semibold tracking-wide text-white flex items-center gap-2">
-                        {attachedProcess ? (
-                            <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{attachedProcess}</span>
+                    {attachedProcessLabel ? (
+                            <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">{attachedProcessLabel}</span>
                         ) : (
                             <span className="text-rose-400/80 pointer-events-none">No Process Attached</span>
                         )}
-                        <span className={`text-[10px] uppercase tracking-wider ${lifecycleClassName}`}>{lifecycleLabel}</span>
-                        <span className={`text-[10px] uppercase tracking-wider ${workspace.runtimeSession.bridgeConnected ? 'text-emerald-300' : 'text-amber-300'}`}>
-                            Runtime {runtimeSessionLabel}
-                        </span>
-                        {contractVersions ? (
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500">
-                                Contracts T{contractVersions.tauriCommandVersion}/B{contractVersions.bridgeProtocolVersion}/A{contractVersions.analysisSchemaVersion}/W{contractVersions.workflowSchemaVersion}
-                            </span>
-                        ) : null}
-                    </div>
                 </div>
             </div>
 

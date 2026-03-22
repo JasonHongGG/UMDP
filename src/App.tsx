@@ -25,8 +25,6 @@ export default function App() {
 
 function AppContent() {
   const {
-    processSession,
-    contractVersions,
     workspaceLifecycle,
     activePage,
     setActivePage,
@@ -36,8 +34,6 @@ function AppContent() {
     <MainLayout>
       <TopBar
         workspace={workspaceLifecycle}
-        contractVersions={contractVersions}
-        attachedProcess={processSession ? `${processSession.processName} (${processSession.pid})` : null}
         onOpenSelector={openProcessSelectorWindow}
         activePage={activePage}
         onPageChange={setActivePage}
