@@ -11,6 +11,7 @@ import type { INodeEditProps } from '../../core/studio/types';
 import type { EditorNodeAvailableTarget, EditorNodeQueryState, EditorNodeTargetPreview } from '../../domain/studio/contracts';
 import type { EditorNodeData } from './editorNodeModel';
 import { createEditorTargetEntry, findEditorTarget } from './editorNodeModel';
+import { Select } from '../../components/common/Select';
 
 const EDITOR_TARGET_MIME = 'application/x-umdp-editor-target';
 
@@ -84,14 +85,14 @@ function TargetLiteralEditor({
 }) {
   if (preview.scalarKind === 'boolean') {
     return (
-      <select
+      <Select
         value={rawValue || 'false'}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500"
-      >
-        <option value="false">false</option>
-        <option value="true">true</option>
-      </select>
+        onChange={(val) => onChange(String(val))}
+        options={[
+          { value: 'false', label: 'false' },
+          { value: 'true', label: 'true' }
+        ]}
+      />
     );
   }
 

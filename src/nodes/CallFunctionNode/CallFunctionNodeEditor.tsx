@@ -16,6 +16,7 @@ import {
   hasSameCallFunctionArguments,
   reconcileCallFunctionArguments,
 } from './callFunctionNodeModel';
+import { Select } from '../../components/common/Select';
 
 
 function ArgumentInput({
@@ -123,20 +124,17 @@ export const CallFunctionNodeEditor: React.FC<INodeEditProps<CallFunctionNodeDat
 
       <div className="space-y-2">
         <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Method</div>
-        <select
+        <Select
           value={data.selectedMethodStableId ?? ''}
-          onChange={(event) => updateData({
-            selectedMethodStableId: (event.target.value || null) as StableId | null,
+          onChange={(val) => updateData({
+            selectedMethodStableId: (val || null) as StableId | null,
           })}
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500"
-        >
-          <option value="">Select method</option>
-          {availableMethods.map((method: ClassInfoFunctionPayload) => (
-            <option key={method.runtimeRef.methodStableId} value={method.runtimeRef.methodStableId}>
-              {method.name} :: {method.signature}
-            </option>
-          ))}
-        </select>
+          placeholder="Select method"
+          options={availableMethods.map((method: ClassInfoFunctionPayload) => ({
+            value: method.runtimeRef.methodStableId,
+            label: `${method.name} :: ${method.signature}`
+          }))}
+        />
       </div>
 
       {selectedMethod ? (

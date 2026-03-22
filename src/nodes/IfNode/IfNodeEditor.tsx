@@ -11,6 +11,7 @@ import type { INodeEditProps } from '../../core/studio/types';
 import type { ExpressionSource, IfNodeQueryState, NodeQueryIssue } from '../../domain/studio/contracts';
 import { createDefaultIfRightLiteralSource, formatIfValuePreview, getDefaultIfOperator, IF_OPERATOR_LABELS } from './ifNodePredicate';
 import type { IfNodeData } from './ifNodeModel';
+import { Select } from '../../components/common/Select';
 
 function issueTone(severity: NodeQueryIssue['severity']) {
   switch (severity) {
@@ -236,17 +237,11 @@ export const IfNodeEditor: React.FC<INodeEditProps<IfNodeData>> = ({ nodeId, dat
 
         <div className="space-y-2">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Operator</div>
-          <select
+          <Select
             value={data.operator}
-            onChange={(event) => updateData({ operator: event.target.value as IfNodeData['operator'] })}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500"
-          >
-            {queryState.availableOperators.length > 0 ? queryState.availableOperators.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            )) : (
-              <option value={data.operator}>{IF_OPERATOR_LABELS[data.operator]}</option>
-            )}
-          </select>
+            onChange={(val) => updateData({ operator: val as IfNodeData['operator'] })}
+            options={queryState.availableOperators.length > 0 ? queryState.availableOperators : [{ value: data.operator, label: IF_OPERATOR_LABELS[data.operator] }]}
+          />
         </div>
 
         <div className="space-y-2">
@@ -275,14 +270,14 @@ export const IfNodeEditor: React.FC<INodeEditProps<IfNodeData>> = ({ nodeId, dat
               Current: <span className="text-slate-300">{formatIfValuePreview(queryState.rightPreview.value)}</span>
             </div>
             {queryState.leftPreview.scalarKind === 'boolean' ? (
-              <select
+              <Select
                 value={rightLiteralRaw || 'false'}
-                onChange={(event) => setRightLiteral(event.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500"
-              >
-                <option value="false">false</option>
-                <option value="true">true</option>
-              </select>
+                onChange={(val) => setRightLiteral(String(val))}
+                options={[
+                  { value: 'false', label: 'false' },
+                  { value: 'true', label: 'true' }
+                ]}
+              />
             ) : (
               <input
                 type={queryState.leftPreview.scalarKind === 'number' ? 'number' : 'text'}
