@@ -145,7 +145,7 @@ describe('executeStudioFlow', () => {
 
     expect(snapshots).toContainEqual({
       status: 'aborted',
-      errorMessage: 'Execution aborted.',
+      errorMessage: 'Execution aborted by rerun.',
       failureReason: 'aborted',
       abortReason: 'rerun',
     });

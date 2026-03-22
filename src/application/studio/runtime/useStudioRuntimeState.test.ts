@@ -43,6 +43,19 @@ afterEach(() => {
   executeStudioFlowMock.mockReset();
 });
 
+function createReadyLifecycle() {
+  return {
+    ...EMPTY_WORKSPACE_LIFECYCLE,
+    status: 'ready' as const,
+    hasSnapshot: true,
+    runtimeSession: {
+      ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+      status: 'ready' as const,
+      bridgeConnected: true,
+    },
+  };
+}
+
 interface HookSnapshot {
   state: ReturnType<typeof useStudioRuntimeState>;
 }
@@ -94,7 +107,7 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'ready', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'ready', bridgeConnected: true } },
+        lifecycle: createReadyLifecycle(),
       }));
     });
 
@@ -124,7 +137,7 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'ready', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'ready', bridgeConnected: true } },
+        lifecycle: createReadyLifecycle(),
       }));
     });
 
@@ -145,5 +158,54 @@ describe('useStudioRuntimeState', () => {
     });
 
     expect(cleanupSpy).toHaveBeenCalledWith('workspace-reset');
+  });
+
+  it('blocks execution and logs workspace diagnostics when the workspace is not ready', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    act(() => {
+      root.render(createElement(HookHarness, {
+        lifecycle: {
+          ...EMPTY_WORKSPACE_LIFECYCLE,
+          status: 'recovering',
+          hasSnapshot: true,
+          errorMessage: 'bridge helper disconnected',
+          runtime: 'mono',
+          runtimeSession: {
+            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+            status: 'recovering',
+            runtime: 'mono',
+            bridgeConnected: false,
+            lastError: 'bridge helper disconnected',
+            sessionKey: 'session-1',
+          },
+        },
+      }));
+    });
+
+    act(() => {
+      latestState?.state.executeFlow('node-1');
+    });
+
+    expect(executeStudioFlowMock).not.toHaveBeenCalled();
+    expect(latestState?.state.canExecuteFlow).toBe(false);
+    expect(latestState?.state.executionBlockedReason).toBe('Workspace is not ready (recovering).');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[StudioWorkspaceExecution]', expect.objectContaining({
+      reason: 'blocked',
+      message: 'Workspace is not ready (recovering).',
+      workspace: expect.objectContaining({
+        status: 'recovering',
+        hasSnapshot: true,
+        errorMessage: 'bridge helper disconnected',
+        runtimeSession: expect.objectContaining({
+          status: 'recovering',
+          bridgeConnected: false,
+          lastError: 'bridge helper disconnected',
+          sessionKey: 'session-1',
+        }),
+      }),
+    }));
+
+    consoleErrorSpy.mockRestore();
   });
 });

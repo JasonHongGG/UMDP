@@ -10,8 +10,11 @@ import { parseTriggerNodeDocumentState, type TriggerNodeDocumentState } from '..
 interface TriggerNodeData extends BaseNodeData {}
 
 const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { nodeStates, executeFlow } = useStudioRuntime();
+  const { nodeStates, executeFlow, canExecuteFlow, executionBlockedReason } = useStudioRuntime();
   const executionState = nodeStates?.[id] || 'idle';
+  const triggerTitle = canExecuteFlow
+    ? 'Run workflow'
+    : executionBlockedReason ?? 'Workspace is not ready for execution.';
 
   return (
     <div className="relative flex flex-col items-center group">
@@ -35,8 +38,13 @@ const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id,
         {/* Icon (Play Button) */}
         <div 
             data-studio-no-drag="true"
-            className="w-10 h-10 rounded-full flex items-center justify-center cursor-pointer transition-transform duration-300 group-hover:scale-105 shadow-[0_0_10px_rgba(16,185,129,0.2)] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 hover:text-white"
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-300 shadow-[0_0_10px_rgba(16,185,129,0.2)] ${canExecuteFlow
+              ? 'cursor-pointer group-hover:scale-105 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/40 hover:text-white'
+              : 'cursor-not-allowed bg-amber-500/15 text-amber-300'}
+            `}
             onClick={(e) => { e.stopPropagation(); executeFlow(id); }}
+            title={triggerTitle}
+            aria-disabled={!canExecuteFlow}
         >
           <Play size={20} className={`ml-1 ${executionState === 'running' ? 'animate-pulse' : ''}`} fill="currentColor" />
         </div>

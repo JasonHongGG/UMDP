@@ -15,8 +15,9 @@ import {
 function logRuntimeFlowError(context: {
   runId: string;
   nodeId: string;
-  reason: 'node-not-found' | 'execution-error';
+  reason: 'node-not-found' | 'execution-error' | 'aborted';
   message: string;
+  abortReason?: StudioExecutionAbortReason;
   error?: unknown;
 }) {
   console.log('[StudioFrontendError]', {
@@ -25,8 +26,26 @@ function logRuntimeFlowError(context: {
     phase: 'execute',
     reason: context.reason,
     message: context.message,
+    abortReason: context.abortReason,
     error: context.error,
   });
+}
+
+function formatAbortMessage(reason: StudioExecutionAbortReason | undefined) {
+  switch (reason) {
+    case 'rerun':
+      return 'Execution aborted by rerun.';
+    case 'workspace-reset':
+      return 'Execution aborted by workspace reset.';
+    case 'document-reset':
+      return 'Execution aborted by document reset.';
+    case 'component-dispose':
+      return 'Execution aborted by component dispose.';
+    case 'manual-stop':
+      return 'Execution aborted manually.';
+    default:
+      return 'Execution aborted.';
+  }
 }
 
 interface ExecuteStudioFlowOptions {
@@ -153,6 +172,15 @@ export function executeStudioFlow({
         return;
       }
 
+      const message = formatAbortMessage(reason);
+      logRuntimeFlowError({
+        runId,
+        nodeId: snapshot.nodeId,
+        reason: 'aborted',
+        message,
+        abortReason: reason,
+      });
+
       onNodeStateChange(snapshot.nodeId, 'aborted');
       publishSnapshot({
         ...snapshot,
@@ -160,7 +188,7 @@ export function executeStudioFlow({
         phase: 'execute',
         failureReason: 'aborted',
         abortReason: reason,
-        errorMessage: 'Execution aborted.',
+        errorMessage: message,
         timing: createExecutionTiming(snapshot.timing?.startedAt, Date.now()),
         progress: undefined,
       });
@@ -260,7 +288,27 @@ export function executeStudioFlow({
             }
 
             try {
-              const snapshot = await executePreparedNode(prepared, 'runtime', { runId, phase: 'execute' });
+              let snapshot = await executePreparedNode(prepared, 'runtime', { runId, phase: 'execute' });
+              if (disposed && snapshot.status === 'aborted') {
+                return;
+              }
+
+              if (snapshot.status === 'aborted') {
+                const message = formatAbortMessage(snapshot.abortReason ?? cleanupReason);
+                logRuntimeFlowError({
+                  runId,
+                  nodeId,
+                  reason: 'aborted',
+                  message,
+                  abortReason: snapshot.abortReason ?? cleanupReason,
+                });
+                snapshot = {
+                  ...snapshot,
+                  errorMessage: message,
+                  abortReason: snapshot.abortReason ?? cleanupReason,
+                };
+              }
+
               if (snapshot.status === 'success') {
                 if (snapshot.nextRuntimeState) {
                   nodeRuntimeStateById[nodeId] = snapshot.nextRuntimeState;
@@ -280,8 +328,21 @@ export function executeStudioFlow({
               settleNode(snapshot.status);
             } catch (error) {
               const isAbortError = error instanceof Error && error.name === 'AbortError';
+              if (disposed && isAbortError) {
+                return;
+              }
+
               const status: NodeExecutionState = isAbortError ? 'aborted' : 'error';
-              if (!isAbortError) {
+              if (isAbortError) {
+                logRuntimeFlowError({
+                  runId,
+                  nodeId,
+                  reason: 'aborted',
+                  message: formatAbortMessage(cleanupReason),
+                  abortReason: cleanupReason,
+                  error,
+                });
+              } else {
                 logRuntimeFlowError({
                   runId,
                   nodeId,
@@ -299,7 +360,7 @@ export function executeStudioFlow({
                 runId,
                 inputs: incoming,
                 outputs: {},
-                errorMessage: error instanceof Error ? error.message : isAbortError ? 'Execution aborted.' : 'Node execution failed.',
+                errorMessage: isAbortError ? formatAbortMessage(cleanupReason) : error instanceof Error ? error.message : 'Node execution failed.',
                 failureReason: isAbortError ? 'aborted' : 'execution-error',
                 abortReason: isAbortError ? cleanupReason : undefined,
                 timing: createExecutionTiming(startedAt, Date.now()),

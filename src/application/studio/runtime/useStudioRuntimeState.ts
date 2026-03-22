@@ -8,6 +8,25 @@ import type { StudioExecutionAbortReason } from '../../../domain/studio/contract
 
 export type StudioExecutionRunStatus = 'running' | 'success' | 'error' | 'aborted';
 
+interface StudioExecutionWorkspaceDiagnostics {
+  status: WorkspaceLifecycleState['status'];
+  hasSnapshot: boolean;
+  runtime: WorkspaceLifecycleState['runtime'];
+  errorMessage: string | null;
+  runtimeSession: {
+    status: WorkspaceLifecycleState['runtimeSession']['status'];
+    bridgeConnected: boolean;
+    lastError: string | null;
+    sessionKey: string | null;
+  };
+}
+
+interface StudioExecutionWorkspaceReadiness {
+  canExecute: boolean;
+  blockedReason: string | null;
+  diagnostics: StudioExecutionWorkspaceDiagnostics;
+}
+
 export interface StudioExecutionRun {
   runId: string;
   startNodeId: string;
@@ -24,7 +43,71 @@ export interface StudioRuntimeState {
   nodeSnapshots: Record<string, NodeExecutionSnapshot>;
   activeRun: StudioExecutionRun | null;
   runHistory: StudioExecutionRun[];
+  canExecuteFlow: boolean;
+  executionBlockedReason: string | null;
   executeFlow: (startNodeId: string) => void;
+}
+
+function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleState): StudioExecutionWorkspaceReadiness {
+  const diagnostics: StudioExecutionWorkspaceDiagnostics = {
+    status: workspaceLifecycle.status,
+    hasSnapshot: workspaceLifecycle.hasSnapshot,
+    runtime: workspaceLifecycle.runtime,
+    errorMessage: workspaceLifecycle.errorMessage,
+    runtimeSession: {
+      status: workspaceLifecycle.runtimeSession.status,
+      bridgeConnected: workspaceLifecycle.runtimeSession.bridgeConnected,
+      lastError: workspaceLifecycle.runtimeSession.lastError,
+      sessionKey: workspaceLifecycle.runtimeSession.sessionKey,
+    },
+  };
+
+  if (!workspaceLifecycle.hasSnapshot) {
+    return {
+      canExecute: false,
+      blockedReason: 'Workspace snapshot is unavailable.',
+      diagnostics,
+    };
+  }
+
+  if (workspaceLifecycle.status !== 'ready') {
+    return {
+      canExecute: false,
+      blockedReason: `Workspace is not ready (${workspaceLifecycle.status}).`,
+      diagnostics,
+    };
+  }
+
+  if (!workspaceLifecycle.runtimeSession.bridgeConnected) {
+    return {
+      canExecute: false,
+      blockedReason: 'Runtime bridge is disconnected.',
+      diagnostics,
+    };
+  }
+
+  if (workspaceLifecycle.runtimeSession.status !== 'ready' && workspaceLifecycle.runtimeSession.status !== 'degraded') {
+    return {
+      canExecute: false,
+      blockedReason: `Runtime session is not ready (${workspaceLifecycle.runtimeSession.status}).`,
+      diagnostics,
+    };
+  }
+
+  return {
+    canExecute: true,
+    blockedReason: null,
+    diagnostics,
+  };
+}
+
+function logWorkspaceExecutionInterruption(reason: 'blocked' | 'reset', blockedReason: string, workspaceLifecycle: WorkspaceLifecycleState) {
+  const readiness = getWorkspaceExecutionReadiness(workspaceLifecycle);
+  console.error('[StudioWorkspaceExecution]', {
+    reason,
+    message: blockedReason,
+    workspace: readiness.diagnostics,
+  });
 }
 
 export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[], runtimeData: StudioRuntimeDataState, workspaceLifecycle: WorkspaceLifecycleState): StudioRuntimeState {
@@ -33,6 +116,10 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
   const [activeRun, setActiveRun] = useState<StudioExecutionRun | null>(null);
   const [runHistory, setRunHistory] = useState<StudioExecutionRun[]>([]);
   const executionCleanupRef = useRef<StudioExecutionCleanup | null>(null);
+  const workspaceExecutionReadiness = useMemo(
+    () => getWorkspaceExecutionReadiness(workspaceLifecycle),
+    [workspaceLifecycle],
+  );
 
   useEffect(() => {
     return () => {
@@ -50,13 +137,12 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
   }, [document]);
 
   useEffect(() => {
-    if (workspaceLifecycle.hasSnapshot
-      && workspaceLifecycle.runtimeSession.bridgeConnected
-      && workspaceLifecycle.status !== 'bridge-error'
-      && workspaceLifecycle.status !== 'recovering'
-      && workspaceLifecycle.runtimeSession.status !== 'recovering'
-      && workspaceLifecycle.runtimeSession.status !== 'error') {
+    if (workspaceExecutionReadiness.canExecute) {
       return;
+    }
+
+    if (executionCleanupRef.current) {
+      logWorkspaceExecutionInterruption('reset', workspaceExecutionReadiness.blockedReason ?? 'Workspace execution context changed.', workspaceLifecycle);
     }
 
     executionCleanupRef.current?.('workspace-reset');
@@ -64,9 +150,14 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
     setNodeStates({});
     setNodeSnapshots({});
     setActiveRun(null);
-  }, [workspaceLifecycle]);
+  }, [workspaceExecutionReadiness, workspaceLifecycle]);
 
   const executeFlow = useCallback((startNodeId: string) => {
+    if (!workspaceExecutionReadiness.canExecute) {
+      logWorkspaceExecutionInterruption('blocked', workspaceExecutionReadiness.blockedReason ?? 'Workspace is not ready for execution.', workspaceLifecycle);
+      return;
+    }
+
     executionCleanupRef.current?.('rerun');
     executionCleanupRef.current = executeStudioFlow({
       documentId: document.id,
@@ -95,13 +186,15 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
         setRunHistory((previous) => [completedRun, ...previous.filter((entry) => entry.runId !== completedRun.runId)].slice(0, 20));
       },
     });
-  }, [document.id, edges, nodes, runtimeData]);
+  }, [document.id, edges, nodes, runtimeData, workspaceExecutionReadiness, workspaceLifecycle]);
 
   return useMemo(() => ({
     nodeStates,
     nodeSnapshots,
     activeRun,
     runHistory,
+    canExecuteFlow: workspaceExecutionReadiness.canExecute,
+    executionBlockedReason: workspaceExecutionReadiness.blockedReason,
     executeFlow,
-  }), [activeRun, executeFlow, nodeSnapshots, nodeStates, runHistory]);
+  }), [activeRun, executeFlow, nodeSnapshots, nodeStates, runHistory, workspaceExecutionReadiness]);
 }
