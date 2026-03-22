@@ -2,8 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 
+type TooltipTriggerElement = HTMLElement;
+
+type TooltipTriggerProps = {
+  onMouseEnter?: React.MouseEventHandler<TooltipTriggerElement>;
+  onMouseLeave?: React.MouseEventHandler<TooltipTriggerElement>;
+  onFocus?: React.FocusEventHandler<TooltipTriggerElement>;
+  onBlur?: React.FocusEventHandler<TooltipTriggerElement>;
+};
+
+type TooltipTriggerChild = React.ReactElement<TooltipTriggerProps & React.RefAttributes<TooltipTriggerElement>>;
+
 export interface TooltipProps {
-  children: React.ReactElement;
+  children: TooltipTriggerChild;
   content: React.ReactNode;
   delay?: number;
   position?: 'top' | 'bottom' | 'left' | 'right';
@@ -14,8 +25,9 @@ export interface TooltipProps {
 export function Tooltip({ children, content, delay = 300, position = 'bottom', className = '', offset = 8 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
-  const triggerRef = useRef<HTMLElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const triggerRef = useRef<TooltipTriggerElement | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const childProps = children.props;
 
   const showTooltip = () => {
     timeoutRef.current = setTimeout(() => {
@@ -95,19 +107,19 @@ export function Tooltip({ children, content, delay = 300, position = 'bottom', c
         ref: triggerRef,
         onMouseEnter: (e: React.MouseEvent) => {
           showTooltip();
-          if (children.props.onMouseEnter) children.props.onMouseEnter(e);
+          childProps.onMouseEnter?.(e as React.MouseEvent<TooltipTriggerElement>);
         },
         onMouseLeave: (e: React.MouseEvent) => {
           hideTooltip();
-          if (children.props.onMouseLeave) children.props.onMouseLeave(e);
+          childProps.onMouseLeave?.(e as React.MouseEvent<TooltipTriggerElement>);
         },
         onFocus: (e: React.FocusEvent) => {
           showTooltip();
-          if (children.props.onFocus) children.props.onFocus(e);
+          childProps.onFocus?.(e as React.FocusEvent<TooltipTriggerElement>);
         },
         onBlur: (e: React.FocusEvent) => {
           hideTooltip();
-          if (children.props.onBlur) children.props.onBlur(e);
+          childProps.onBlur?.(e as React.FocusEvent<TooltipTriggerElement>);
         },
       })}
       
