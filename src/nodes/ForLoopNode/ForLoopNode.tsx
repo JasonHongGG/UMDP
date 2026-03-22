@@ -186,9 +186,12 @@ const ForLoopNodeCanvas: React.FC<INodeComponentProps<ForLoopNodeData>> = ({ id,
 
   return (
     <div className="relative flex flex-col items-center group">
-      <div className={`relative z-10 flex min-h-[94px] w-44 flex-col rounded-2xl border bg-slate-900/95 px-4 py-3 shadow-lg backdrop-blur-md transition-colors
-        ${nodeState === 'running' ? 'border-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.28)]' : nodeState === 'success' ? 'border-emerald-500/50' : nodeState === 'error' ? 'border-red-500/50' : 'border-slate-700 hover:border-cyan-500/50'}`}
-      >
+      <div className={`bg-[#1e293b]/95 backdrop-blur-md rounded-2xl border w-16 h-16 shadow-lg flex items-center justify-center relative z-10 transition-colors cursor-grab active:cursor-grabbing
+        ${nodeState === 'running' ? 'border-cyan-400 shadow-[0_0_22px_rgba(34,211,238,0.28)] scale-110' :
+          nodeState === 'success' ? 'border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
+          nodeState === 'error' ? 'border-red-500/60 shadow-[0_0_12px_rgba(239,68,68,0.18)]' :
+          'border-slate-700 hover:border-cyan-500/60'}
+      `}>
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-center gap-2 -translate-x-[calc(50%+1px)] z-20">
           {inputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="target" />)}
         </div>
@@ -196,21 +199,23 @@ const ForLoopNodeCanvas: React.FC<INodeComponentProps<ForLoopNodeData>> = ({ id,
           {outputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="source" />)}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-300">
-            <Repeat size={16} />
+        {nodeState === 'running' && iterationPayload ? (
+          <div className="flex h-10 w-10 flex-col items-center justify-center rounded-full border border-cyan-400/35 bg-cyan-500/12 text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.16)] transition-transform duration-300 group-hover:scale-105">
+            <span className="text-[11px] font-semibold leading-none tracking-wide">{Number(iterationPayload.index ?? 0) + 1}</span>
+            <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">Loop</span>
           </div>
-          <div>
-            <div className="text-sm font-semibold text-slate-100">{data.nodeName?.trim() || 'For Loop'}</div>
-            <div className="text-[11px] text-slate-500">{getForLoopSubtitle(data)}</div>
+        ) : (
+          <div className="w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform duration-300 bg-cyan-500/20 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+            <Repeat size={20} />
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="mt-3 text-xs text-slate-300">
-          {iterationPayload
-            ? `Iteration ${Number(iterationPayload.index ?? 0) + 1} / ${iterationPayload.totalCount ?? '?'}`
-            : 'Routes through loop and done control paths.'}
-        </div>
+      <div className="absolute top-full mt-2 text-center pointer-events-none w-max flex flex-col items-center z-20">
+        <span className="text-xs text-white font-medium tracking-wide">
+          {data.nodeName?.trim() || 'For Loop'}
+        </span>
+        <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">{getForLoopSubtitle(data)}</span>
       </div>
     </div>
   );

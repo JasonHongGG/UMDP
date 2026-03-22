@@ -4,7 +4,7 @@ import { createFlowPort, createJsonPort, GENERIC_JSON_SCHEMA } from '../../core/
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { resolveExpressionSource, getExpressionSourceDisplayValue } from '../../core/studio/expression';
-import { useStudioQuery, useStudioRuntime } from '../../core/studio/StudioContext';
+import { useStudioRuntime } from '../../core/studio/StudioContext';
 import type { INodeComponentProps, INodeDefinition, IPort } from '../../core/studio/types';
 import { Port } from '../../components/studio/canvas/Port';
 import type {
@@ -283,19 +283,20 @@ function executeIfNode(context: NodeExecutionContext) {
 
 const IfNodeCanvas: React.FC<INodeComponentProps<IfNodeData>> = ({ id, data, inputs, outputs }) => {
   const { nodeStates, nodeSnapshots } = useStudioRuntime();
-  const query = useStudioQuery();
   const nodeState = nodeStates[id] ?? 'idle';
   const snapshot = nodeSnapshots[id] ?? null;
-  const queryState = query.getNodeQueryState<IfNodeQueryState>(id);
   const resultBadge = snapshot?.status === 'success'
     ? snapshot.nextControlPorts?.includes('true-out') ? 'TRUE' : 'FALSE'
     : snapshot?.status === 'error' ? 'ERROR' : null;
 
   return (
     <div className="relative flex flex-col items-center group">
-      <div className={`relative z-10 flex min-h-[94px] w-44 flex-col rounded-2xl border bg-slate-900/95 px-4 py-3 shadow-lg backdrop-blur-md transition-colors
-        ${nodeState === 'running' ? 'border-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.28)]' : nodeState === 'success' ? 'border-emerald-500/50' : nodeState === 'error' ? 'border-red-500/50' : 'border-slate-700 hover:border-cyan-500/50'}`}
-      >
+      <div className={`bg-[#1e293b]/95 backdrop-blur-md rounded-2xl border w-16 h-16 shadow-lg flex items-center justify-center relative z-10 transition-colors cursor-grab active:cursor-grabbing
+        ${nodeState === 'running' ? 'border-cyan-400 shadow-[0_0_22px_rgba(34,211,238,0.28)] scale-110' :
+          nodeState === 'success' ? 'border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
+          nodeState === 'error' ? 'border-red-500/60 shadow-[0_0_12px_rgba(239,68,68,0.18)]' :
+          'border-slate-700 hover:border-cyan-500/60'}
+      `}>
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-center gap-2 -translate-x-[calc(50%+1px)] z-20">
           {inputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="target" />)}
         </div>
@@ -303,29 +304,22 @@ const IfNodeCanvas: React.FC<INodeComponentProps<IfNodeData>> = ({ id, data, inp
           {outputs.map((port: IPort) => <Port key={port.id} nodeId={id} port={port} type="source" />)}
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-300">
-              <GitBranch size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-100">{data.nodeName?.trim() || 'If'}</div>
-              <div className="text-[11px] text-slate-500">Control Branch</div>
-            </div>
-          </div>
-          {resultBadge ? (
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wider ${resultBadge === 'TRUE' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : resultBadge === 'FALSE' ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-red-500/30 bg-red-500/10 text-red-200'}`}>
-              {resultBadge}
-            </span>
-          ) : null}
+        <div className="w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform duration-300 bg-cyan-500/20 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+          <GitBranch size={20} />
         </div>
+      </div>
 
-        <div className="mt-3 text-xs text-slate-300 line-clamp-2">
-          {queryState?.summary ?? 'Condition incomplete'}
-        </div>
-        <div className="mt-2 text-[11px] text-slate-500">
-          Preview: <span className="text-slate-300">{queryState?.predictedResult == null ? 'Pending' : queryState.predictedResult ? 'TRUE' : 'FALSE'}</span>
-        </div>
+      <div className="absolute top-full mt-2 text-center pointer-events-none w-max flex flex-col items-center z-20">
+        <span className="text-xs text-white font-medium tracking-wide">
+          {data.nodeName?.trim() || 'If'}
+        </span>
+        {resultBadge ? (
+          <span className={`mt-0.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-wider ${resultBadge === 'TRUE' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : resultBadge === 'FALSE' ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-red-500/30 bg-red-500/10 text-red-200'}`}>
+            {resultBadge}
+          </span>
+        ) : (
+          <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">Control Branch</span>
+        )}
       </div>
     </div>
   );
