@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
-import { useStudioGraph, useStudioQuery, useStudioUi } from '../../../../core/studio/StudioContext';
-import { BaseNodeData, IPort, StudioNode } from '../../../../core/studio/types';
-import { getNodePortsByDirection, getStudioNodePort } from '../../../../core/studio/NodeRegistry';
-import { beginPointerExpressionDrag } from '../../../../core/studio/drag/expressionPointerDrag';
-import { useExpressionDrag } from '../../../../core/studio/drag/ExpressionDragContext';
-import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../../core/studio/expression';
-import { NodeParameterEditor } from '../../editor/NodeParameterEditor';
-import type { CallFunctionClassInfoQueryState } from '../../../../domain/studio/contracts';
-import { getRegisteredStudioNodeCatalog } from '../../../../core/studio/catalog/studioNodeCatalogRuntime';
+import { useStudioGraph, useStudioQuery, useStudioUi } from '../../../core/studio/StudioContext';
+import { BaseNodeData, IPort, StudioNode } from '../../../core/studio/types';
+import { getNodePortsByDirection, getStudioNodePort } from '../../../core/studio/NodeRegistry';
+import { beginPointerExpressionDrag } from '../../../core/studio/drag/expressionPointerDrag';
+import { useExpressionDrag } from '../../../core/studio/drag/ExpressionDragContext';
+import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../core/studio/expression';
+import { NodeParameterEditor } from '../editor/NodeParameterEditor';
+import type { CallFunctionClassInfoQueryState } from '../../../domain/studio/contracts';
+import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {

@@ -6,7 +6,7 @@ import { AssembliesColumn } from '../../components/features/AssembliesColumn';
 import { ClassesColumn } from '../../components/features/ClassesColumn';
 import { InspectorTabBar } from '../../components/features/InspectorTabBar';
 import ClassInspectorApp from '../../components/features/ClassInspectorApp';
-import { useInspectorPageFacade } from '../facades/useInspectorPageFacade';
+import { useInspectorWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
 import { useInspectorPageController } from './useInspectorPageController';
 
 export function InspectorPage() {
@@ -61,7 +61,7 @@ export function InspectorPage() {
     pendingScrollImageStableId,
     pendingScrollClassStableId,
     clearPendingScrollTarget,
-  } = useInspectorPageFacade();
+  } = useInspectorWorkspace();
 
   const { tabBarRef, imageListRef, classListRef } = useInspectorPageController({
     tabsLength: tabs.length,

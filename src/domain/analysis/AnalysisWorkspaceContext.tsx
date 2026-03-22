@@ -277,7 +277,6 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
           .filter((descriptor): descriptor is NonNullable<typeof descriptor> => Boolean(descriptor))
           .map((descriptor) => createAnalysisClassSummary(image ?? {
             stableId: descriptor.imageStableId,
-            legacyImageId: descriptor.legacyImageId,
             name: '',
             path: '',
           }, descriptor));

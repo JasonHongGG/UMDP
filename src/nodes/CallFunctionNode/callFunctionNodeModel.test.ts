@@ -14,7 +14,7 @@ import {
 } from './callFunctionNodeModel';
 
 const IMAGE_ID = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
-const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player-controller' });
+const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController' });
 const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_ID, methodName: 'Move', signature: 'System.Void (System.Single x, System.Single y)' });
 
 const SAMPLE_CLASS_INFO: ClassInfoPayload = {

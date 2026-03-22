@@ -10,7 +10,6 @@ import {
   writeStoredGraphDocument,
 } from '../../infrastructure/studio/persistence/graphPersistence';
 import {
-  bootstrapStudioPersistencePolicy,
   readStudioWorkflowPersistenceSnapshot,
   readStudioWorkflowSlot,
   resetStudioWorkflowPersistence,
@@ -148,20 +147,6 @@ describe('studio persistence', () => {
     expect(readStoredGraphDocument('studio.test.workflow')).toBeNull();
   });
 
-  it('boots v3 persistence by removing legacy v1 and v2 slots', () => {
-    window.localStorage.setItem('unity-mono-studio.workflow.autosave.v1', '{"legacy":true}');
-    window.localStorage.setItem('unity-mono-studio.workflow.manual-save.v1', '{"legacy":true}');
-    window.localStorage.setItem('unity-mono-studio.workflow.autosave.v2', '{"legacy":true}');
-    window.localStorage.setItem('unity-mono-studio.workflow.manual-save.v2', '{"legacy":true}');
-
-    bootstrapStudioPersistencePolicy();
-
-    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v1')).toBeNull();
-    expect(window.localStorage.getItem('unity-mono-studio.workflow.manual-save.v1')).toBeNull();
-    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v2')).toBeNull();
-    expect(window.localStorage.getItem('unity-mono-studio.workflow.manual-save.v2')).toBeNull();
-  });
-
   it('reads and writes v3 workflow slots through the persistence policy', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const document = createEmptyGraphDocument();
@@ -181,10 +166,12 @@ describe('studio persistence', () => {
   it('resets v3 workflow slots through the persistence policy', () => {
     writeStudioWorkflowSlot('autosave', createEmptyGraphDocument());
     writeStudioWorkflowSlot('manual-save', createEmptyGraphDocument());
+    window.localStorage.setItem('unity-mono-studio.workflow.autosave.v2', '{"legacy":true}');
 
     resetStudioWorkflowPersistence();
 
     expect(readStudioWorkflowSlot('autosave')).toBeNull();
     expect(readStudioWorkflowSlot('manual-save')).toBeNull();
+    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v2')).toBe('{"legacy":true}');
   });
 });

@@ -7,8 +7,6 @@ export type AnalysisImageInfo = ImageDescriptor;
 export interface AnalysisClassSummary {
   stableId: StableId;
   imageStableId: StableId;
-  legacyImageId: string;
-  legacyClassId: string;
   name: string;
   namespace: string;
   fullName: string;
@@ -38,8 +36,6 @@ export interface AnalysisMethodInfo {
 export interface AnalysisClassInfo {
   stableId: StableId;
   imageStableId: StableId;
-  legacyImageId: string;
-  legacyClassId: string;
   name: string;
   namespace: string;
   fullName: string;
@@ -92,8 +88,6 @@ export function createAnalysisClassSummary(image: ImageDescriptor, descriptor: C
   return {
     stableId: descriptor.stableId,
     imageStableId: descriptor.imageStableId,
-    legacyImageId: descriptor.legacyImageId,
-    legacyClassId: descriptor.legacyClassId,
     name: descriptor.name,
     namespace: descriptor.namespace,
     fullName: descriptor.fullName,
@@ -108,8 +102,6 @@ export function createAnalysisClassInfo(
   return {
     stableId: descriptor.stableId,
     imageStableId: descriptor.imageStableId,
-    legacyImageId: descriptor.legacyImageId,
-    legacyClassId: descriptor.legacyClassId,
     name: descriptor.name,
     namespace: descriptor.namespace,
     fullName: descriptor.fullName,

@@ -77,8 +77,6 @@ export function useAnalysisInspectorCatalog({
         lookup.set(classSummary.fullName, {
           imageStableId: classSummary.imageStableId,
           classStableId: classSummary.stableId,
-          legacyImageId: classSummary.legacyImageId,
-          legacyClassId: classSummary.legacyClassId,
           name: classSummary.name,
           namespace: classSummary.namespace,
           imageName: classSummary.imageName,

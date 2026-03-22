@@ -14,9 +14,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 const IMAGE_ID = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
-const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player-controller' });
+const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController' });
 const METHOD_ID = createMethodStableId({ classStableId: CLASS_ID, methodName: 'Move', signature: 'System.Void (System.Single x)' });
-const WORLD_DATA_CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'WorldData', legacyClassId: 'world-data' });
+const WORLD_DATA_CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'WorldData' });
 const WORLD_DATA_METHOD_ID = createMethodStableId({ classStableId: WORLD_DATA_CLASS_ID, methodName: 'Describe', signature: 'System.String ()' });
 const ARGUMENT_ID = createStableId('binding', ['call-1', 'x']);
 

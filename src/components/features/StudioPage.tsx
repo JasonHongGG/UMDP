@@ -1,15 +1,14 @@
 import React from 'react';
 import { StudioProvider, useStudioGraph, useStudioUi } from '../../core/studio/StudioContext';
+import { useStudioWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
+import type { PendingClassNodeRequest } from '../../domain/studio/editor';
 import { CanvasCore } from '../studio/canvas/CanvasCore';
 import { StudioModalLayer } from '../studio/StudioModalLayer';
 import { StudioToolbar } from '../studio/StudioToolbar';
-import { useStudioPageFacade } from '../../app/facades/useStudioPageFacade';
 import { useStudioPageController } from './useStudioPageController';
 
-type PendingClassNode = ReturnType<typeof useStudioPageFacade>['pendingClassNode'];
-
 export function StudioPage() {
-  const { studioRuntimeData, pendingClassNode, clearPendingClassNode, workspaceLifecycle } = useStudioPageFacade();
+  const { studioRuntimeData, pendingClassNode, clearPendingClassNode, workspaceLifecycle } = useStudioWorkspace();
 
   return (
     <StudioProvider runtimeData={studioRuntimeData} workspaceLifecycle={workspaceLifecycle}>
@@ -25,7 +24,7 @@ function StudioPageContent({
   pendingClassNode,
   onPendingClassNodeHandled,
 }: {
-  pendingClassNode: PendingClassNode;
+  pendingClassNode: PendingClassNodeRequest | null;
   onPendingClassNodeHandled?: () => void;
 }) {
   const { addNode, undo, redo, saveWorkflow, deleteNodes, duplicateNodes } = useStudioGraph();

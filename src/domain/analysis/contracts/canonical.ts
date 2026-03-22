@@ -33,7 +33,6 @@ export interface RuntimeOverlaySnapshot {
 
 export interface ImageDescriptor {
   stableId: StableId;
-  legacyImageId: string;
   name: string;
   path: string;
 }
@@ -44,7 +43,6 @@ export interface InheritanceDescriptor {
 
 export interface FieldDescriptor {
   stableId: StableId;
-  legacyFieldName: string;
   name: string;
   fieldType: string;
   offset: string | null;
@@ -78,8 +76,6 @@ export interface RuntimeResolvedFieldDescriptor extends FieldDescriptor {
 
 export interface ClassDescriptor {
   stableId: StableId;
-  legacyClassId: string;
-  legacyImageId: string;
   imageStableId: StableId;
   name: string;
   namespace: string;

@@ -51,7 +51,6 @@ pub struct RuntimeOverlaySnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct ImageDescriptor {
     pub stable_id: StableId,
-    pub legacy_image_id: String,
     pub name: String,
     pub path: String,
 }
@@ -65,7 +64,6 @@ pub struct InheritanceDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct FieldDescriptor {
     pub stable_id: StableId,
-    pub legacy_field_name: String,
     pub name: String,
     pub field_type: String,
     pub offset: Option<String>,
@@ -75,7 +73,6 @@ pub struct FieldDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct StaticFieldDescriptor {
     pub stable_id: StableId,
-    pub legacy_field_name: String,
     pub name: String,
     pub field_type: String,
     pub offset: Option<String>,
@@ -107,7 +104,6 @@ pub struct MethodDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeResolvedFieldDescriptor {
     pub stable_id: StableId,
-    pub legacy_field_name: String,
     pub name: String,
     pub field_type: String,
     pub offset: Option<String>,
@@ -119,8 +115,8 @@ pub struct RuntimeResolvedFieldDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct ClassDescriptor {
     pub stable_id: StableId,
-    pub legacy_class_id: String,
-    pub legacy_image_id: String,
+    #[serde(alias = "legacyImageId", skip_serializing)]
+    pub bridge_image_name: String,
     pub image_stable_id: StableId,
     pub name: String,
     pub namespace: String,

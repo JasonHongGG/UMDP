@@ -15,8 +15,6 @@ export type ActivePage = 'inspector' | 'studio';
 export interface ClassLookupEntry {
   imageStableId: StableId;
   classStableId: StableId;
-  legacyImageId: string;
-  legacyClassId: string;
   name: string;
   namespace: string;
   imageName: string;

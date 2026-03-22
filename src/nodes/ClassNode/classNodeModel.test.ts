@@ -12,7 +12,7 @@ const EXECUTION_RUNTIME_EXTRAS = {
 };
 
 const IMAGE_A = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
-const CLASS_PLAYER = createClassStableId({ imageStableId: IMAGE_A, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player' });
+const CLASS_PLAYER = createClassStableId({ imageStableId: IMAGE_A, namespace: 'Gameplay', className: 'PlayerController' });
 const METHOD_MOVE = createMethodStableId({ classStableId: CLASS_PLAYER, methodName: 'Move', signature: 'System.Void ()' });
 const MEMBER_HEALTH = createFieldStableId({
   classStableId: CLASS_PLAYER,
@@ -145,7 +145,6 @@ describe('classNodeModel', () => {
           id: MEMBER_HEALTH,
           label: 'health',
           name: 'health',
-          legacyFieldName: 'health',
           typeName: 'System.Int32',
           offset: '0x10',
           address: null,
@@ -207,7 +206,6 @@ describe('classNodeModel', () => {
           id: MEMBER_HEALTH,
           label: 'health',
           name: 'health',
-          legacyFieldName: 'health',
           typeName: 'System.Int32',
           offset: '0x10',
           address: null,

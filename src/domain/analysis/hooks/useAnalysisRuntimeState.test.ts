@@ -13,7 +13,7 @@ import { createClassStableId, createImageStableId, createFieldStableId } from '.
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const IMAGE_ID = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
-const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController', legacyClassId: 'player-controller' });
+const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController' });
 const STATIC_FIELD_ID = createFieldStableId({ classStableId: CLASS_ID, fieldName: 'speed', fieldType: 'System.Single', fieldKind: 'static' });
 const INSTANCE_FIELD_ID = createFieldStableId({ classStableId: CLASS_ID, fieldName: 'speed', fieldType: 'System.Single', fieldKind: 'instance' });
 
@@ -58,7 +58,6 @@ function createRepository(): AnalysisRepository {
           fields: [],
           staticFields: [{
             stableId: STATIC_FIELD_ID,
-            legacyFieldName: 'speed',
             name: 'speed',
             fieldType: 'System.Single',
             address: '0x1000',
@@ -72,7 +71,6 @@ function createRepository(): AnalysisRepository {
       instanceAddress: '0x1234',
       fields: [{
         stableId: INSTANCE_FIELD_ID,
-        legacyFieldName: 'speed',
         name: 'speed',
         fieldType: 'System.Single',
         offset: null,
@@ -96,18 +94,16 @@ const SNAPSHOT: AnalysisSnapshot = {
   schemaVersion: 1,
   generatedAt: '2026-03-22T12:00:00.000Z',
   process: SESSION,
-  images: [{ stableId: IMAGE_ID, legacyImageId: 'asm', name: 'Assembly-CSharp.dll', path: 'Assembly-CSharp.dll' }],
+  images: [{ stableId: IMAGE_ID, name: 'Assembly-CSharp.dll', path: 'Assembly-CSharp.dll' }],
   classes: {
     [CLASS_ID]: {
       stableId: CLASS_ID,
-      legacyClassId: 'player-controller',
-      legacyImageId: 'asm',
       imageStableId: IMAGE_ID,
       name: 'PlayerController',
       namespace: 'Gameplay',
       fullName: 'Gameplay.PlayerController',
       inheritance: [{ name: 'System.Object' }],
-      fields: [{ stableId: INSTANCE_FIELD_ID, legacyFieldName: 'speed', name: 'speed', fieldType: 'System.Single', offset: null }],
+      fields: [{ stableId: INSTANCE_FIELD_ID, name: 'speed', fieldType: 'System.Single', offset: null }],
       staticFields: [],
       methods: [],
     },

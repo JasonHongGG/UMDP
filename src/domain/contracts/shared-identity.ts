@@ -20,7 +20,6 @@ export interface ClassIdentitySeed {
   imageStableId: StableId;
   namespace: string;
   className: string;
-  legacyClassId?: string | null;
 }
 
 export interface FieldIdentitySeed {
@@ -46,7 +45,7 @@ export function createImageStableId(seed: ImageIdentitySeed) {
 }
 
 export function createClassStableId(seed: ClassIdentitySeed) {
-  return createStableId('class', [seed.imageStableId, seed.namespace, seed.className, seed.legacyClassId ?? '']);
+  return createStableId('class', [seed.imageStableId, seed.namespace, seed.className]);
 }
 
 export function createFieldStableId(seed: FieldIdentitySeed) {

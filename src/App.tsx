@@ -2,9 +2,9 @@
 import { Suspense, lazy } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
 import { TopBar } from './components/features/TopBar';
-import { AnalysisWorkspaceProvider, useAnalysisWorkspace } from './domain/analysis/AnalysisWorkspaceContext';
+import { AnalysisWorkspaceProvider, useWorkspaceShellState } from './domain/analysis/AnalysisWorkspaceContext';
 import { StatusBar } from './app/shell/StatusBar';
-import { useWorkspaceShellFacade } from './app/facades/useWorkspaceShellFacade';
+import { openProcessSelectorWindow } from './infrastructure/tauri/TauriWorkspaceGateway';
 import './styles.css';
 
 const StudioPage = lazy(async () => ({
@@ -24,15 +24,21 @@ export default function App() {
 }
 
 function AppContent() {
-  const { workspace, contractVersions, processSession, activePage, setActivePage, openSelector } = useWorkspaceShellFacade();
+  const {
+    processSession,
+    contractVersions,
+    workspaceLifecycle,
+    activePage,
+    setActivePage,
+  } = useWorkspaceShellState();
 
   return (
     <MainLayout>
       <TopBar
-        workspace={workspace}
+        workspace={workspaceLifecycle}
         contractVersions={contractVersions}
         attachedProcess={processSession ? `${processSession.processName} (${processSession.pid})` : null}
-        onOpenSelector={openSelector}
+        onOpenSelector={openProcessSelectorWindow}
         activePage={activePage}
         onPageChange={setActivePage}
       />
@@ -45,7 +51,7 @@ function AppContent() {
         )}
       </Suspense>
 
-      <StatusBar workspace={workspace} />
+      <StatusBar workspace={workspaceLifecycle} />
     </MainLayout>
   );
 }

@@ -16,7 +16,6 @@ export interface ClassInfoFieldDescriptor {
   id: StableId;
   label: string;
   name: string;
-  legacyFieldName: string;
   typeName: string;
   offset: string | null;
   address: string | null;
@@ -78,7 +77,6 @@ function normalizeClassInfoFieldDescriptor(value: unknown): ClassInfoFieldDescri
     typeof value.id !== 'string'
     || typeof value.label !== 'string'
     || typeof value.name !== 'string'
-    || typeof value.legacyFieldName !== 'string'
     || typeof value.typeName !== 'string'
     || (value.offset !== null && typeof value.offset !== 'string')
     || (value.address !== null && typeof value.address !== 'string')
@@ -92,7 +90,6 @@ function normalizeClassInfoFieldDescriptor(value: unknown): ClassInfoFieldDescri
     id: value.id as StableId,
     label: value.label,
     name: value.name,
-    legacyFieldName: value.legacyFieldName,
     typeName: value.typeName,
     offset: value.offset,
     address: value.address,
@@ -193,7 +190,6 @@ export function createClassInfoCatalogFromClassDescriptor(
       id: field.stableId,
       label: field.name,
       name: field.name,
-      legacyFieldName: field.legacyFieldName,
       typeName: field.fieldType,
       offset: formatHexAddress(field.offset),
       address: null,
@@ -205,7 +201,6 @@ export function createClassInfoCatalogFromClassDescriptor(
       id: field.stableId,
       label: field.name,
       name: field.name,
-      legacyFieldName: field.legacyFieldName,
       typeName: field.fieldType,
       offset: formatHexAddress(field.offset),
       address: formatHexAddress(field.address),
