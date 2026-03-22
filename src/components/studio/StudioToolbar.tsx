@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, FolderOpen, History, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
 import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import { Tooltip } from '../common/Tooltip';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -36,8 +37,6 @@ export function StudioToolbar() {
   useStudioRuntime();
   const [statusMessage, setStatusMessage] = useState<string>('');
 
-  const countsLabel = useMemo(() => `${nodes.length} nodes · ${edges.length} edges`, [edges.length, nodes.length]);
-
   const handleSave = () => {
     setStatusMessage(saveWorkflow() ? 'Workflow saved to local draft slot.' : 'Save failed.');
   };
@@ -68,19 +67,30 @@ export function StudioToolbar() {
 
   return (
     <div className="absolute top-4 left-4 right-4 z-20 pointer-events-none">
-      <div className="pointer-events-auto flex items-center justify-between gap-4 rounded-2xl border border-slate-800/80 bg-[#071018]/88 backdrop-blur-xl px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={`px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] border ${hasUnsavedChanges ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'}`}>
-            {hasUnsavedChanges ? 'Dirty' : 'Saved'}
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Studio Workflow</div>
-            <div className="text-[11px] text-slate-500 truncate">{countsLabel}</div>
-          </div>
-          <div className="hidden xl:flex items-center gap-3 text-[11px] text-slate-500">
-            <span>Manual save: {formatTimestamp(lastSavedAt)}</span>
-            <span>Autosave: {formatTimestamp(lastAutosavedAt)}</span>
-            <span>Load/undo anchor: {formatTimestamp(lastLoadedAt)}</span>
+      <div className="pointer-events-auto flex items-center justify-between gap-4 rounded-xl border border-slate-800/80 bg-[#071018]/88 backdrop-blur-xl px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center gap-4 min-w-0">
+          <Tooltip 
+            position="bottom" 
+            content={`Manual save: ${formatTimestamp(lastSavedAt)}\nAutosave: ${formatTimestamp(lastAutosavedAt)}\nLoad/undo anchor: ${formatTimestamp(lastLoadedAt)}`}
+          >
+            <div 
+              className={`flex items-center gap-2 px-2.5 py-1 rounded border text-[11px] font-bold uppercase tracking-[0.15em] transition-colors cursor-help
+                ${hasUnsavedChanges ? 'border-amber-500/20 bg-amber-500/10 text-amber-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0
+                ${hasUnsavedChanges ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]' : 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]'}`} 
+              />
+              {hasUnsavedChanges ? 'Unsaved' : 'Saved'}
+            </div>
+          </Tooltip>
+
+          <div className="w-px h-5 bg-slate-700/60 hidden sm:block" />
+
+          <div className="min-w-0 flex items-baseline gap-3">
+            <h1 className="text-[13px] font-bold text-slate-200 tracking-wide uppercase">Studio Workflow</h1>
+            <div className="text-[11px] font-medium text-slate-500/80 tracking-wide truncate hidden sm:block">
+              {nodes.length} nodes <span className="mx-1.5 opacity-40">•</span> {edges.length} edges
+            </div>
           </div>
         </div>
 
