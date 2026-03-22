@@ -14,27 +14,6 @@ import { createDefaultIfRightLiteralSource, formatIfValuePreview, getDefaultIfOp
 import type { IfNodeData } from './ifNodeModel';
 import { Select } from '../../components/common/Select';
 
-function issueTone(severity: NodeQueryIssue['severity']) {
-  switch (severity) {
-    case 'error':
-      return 'border-red-500/30 bg-red-500/10 text-red-200 outline-red-500/20';
-    case 'warning':
-      return 'border-amber-500/30 bg-amber-500/10 text-amber-200 outline-amber-500/20';
-    default:
-      return 'border-blue-500/30 bg-blue-500/10 text-blue-200 outline-blue-500/20';
-  }
-}
-
-function issueIconColor(severity: NodeQueryIssue['severity']) {
-  switch (severity) {
-    case 'error':
-      return 'text-red-400';
-    case 'warning':
-      return 'text-amber-400';
-    default:
-      return 'text-blue-400';
-  }
-}
 
 function toLiteralValueType(kind: IfNodeQueryState['leftPreview']['scalarKind']): 'string' | 'number' | 'boolean' | 'address' {
   switch (kind) {
@@ -215,24 +194,52 @@ function ExpressionOperandDropZone({
 function QueryIssues({ issues }: { issues: NodeQueryIssue[] }) {
   if (issues.length === 0) return null;
 
+  const hasError = issues.some(i => i.severity === 'error');
+  const hasWarning = issues.some(i => i.severity === 'warning');
+
+  // Overall container tone
+  const containerTone = hasError 
+    ? 'border-red-500/20 bg-red-950/10 shadow-[0_0_20px_rgba(239,68,68,0.05)]' 
+    : hasWarning 
+      ? 'border-amber-500/20 bg-amber-950/10 shadow-[0_0_20px_rgba(245,158,11,0.05)]' 
+      : 'border-blue-500/20 bg-blue-950/10 shadow-[0_0_20px_rgba(59,130,246,0.05)]';
+
   return (
-    <motion.div layout className="space-y-2 mt-4">
-      <AnimatePresence>
-        {issues.map((issue) => (
-          <motion.div
-            key={`${issue.code}-${issue.message}`}
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className={`rounded-xl border p-3 text-xs outline outline-2 outline-offset-2 ${issueTone(issue.severity)} shadow-lg shadow-black/20`}
-          >
-            <div className="flex items-start gap-2.5">
-              <AlertCircle size={16} className={`mt-0.5 shrink-0 ${issueIconColor(issue.severity)}`} />
-              <span className="font-medium leading-relaxed">{issue.message}</span>
-            </div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
+    <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`mt-4 rounded-xl border ${containerTone} overflow-hidden backdrop-blur-md`}>
+      <div className="px-4 py-2 border-b border-white/5 bg-slate-950/60 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Activity size={12} className={hasError ? 'text-red-400' : hasWarning ? 'text-amber-400' : 'text-blue-400'} />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Diagnostics</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+           <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-900/80 px-2 py-0.5 rounded-full">{issues.length} message{issues.length > 1 ? 's' : ''}</span>
+        </div>
+      </div>
+      <div className="p-2 space-y-1 bg-slate-900/40 custom-scrollbar max-h-[160px] overflow-y-auto">
+        <AnimatePresence>
+          {issues.map((issue) => (
+            <motion.div
+              layout
+              key={`${issue.code}-${issue.message}`}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="group flex items-start gap-3 p-2 rounded-lg hover:bg-slate-800/60 transition-colors"
+            >
+               <div className={`mt-0.5 p-1 rounded-lg ${
+                 issue.severity === 'error' ? 'bg-red-500/10 text-red-400' : 
+                 issue.severity === 'warning' ? 'bg-amber-500/10 text-amber-400' : 
+                 'bg-blue-500/10 text-blue-400'
+               }`}>
+                 <AlertCircle size={14} />
+               </div>
+               <div className="flex-1 text-xs font-medium text-slate-300 leading-relaxed pt-0.5">
+                 {issue.message}
+               </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 }
