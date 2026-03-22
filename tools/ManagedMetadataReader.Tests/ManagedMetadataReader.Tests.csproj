@@ -16,4 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ManagedMetadataReader\ManagedMetadataReader.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\contract-fixtures\*.json" Link="contract-fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

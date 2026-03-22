@@ -1,4 +1,7 @@
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -135,6 +138,67 @@ int RunSessionMode()
     return 0;
 }
 
+std::string ReadFixtureFile(const std::filesystem::path& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        throw std::runtime_error("Failed to open fixture file: " + path.string());
+    }
+
+    std::ostringstream output;
+    output << input.rdbuf();
+    return output.str();
+}
+
+int RunFixtureValidation(const std::filesystem::path& fixture_directory)
+{
+    const bridge::RuntimeClassOverlayResponse overlay_response{
+        .static_fields = { bridge::FieldRow{ "speed", "System.Single", std::string("0x1000"), std::string("1.5"), std::nullopt } },
+        .fields = { bridge::FieldRow{ "health", "System.Int32", std::nullopt, std::nullopt, std::string("0x20") } },
+    };
+
+    const bridge::RuntimeMethodInvokeResponse invoke_response{
+        .success = true,
+        .method_name = "Move",
+        .method_signature = "System.Void (System.Single x)",
+        .return_type = "System.Void",
+        .error = std::nullopt,
+        .exception = std::nullopt,
+        .result = bridge::InvokeValue{ "void", std::nullopt, std::nullopt },
+    };
+
+    const bridge::RuntimeFieldSetResponse field_set_response{
+        .success = true,
+        .failure_kind = bridge::RuntimeFieldSetFailureKind::None,
+        .field_name = "speed",
+        .field_type = "System.Single",
+        .is_static = false,
+        .address = std::string("0x2000"),
+        .error = std::nullopt,
+        .previous_value = std::string("1.5"),
+        .applied_value = std::string("2.5"),
+    };
+
+    const auto overlay_fixture = ReadFixtureFile(fixture_directory / "runtime-overlay-response.json");
+    const auto invoke_fixture = ReadFixtureFile(fixture_directory / "runtime-invoke-response.json");
+    const auto field_set_fixture = ReadFixtureFile(fixture_directory / "runtime-field-set-response.json");
+
+    if (bridge::SerializeResponse(overlay_response) != overlay_fixture) {
+        throw std::runtime_error("Native runtime overlay fixture mismatch");
+    }
+
+    if (bridge::SerializeResponse(invoke_response) != invoke_fixture) {
+        throw std::runtime_error("Native runtime invoke fixture mismatch");
+    }
+
+    if (bridge::SerializeResponse(field_set_response) != field_set_fixture) {
+        throw std::runtime_error("Native runtime field-set fixture mismatch");
+    }
+
+    std::cout << "native-contract-fixtures-ok" << std::endl;
+    return 0;
+}
+
 }
 
 int main(int argc, char* argv[])
@@ -142,6 +206,10 @@ int main(int argc, char* argv[])
     try {
         if (argc == 2 && std::string(argv[1]) == "--session") {
             return RunSessionMode();
+        }
+
+        if (argc == 3 && std::string(argv[1]) == "--validate-fixtures") {
+            return RunFixtureValidation(argv[2]);
         }
 
         const auto request = bridge::ArgumentParser::Parse(argc, argv);

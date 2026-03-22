@@ -2,7 +2,7 @@ import React from 'react';
 import { Hexagon, Layers3, ChevronRight, LoaderCircle, Waypoints, Plus } from 'lucide-react';
 import type { AnalysisClassInfo, AnalysisFieldInfo, AnalysisStaticFieldInfo } from '../../domain/analysis/view-models';
 import type { ClassBinding } from '../../domain/studio/editor';
-import type { InspectorTab } from '../../domain/analysis/AnalysisWorkspaceContext';
+import type { InspectorTab } from '../../domain/analysis/workspace-types';
 import { formatHexAddress } from '../../core/addressFormat';
 
 interface ClassInspectorAppProps {

@@ -7,6 +7,7 @@ import type {
 } from '../contracts';
 import type { StableId } from '../../contracts/shared-identity';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
+import type { WorkspaceLifecycleState } from '../../../shared/contracts';
 import { formatHexAddress } from '../../../core/addressFormat';
 import type { ResolvedMemberRuntimeValue } from '../../../core/studio/contracts';
 
@@ -14,9 +15,10 @@ interface UseAnalysisRuntimeStateOptions {
   repository: AnalysisRepository;
   processSession: ProcessSession | null;
   analysisSnapshot: AnalysisSnapshot | null;
+  workspaceLifecycle: WorkspaceLifecycleState;
 }
 
-export function useAnalysisRuntimeState({ repository, processSession, analysisSnapshot }: UseAnalysisRuntimeStateOptions) {
+export function useAnalysisRuntimeState({ repository, processSession, analysisSnapshot, workspaceLifecycle }: UseAnalysisRuntimeStateOptions) {
   const [runtimeOverlays, setRuntimeOverlays] = useState<Record<string, RuntimeClassOverlayDescriptor>>({});
   const [runtimeInstanceFieldSnapshots, setRuntimeInstanceFieldSnapshots] = useState<Record<string, RuntimeInstanceFieldSnapshot>>({});
   const [runtimeFieldErrorByKey, setRuntimeFieldErrorByKey] = useState<Record<string, string | null>>({});
@@ -26,8 +28,17 @@ export function useAnalysisRuntimeState({ repository, processSession, analysisSn
   const fetchingRuntimeRef = useRef<Set<string>>(new Set());
   const fetchingRuntimeInstanceRef = useRef<Set<string>>(new Set());
 
+  const shouldClearRuntimeState = !processSession
+    || !analysisSnapshot
+    || !workspaceLifecycle.hasSnapshot
+    || workspaceLifecycle.status === 'bridge-error'
+    || workspaceLifecycle.status === 'recovering'
+    || !workspaceLifecycle.runtimeSession.bridgeConnected
+    || workspaceLifecycle.runtimeSession.status === 'recovering'
+    || workspaceLifecycle.runtimeSession.status === 'error';
+
   useEffect(() => {
-    if (processSession && analysisSnapshot) {
+    if (!shouldClearRuntimeState) {
       return;
     }
 
@@ -39,7 +50,7 @@ export function useAnalysisRuntimeState({ repository, processSession, analysisSn
     setLoadingRuntimeInstanceByKey({});
     fetchingRuntimeRef.current.clear();
     fetchingRuntimeInstanceRef.current.clear();
-  }, [analysisSnapshot, processSession]);
+  }, [shouldClearRuntimeState]);
 
   const ensureRuntimeOverlayLoaded = useCallback((classStableId: StableId) => {
     if (!processSession || !analysisSnapshot) {

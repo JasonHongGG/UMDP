@@ -399,4 +399,49 @@ describe('nodeQueryService', () => {
       },
     });
   });
+
+  it('stops query materialization cleanly when preview dependencies form a cycle', () => {
+    const context = createContext();
+    context.nodes = [
+      {
+        id: 'call-a',
+        type: 'call-function',
+        position: { x: 0, y: 0 },
+        data: {
+          selectedMethodStableId: METHOD_MOVE,
+          arguments: [],
+        },
+      },
+      {
+        id: 'call-b',
+        type: 'call-function',
+        position: { x: 240, y: 0 },
+        data: {
+          selectedMethodStableId: METHOD_MOVE,
+          arguments: [],
+        },
+      },
+    ];
+    context.edges = [
+      {
+        id: 'edge-a-b',
+        channel: 'data',
+        sourceNodeId: 'call-a',
+        sourcePortId: 'result-out',
+        targetNodeId: 'call-b',
+        targetPortId: 'class-info-in',
+      },
+      {
+        id: 'edge-b-a',
+        channel: 'data',
+        sourceNodeId: 'call-b',
+        sourcePortId: 'result-out',
+        targetNodeId: 'call-a',
+        targetPortId: 'class-info-in',
+      },
+    ];
+
+    expect(getNodeQuerySnapshot('call-a', context)).toBeNull();
+    expect(getNodeOutputPreview('call-a', context)).toBeNull();
+  });
 });

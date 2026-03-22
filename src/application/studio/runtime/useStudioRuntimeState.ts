@@ -3,6 +3,7 @@ import type { GraphDocument } from '../../../domain/studio/contracts';
 import { executeStudioFlow } from './executeStudioFlow';
 import { StudioRuntimeDataState } from '../../../core/studio/runtimeData';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '../../../core/studio/types';
+import type { WorkspaceLifecycleState } from '../../../shared/contracts';
 
 export type StudioExecutionRunStatus = 'running' | 'success' | 'error' | 'aborted';
 
@@ -22,7 +23,7 @@ export interface StudioRuntimeState {
   executeFlow: (startNodeId: string) => void;
 }
 
-export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[], runtimeData: StudioRuntimeDataState): StudioRuntimeState {
+export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[], runtimeData: StudioRuntimeDataState, workspaceLifecycle: WorkspaceLifecycleState): StudioRuntimeState {
   const [nodeStates, setNodeStates] = useState<Record<string, NodeExecutionState>>({});
   const [nodeSnapshots, setNodeSnapshots] = useState<Record<string, NodeExecutionSnapshot>>({});
   const [activeRun, setActiveRun] = useState<StudioExecutionRun | null>(null);
@@ -42,6 +43,23 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
     setActiveRun(null);
     setRunHistory([]);
   }, [document]);
+
+  useEffect(() => {
+    if (workspaceLifecycle.hasSnapshot
+      && workspaceLifecycle.runtimeSession.bridgeConnected
+      && workspaceLifecycle.status !== 'bridge-error'
+      && workspaceLifecycle.status !== 'recovering'
+      && workspaceLifecycle.runtimeSession.status !== 'recovering'
+      && workspaceLifecycle.runtimeSession.status !== 'error') {
+      return;
+    }
+
+    executionCleanupRef.current?.();
+    executionCleanupRef.current = null;
+    setNodeStates({});
+    setNodeSnapshots({});
+    setActiveRun(null);
+  }, [workspaceLifecycle]);
 
   const executeFlow = useCallback((startNodeId: string) => {
     executionCleanupRef.current?.();

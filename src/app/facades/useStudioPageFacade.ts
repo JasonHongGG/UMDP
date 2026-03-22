@@ -5,11 +5,13 @@ export function useStudioPageFacade() {
     studioRuntimeData,
     pendingClassNode,
     clearPendingClassNode,
+    workspaceLifecycle,
   } = useStudioWorkspace();
 
   return {
     studioRuntimeData,
     pendingClassNode,
     clearPendingClassNode,
+    workspaceLifecycle,
   };
 }

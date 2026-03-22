@@ -9,10 +9,10 @@ import { useStudioPageController } from './useStudioPageController';
 type PendingClassNode = ReturnType<typeof useStudioPageFacade>['pendingClassNode'];
 
 export function StudioPage() {
-  const { studioRuntimeData, pendingClassNode, clearPendingClassNode } = useStudioPageFacade();
+  const { studioRuntimeData, pendingClassNode, clearPendingClassNode, workspaceLifecycle } = useStudioPageFacade();
 
   return (
-    <StudioProvider runtimeData={studioRuntimeData}>
+    <StudioProvider runtimeData={studioRuntimeData} workspaceLifecycle={workspaceLifecycle}>
       <StudioPageContent
         pendingClassNode={pendingClassNode}
         onPendingClassNodeHandled={clearPendingClassNode}

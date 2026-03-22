@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "commandVersion": 2,
+  "operation": "runtime-method-invoke",
+  "requestId": "bridge-42-1",
+  "payload": {
+    "classStableId": "class:image:Assembly-CSharp.dll|Gameplay|PlayerController",
+    "methodStableId": "method:class:image:Assembly-CSharp.dll|Gameplay|PlayerController|Move|System.Void (System.Single x)",
+    "instanceAddress": "0x0000000000001000",
+    "arguments": [
+      {
+        "name": "x",
+        "typeName": "System.Single",
+        "valueKind": "number",
+        "value": "1.5"
+      }
+    ]
+  }
+}

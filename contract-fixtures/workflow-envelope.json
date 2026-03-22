@@ -1,0 +1,22 @@
+{
+  "format": "studio-graph",
+  "schemaVersion": 1,
+  "savedAt": "2026-03-22T10:00:00.000Z",
+  "document": {
+    "schemaVersion": 1,
+    "id": "studio-document",
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "nodeType": "trigger",
+        "typeVersion": 1,
+        "position": { "x": 120, "y": 80 },
+        "parameters": {},
+        "bindings": {},
+        "documentState": { "mode": "manual" }
+      }
+    ],
+    "controlConnections": [],
+    "dataConnections": []
+  }
+}

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import type { GraphDocument } from '../../domain/studio/contracts';
+import type { WorkspaceLifecycleState } from '../../shared/contracts';
 import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 import { ExpressionDragProvider } from './drag/ExpressionDragContext';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
@@ -59,12 +60,12 @@ export function useStudio() {
   };
 }
 
-export function StudioProvider({ children, runtimeData }: { children: React.ReactNode; runtimeData: StudioRuntimeDataState }) {
+export function StudioProvider({ children, runtimeData, workspaceLifecycle }: { children: React.ReactNode; runtimeData: StudioRuntimeDataState; workspaceLifecycle: WorkspaceLifecycleState }) {
   const catalog = getRegisteredStudioNodeCatalog();
   const graphStore = useStudioGraphStore(catalog);
   const { nodes, edges, document, connectPorts } = graphStore;
   const uiValue = useStudioUiState({ nodes, edges, connectPorts });
-  const runtimeValue = useStudioRuntimeState(document, nodes, edges, runtimeData);
+  const runtimeValue = useStudioRuntimeState(document, nodes, edges, runtimeData, workspaceLifecycle);
   const queryValue = useStudioQueryState(nodes, edges, runtimeValue.nodeSnapshots, runtimeData);
 
   useEffect(() => {

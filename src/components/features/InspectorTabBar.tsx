@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Boxes, List, Type, Variable } from 'lucide-react';
-import type { InspectorTab } from '../../domain/analysis/AnalysisWorkspaceContext';
+import type { InspectorTab } from '../../domain/analysis/workspace-types';
 
 interface InspectorTabBarProps {
   tabs: InspectorTab[];
