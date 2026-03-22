@@ -318,10 +318,7 @@ describe('studio full flow integration', () => {
         type: 'display',
         position: { x: 540, y: 0 },
         data: {
-          expandedByDefault: false,
-          truncateAt: 180,
-          showSchema: true,
-          showMeta: true,
+          selectedFields: [],
         },
       },
       {
@@ -417,10 +414,7 @@ describe('studio full flow integration', () => {
         type: 'display',
         position: { x: 360, y: 0 },
         data: {
-          expandedByDefault: false,
-          truncateAt: 180,
-          showSchema: true,
-          showMeta: true,
+          selectedFields: [],
         },
       },
     ];

@@ -3,17 +3,20 @@ import { ActivitySquare, AlertTriangle, Eye, PlayCircle } from 'lucide-react';
 import { Port } from '../../components/studio/canvas/Port';
 import { useStudioQuery, useStudioRuntime } from '../../core/studio/StudioContext';
 import type { INodeComponentProps } from '../../core/studio/types';
-import type { DisplayNodeQueryState, NodeExecutionSnapshot, WorkflowJsonEnvelope, WorkflowJsonValue } from '../../domain/studio/contracts';
-import { createPayloadSummary, formatMetaValue, type DisplayNodeData } from './displayNodeModel';
+import type { DisplayNodeQueryState, DisplayNodeResolvedField, NodeExecutionSnapshot, WorkflowJsonEnvelope, WorkflowJsonValue } from '../../domain/studio/contracts';
+import {
+  formatDisplayValuePreview,
+  renderDisplayJsonValue,
+  resolveDisplaySelectedFields,
+  type DisplayNodeData,
+} from './displayNodeModel';
 
 interface ResolvedDisplayState {
   sourceKind: 'runtime' | 'preview' | 'empty';
   status: 'idle' | 'running' | 'success' | 'error' | 'aborted';
   envelope: WorkflowJsonEnvelope | null;
-  summaryText: string;
-  countText: string | null;
-  schemaText: string | null;
-  metaEntries: Array<[string, WorkflowJsonValue]>;
+  selectedFields: DisplayNodeResolvedField[];
+  payloadSummary: string;
   issueText: string | null;
 }
 
@@ -28,15 +31,12 @@ function buildResolvedState(
 ): ResolvedDisplayState {
   const runtimeEnvelope = getRuntimeEnvelope(snapshot);
   if (snapshot && runtimeEnvelope) {
-    const summary = createPayloadSummary(runtimeEnvelope.payload, data.truncateAt);
     return {
       sourceKind: 'runtime',
       status: snapshot.status,
       envelope: runtimeEnvelope,
-      summaryText: summary.previewText,
-      countText: summary.entryCount !== undefined ? `${summary.entryCount} item${summary.entryCount === 1 ? '' : 's'}` : null,
-      schemaText: data.showSchema ? `${runtimeEnvelope.schema.id}@v${runtimeEnvelope.schema.version}` : null,
-      metaEntries: data.showMeta ? Object.entries(runtimeEnvelope.meta ?? {}) : [],
+      selectedFields: resolveDisplaySelectedFields(data.selectedFields ?? [], runtimeEnvelope.payload),
+      payloadSummary: formatDisplayValuePreview(runtimeEnvelope.payload),
       issueText: snapshot.errorMessage ?? snapshot.issues?.[0]?.message ?? null,
     };
   }
@@ -46,24 +46,19 @@ function buildResolvedState(
       sourceKind: 'runtime',
       status: 'running',
       envelope: null,
-      summaryText: 'Executing node and waiting for runtime payload.',
-      countText: null,
-      schemaText: null,
-      metaEntries: [],
+      selectedFields: [],
+      payloadSummary: 'Executing node and waiting for runtime payload.',
       issueText: null,
     };
   }
 
   if (previewState?.kind === 'resolved') {
-    const summary = previewState.summary;
     return {
       sourceKind: 'preview',
       status: 'success',
       envelope: previewState.envelope,
-      summaryText: summary.previewText,
-      countText: summary.entryCount !== undefined ? `${summary.entryCount} item${summary.entryCount === 1 ? '' : 's'}` : null,
-      schemaText: data.showSchema ? `${previewState.envelope.schema.id}@v${previewState.envelope.schema.version}` : null,
-      metaEntries: data.showMeta ? Object.entries(previewState.envelope.meta ?? {}) : [],
+      selectedFields: previewState.selectedFields,
+      payloadSummary: formatDisplayValuePreview(previewState.envelope.payload),
       issueText: null,
     };
   }
@@ -72,15 +67,13 @@ function buildResolvedState(
     sourceKind: 'empty',
     status: snapshot?.status ?? 'idle',
     envelope: null,
-    summaryText: previewState?.issues[0]?.message ?? 'No runtime result yet.',
-    countText: null,
-    schemaText: null,
-    metaEntries: [],
+    selectedFields: [],
+    payloadSummary: previewState?.issues[0]?.message ?? 'No runtime result yet.',
     issueText: previewState?.issues[0]?.message ?? null,
   };
 }
 
-function renderJsonValue(value: WorkflowJsonValue, truncateAt: number, depth = 0): React.ReactNode {
+function renderJsonValue(value: WorkflowJsonValue, depth = 0): React.ReactNode {
   if (depth > 1) {
     return <span className="text-slate-500">...</span>;
   }
@@ -95,7 +88,7 @@ function renderJsonValue(value: WorkflowJsonValue, truncateAt: number, depth = 0
         {value.slice(0, 4).map((entry, index) => (
           <div key={index} className="text-[11px] text-slate-300">
             <span className="text-slate-500 mr-2">[{index}]</span>
-            {renderJsonValue(entry, truncateAt, depth + 1)}
+            {renderJsonValue(entry, depth + 1)}
           </div>
         ))}
         {value.length > 4 ? <div className="text-[10px] text-slate-500">+{value.length - 4} more</div> : null}
@@ -111,7 +104,7 @@ function renderJsonValue(value: WorkflowJsonValue, truncateAt: number, depth = 0
           <div key={key} className="text-[11px] text-slate-300 flex gap-2">
             <span className="text-cyan-300 shrink-0">{key}</span>
             <span className="text-slate-500 shrink-0">:</span>
-            <span className="min-w-0">{renderJsonValue(entryValue, truncateAt, depth + 1)}</span>
+            <span className="min-w-0">{renderJsonValue(entryValue, depth + 1)}</span>
           </div>
         ))}
         {entries.length > 5 ? <div className="text-[10px] text-slate-500">+{entries.length - 5} more</div> : null}
@@ -119,14 +112,14 @@ function renderJsonValue(value: WorkflowJsonValue, truncateAt: number, depth = 0
     );
   }
 
-  const text = typeof value === 'string' && value.length > truncateAt ? `${value.slice(0, truncateAt)}...` : String(value);
+  const text = renderDisplayJsonValue(value, depth);
   return <span className="text-slate-200">{text}</span>;
 }
 
 export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> = ({ id, data, inputs, outputs }) => {
   const { nodeSnapshots } = useStudioRuntime();
   const query = useStudioQuery();
-  const [isExpanded, setIsExpanded] = useState(Boolean(data.expandedByDefault));
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const previewState = query.getNodeQueryState<DisplayNodeQueryState>(id);
   const resolvedState = useMemo(
@@ -135,6 +128,7 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
   );
 
   const title = data.nodeName?.trim() || 'Display';
+  const hasSelectedFields = resolvedState.selectedFields.length > 0;
   const badgeClass = resolvedState.sourceKind === 'runtime'
     ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
     : resolvedState.sourceKind === 'preview'
@@ -189,14 +183,9 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
         </div>
 
         <div className="px-4 py-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider">
-            {resolvedState.schemaText ? <span className="px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-700">{resolvedState.schemaText}</span> : null}
-            {resolvedState.countText ? <span className="px-2 py-1 rounded-md bg-slate-900 text-slate-400 border border-slate-700">{resolvedState.countText}</span> : null}
-          </div>
-
           <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Summary</div>
-            <div className="text-xs text-slate-200 break-words">{resolvedState.summaryText}</div>
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Payload Summary</div>
+            <div className="text-xs text-slate-200 break-words">{resolvedState.payloadSummary}</div>
           </div>
 
           {resolvedState.issueText && resolvedState.sourceKind === 'empty' ? (
@@ -205,15 +194,34 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
             </div>
           ) : null}
 
-          {resolvedState.metaEntries.length > 0 ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-slate-500">Meta</div>
-              {resolvedState.metaEntries.slice(0, 4).map(([key, value]) => (
-                <div key={key} className="text-[11px] flex gap-2 text-slate-300">
-                  <span className="text-slate-500 shrink-0">{key}</span>
-                  <span className="min-w-0 break-all">{formatMetaValue(value, data.truncateAt)}</span>
+          {resolvedState.envelope && hasSelectedFields ? (
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500">Selected Fields</div>
+              {resolvedState.selectedFields.map((field) => (
+                <div key={field.id} className={`rounded-xl border p-3 ${field.resolved ? 'border-slate-800 bg-slate-950/50' : 'border-amber-500/20 bg-amber-500/5'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-100 truncate">{field.label}</div>
+                      <div className="mt-1 text-[11px] text-slate-500 break-all">{field.pathText}</div>
+                    </div>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${field.resolved ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-200' : 'border-amber-500/20 bg-amber-500/10 text-amber-200'}`}>
+                      {field.valueKind}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-xs text-slate-200 break-words">
+                    {field.displayText}
+                  </div>
+                  {field.issue ? (
+                    <div className="mt-2 text-[11px] text-amber-200">{field.issue.message}</div>
+                  ) : null}
                 </div>
               ))}
+            </div>
+          ) : null}
+
+          {resolvedState.envelope && !hasSelectedFields ? (
+            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/30 p-3 text-[11px] text-slate-400">
+              Select payload fields in the Display node editor to pin the values you care about here.
             </div>
           ) : null}
 
@@ -228,12 +236,12 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
                 }}
                 className="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] uppercase tracking-wider text-slate-400 hover:bg-slate-900/50 transition-colors"
               >
-                <span>Payload</span>
+                <span>Full Payload</span>
                 <span>{isExpanded ? 'Hide' : 'Show'}</span>
               </button>
               {isExpanded ? (
                 <div className="px-3 pb-3 border-t border-slate-800 pt-3 max-h-52 overflow-y-auto">
-                  {renderJsonValue(resolvedState.envelope.payload, data.truncateAt)}
+                  {renderJsonValue(resolvedState.envelope.payload)}
                 </div>
               ) : null}
             </div>

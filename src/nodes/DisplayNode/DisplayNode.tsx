@@ -3,13 +3,19 @@ import { Eye } from 'lucide-react';
 import { createFlowPort, createJsonPort, GENERIC_JSON_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import type { INodeDefinition, IPort, StudioNodeRuntimeState, NodeExecutionOutputMap } from '../../core/studio/types';
-import { getIncomingEdges } from '../../core/studio/runtimeGraph';
 import type { DisplayNodeQueryState, NodeQueryIssue } from '../../domain/studio/contracts';
-import { parseDisplayNodeDocumentState } from '../../domain/studio/contracts';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import DisplayNodeCanvas from './DisplayNodeCanvas';
-import { createDisplayNodeData, createPayloadSummary, hydrateDisplayNodeData, toDisplayNodeDocumentState, type DisplayNodeData } from './displayNodeModel';
+import DisplayNodeEditor from './DisplayNodeEditor';
+import {
+  buildDisplayAvailableFields,
+  createDisplayNodeData,
+  hydrateDisplayNodeData,
+  resolveDisplaySelectedFields,
+  toDisplayNodeDocumentState,
+  type DisplayNodeData,
+} from './displayNodeModel';
 
 const DISPLAY_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In', 'Control input for runtime execution.', { direction: 'input', required: false }),
@@ -49,7 +55,8 @@ function buildDisplayQueryState(
         sourceNodeId: null,
         sourcePortId: null,
         envelope: null,
-        summary: null,
+        availableFields: [],
+        selectedFields: [],
         issues: [createQueryIssue('query.display.port-mismatch', 'Incoming data is connected, but not to Payload In.', 'warning')],
       };
     }
@@ -60,7 +67,8 @@ function buildDisplayQueryState(
       sourceNodeId: null,
       sourcePortId: null,
       envelope: null,
-      summary: null,
+      availableFields: [],
+      selectedFields: [],
       issues: [createQueryIssue('query.display.missing-edge', 'Connect a data output to Payload In to preview the result.')],
     };
   }
@@ -75,7 +83,8 @@ function buildDisplayQueryState(
       sourceNodeId: boundEdge.sourceNodeId,
       sourcePortId: boundEdge.sourcePortId,
       envelope: null,
-      summary: null,
+      availableFields: [],
+      selectedFields: [],
       issues: [createQueryIssue('query.display.payload-unavailable', 'The upstream payload is not available yet.', 'warning')],
     };
   }
@@ -86,7 +95,8 @@ function buildDisplayQueryState(
     sourceNodeId: boundEdge.sourceNodeId,
     sourcePortId: boundEdge.sourcePortId,
     envelope,
-    summary: createPayloadSummary(envelope.payload, node.data.truncateAt),
+    availableFields: buildDisplayAvailableFields(envelope.payload),
+    selectedFields: resolveDisplaySelectedFields(node.data.selectedFields ?? [], envelope.payload),
     issues: [],
   };
 }
@@ -121,50 +131,7 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
       mode: 'degraded',
       description: 'Display nodes can preview upstream payloads when available, but depend on upstream preview support.',
     },
-    parameters: [
-      {
-        name: 'expandedByDefault',
-        displayName: 'Expanded by Default',
-        valueType: 'boolean',
-        expressionSupport: 'disabled',
-        defaultValue: false,
-        ui: {
-          section: 'Display',
-          helperText: 'Expand the payload section when the node first renders.',
-        },
-      },
-      {
-        name: 'truncateAt',
-        displayName: 'Truncate Length',
-        valueType: 'number',
-        expressionSupport: 'disabled',
-        defaultValue: 180,
-        ui: {
-          section: 'Display',
-          helperText: 'Maximum characters to show in compact summary text.',
-        },
-      },
-      {
-        name: 'showSchema',
-        displayName: 'Show Schema',
-        valueType: 'boolean',
-        expressionSupport: 'disabled',
-        defaultValue: true,
-        ui: {
-          section: 'Display',
-        },
-      },
-      {
-        name: 'showMeta',
-        displayName: 'Show Meta',
-        valueType: 'boolean',
-        expressionSupport: 'disabled',
-        defaultValue: true,
-        ui: {
-          section: 'Display',
-        },
-      },
-    ],
+    parameters: [],
   },
   icon: Eye,
   createInitialData: createDisplayNodeData,
@@ -172,23 +139,13 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
   hydrateData: (instance, baseData) => hydrateDisplayNodeData(baseData, instance),
   dehydrateData: (data) => ({
     displayName: data.nodeName?.trim() || undefined,
-    parameters: {
-      expandedByDefault: data.expandedByDefault,
-      truncateAt: data.truncateAt,
-      showSchema: data.showSchema,
-      showMeta: data.showMeta,
-    },
+    parameters: {},
     bindings: {},
     documentState: toDisplayNodeDocumentState(data) as unknown as Record<string, unknown>,
   }),
   createRuntimeState: (node) => ({
     displayName: node.data.nodeName?.trim() || undefined,
-    parameters: {
-      expandedByDefault: node.data.expandedByDefault,
-      truncateAt: node.data.truncateAt,
-      showSchema: node.data.showSchema,
-      showMeta: node.data.showMeta,
-    },
+    parameters: {},
     bindings: {},
     documentState: toDisplayNodeDocumentState(node.data) as unknown as Record<string, unknown>,
   } satisfies StudioNodeRuntimeState),
@@ -229,6 +186,7 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
     },
   },
   CanvasComponent: DisplayNodeCanvas,
+  EditComponent: DisplayNodeEditor,
 };
 
 export const DisplayNodeDef = defineStudioNode(DisplayNodeDefinition);

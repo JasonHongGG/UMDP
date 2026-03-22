@@ -1,4 +1,5 @@
-import type { ClassInfoPayload, WorkflowJsonEnvelope } from './payloads';
+import type { ClassInfoPayload, WorkflowJsonEnvelope, WorkflowJsonValue } from './payloads';
+import type { DisplayNodePathToken } from './nodes';
 
 export interface NodeQueryIssue {
   severity: 'info' | 'warning' | 'error';
@@ -7,11 +8,27 @@ export interface NodeQueryIssue {
   targetPortId?: string;
 }
 
-export interface DisplayNodePayloadSummary {
+export interface DisplayNodeAvailableField {
+  id: string;
+  label: string;
+  pathTokens: DisplayNodePathToken[];
+  pathText: string;
   valueKind: 'null' | 'primitive' | 'object' | 'array';
   previewText: string;
-  entryCount?: number;
-  sampleKeys?: string[];
+  selectable: boolean;
+  children: DisplayNodeAvailableField[];
+}
+
+export interface DisplayNodeResolvedField {
+  id: string;
+  label: string;
+  pathTokens: DisplayNodePathToken[];
+  pathText: string;
+  resolved: boolean;
+  valueKind: 'missing' | 'null' | 'primitive' | 'object' | 'array';
+  value?: WorkflowJsonValue;
+  displayText: string;
+  issue?: NodeQueryIssue;
 }
 
 export type CallFunctionClassInfoQueryState =
@@ -53,7 +70,8 @@ export type DisplayNodeQueryState =
     sourceNodeId: null;
     sourcePortId: null;
     envelope: null;
-    summary: null;
+    availableFields: [];
+    selectedFields: [];
     issues: [NodeQueryIssue];
   }
   | {
@@ -62,7 +80,8 @@ export type DisplayNodeQueryState =
     sourceNodeId: null;
     sourcePortId: null;
     envelope: null;
-    summary: null;
+    availableFields: [];
+    selectedFields: [];
     issues: [NodeQueryIssue];
   }
   | {
@@ -71,7 +90,8 @@ export type DisplayNodeQueryState =
     sourceNodeId: string;
     sourcePortId: string;
     envelope: null;
-    summary: null;
+    availableFields: [];
+    selectedFields: [];
     issues: [NodeQueryIssue];
   }
   | {
@@ -80,7 +100,8 @@ export type DisplayNodeQueryState =
     sourceNodeId: string;
     sourcePortId: string;
     envelope: WorkflowJsonEnvelope;
-    summary: DisplayNodePayloadSummary;
+    availableFields: DisplayNodeAvailableField[];
+    selectedFields: DisplayNodeResolvedField[];
     issues: [];
   };
 

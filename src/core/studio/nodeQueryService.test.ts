@@ -304,10 +304,12 @@ describe('nodeQueryService', () => {
       type: 'display',
       position: { x: 480, y: 0 },
       data: {
-        expandedByDefault: false,
-        truncateAt: 180,
-        showSchema: true,
-        showMeta: true,
+        selectedFields: [{
+          id: 'selected-method-name',
+          label: 'Method Name',
+          pathTokens: ['method', 'name'],
+          pathText: 'method.name',
+        }],
       },
     });
     context.edges.push({
@@ -334,10 +336,18 @@ describe('nodeQueryService', () => {
           success: false,
         },
       },
-      summary: {
-        valueKind: 'object',
-      },
+      selectedFields: [{
+        label: 'Method Name',
+        pathText: 'method.name',
+        resolved: true,
+        valueKind: 'primitive',
+        value: 'Move',
+      }],
     });
+    expect(queryState.availableFields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ pathText: 'method', valueKind: 'object' }),
+      expect.objectContaining({ pathText: 'success', valueKind: 'primitive' }),
+    ]));
   });
 
   it('prefers runtime snapshots over preview output for downstream display consumers', () => {
@@ -347,10 +357,7 @@ describe('nodeQueryService', () => {
       type: 'display',
       position: { x: 480, y: 0 },
       data: {
-        expandedByDefault: false,
-        truncateAt: 180,
-        showSchema: true,
-        showMeta: true,
+        selectedFields: [],
       },
     });
     context.edges.push({

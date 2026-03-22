@@ -12,6 +12,8 @@ export type {
   ControlConnection,
   DataConnection,
   DisplayNodeDocumentState,
+  DisplayNodePathToken,
+  DisplayNodeSelectedField,
   EditorNodeDocumentState,
   ExpressionReferenceDragPayload,
   ExpressionSource,

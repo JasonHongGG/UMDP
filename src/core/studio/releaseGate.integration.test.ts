@@ -31,12 +31,12 @@ describe('release gate integration', () => {
           parameters: [{ id: parameterId, name: 'speed', type: 'float', source: createLiteralExpressionSource('2.5', 'number') }],
         },
       },
-      { id: 'display-1', type: 'display', position: { x: 360, y: 0 }, data: { truncateAt: 180, expandedByDefault: false, showMeta: false, showSchema: false } },
+      { id: 'display-1', type: 'display', position: { x: 360, y: 0 }, data: { selectedFields: [] } },
     ];
 
     const context: StudioNodeQueryContext = {
       nodes,
-      edges: [{ id: 'edge-params-display', channel: 'data', sourceNodeId: 'params-1', sourcePortId: 'params-out', targetNodeId: 'display-1', targetPortId: 'value-in' }],
+      edges: [{ id: 'edge-params-display', channel: 'data', sourceNodeId: 'params-1', sourcePortId: 'params-out', targetNodeId: 'display-1', targetPortId: 'payload-in' }],
       nodeSnapshots: {},
       runtimeData: {
         classes: [],

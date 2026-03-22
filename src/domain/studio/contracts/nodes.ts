@@ -166,11 +166,17 @@ export interface ParameterNodeDocumentState {
   symbols: ParameterSymbolDefinition[];
 }
 
+export type DisplayNodePathToken = string | number;
+
+export interface DisplayNodeSelectedField {
+  id: string;
+  label: string;
+  pathTokens: DisplayNodePathToken[];
+  pathText: string;
+}
+
 export interface DisplayNodeDocumentState {
-  expandedByDefault: boolean;
-  truncateAt: number;
-  showSchema: boolean;
-  showMeta: boolean;
+  selectedFields: DisplayNodeSelectedField[];
 }
 
 export type IfOperator = 'is' | 'is-not' | 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'starts-with' | 'ends-with';
@@ -219,6 +225,19 @@ function isAllowedIfRightSource(value: unknown): value is ExpressionSource {
 
 function isAllowedForLoopCountSource(value: unknown): value is ExpressionSource {
   return isExpressionSourceLike(value) && (value.kind === 'literal' || value.kind === 'input-expression');
+}
+
+function isDisplayNodePathToken(value: unknown): value is DisplayNodePathToken {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isInteger(value) && value >= 0);
+}
+
+function isDisplayNodeSelectedField(value: unknown): value is DisplayNodeSelectedField {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.label === 'string'
+    && typeof value.pathText === 'string'
+    && Array.isArray(value.pathTokens)
+    && value.pathTokens.every((item) => isDisplayNodePathToken(item));
 }
 
 function isIfOperator(value: unknown): value is IfOperator {
@@ -344,12 +363,9 @@ export function parseDisplayNodeDocumentState(value: unknown): DisplayNodeDocume
   const documentState = isRecord(value) ? value : {};
 
   return {
-    expandedByDefault: typeof documentState.expandedByDefault === 'boolean' ? documentState.expandedByDefault : false,
-    truncateAt: typeof documentState.truncateAt === 'number' && Number.isFinite(documentState.truncateAt)
-      ? Math.max(80, Math.min(800, Math.round(documentState.truncateAt)))
-      : 180,
-    showSchema: typeof documentState.showSchema === 'boolean' ? documentState.showSchema : true,
-    showMeta: typeof documentState.showMeta === 'boolean' ? documentState.showMeta : true,
+    selectedFields: Array.isArray(documentState.selectedFields)
+      ? documentState.selectedFields.flatMap((entry) => isDisplayNodeSelectedField(entry) ? [entry] : [])
+      : [],
   };
 }
 

@@ -31,6 +31,8 @@ export type {
   ClassNodeDocumentState,
   ConnectionDefinition,
   DisplayNodeDocumentState,
+  DisplayNodePathToken,
+  DisplayNodeSelectedField,
   ForLoopNodeDocumentState,
   IfNodeDocumentState,
   IfOperandMode,
@@ -66,7 +68,8 @@ export type {
 } from './execution';
 export type {
   CallFunctionClassInfoQueryState,
-  DisplayNodePayloadSummary,
+  DisplayNodeAvailableField,
+  DisplayNodeResolvedField,
   IfNodeOperandPreview,
   IfNodeOperatorOption,
   IfNodeQueryState,
