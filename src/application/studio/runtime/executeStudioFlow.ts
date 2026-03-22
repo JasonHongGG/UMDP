@@ -1,16 +1,15 @@
 import {
   getOutgoingFlowEdgesForPorts,
-} from './runtimeGraph';
-import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
-import type { ValidationIssue } from '../../domain/studio/contracts';
-import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
+} from '../../../core/studio/runtimeGraph';
+import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '../../../core/studio/types';
+import type { ClassBinding, ClassInfoCatalog } from '../../../domain/studio/editor';
 import {
   createExecutionTiming,
   executePreparedNode,
   prepareNodeExecution,
   canMaterializePassiveJsonNode,
   type GraphInterpreterEnvironment,
-} from './graphInterpreter';
+} from '../../../core/studio/graphInterpreter';
 
 interface ExecuteStudioFlowOptions {
   documentId?: string;
@@ -51,11 +50,6 @@ export function executeStudioFlow({
   let pendingNodeCount = 0;
   let runHasErrors = false;
   let completionPublished = false;
-
-  const getPrimaryIssueMessage = (issues: ValidationIssue[] | undefined, fallback: string) => {
-    const issue = issues?.find((entry) => entry.severity === 'error') ?? issues?.[0];
-    return issue?.message ?? fallback;
-  };
 
   const schedule = (callback: () => void, delay: number) => {
     if (disposed) {

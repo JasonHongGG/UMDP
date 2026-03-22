@@ -6,6 +6,7 @@ pub mod process;
 pub fn get_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool {
     tauri::generate_handler![
         process::fetch_system_processes,
+        process::get_contract_versions,
         process::attach_to_process,
         process::get_workspace_lifecycle,
         metadata::load_all_metadata,

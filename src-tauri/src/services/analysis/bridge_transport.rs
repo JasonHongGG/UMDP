@@ -49,7 +49,10 @@ impl BridgeTransport for AppBridgeTransport<'_> {
     fn execute_raw(&self, app: &AppHandle, request: &BridgeRequest) -> Result<Vec<u8>, String> {
         if request.executable_name == "UnityMonoBridge.exe" {
             let executable = find_bundled_executable(app, request.executable_name)?;
-            return self.state.bridge.execute_runtime_request(executable, &request.args);
+            return self
+                .state
+                .bridge
+                .execute_runtime_request(executable, request.operation.clone(), &request.args);
         }
 
         ProcessBridgeTransport.execute_raw(app, request)

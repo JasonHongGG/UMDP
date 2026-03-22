@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { useStudioGraph, useStudioRuntime, useStudioUi } from '../../../core/studio/StudioContext';
-import { useAnalysisWorkspace } from '../../../domain/analysis/AnalysisWorkspaceContext';
+import { useStudioWorkspace } from '../../../domain/analysis/AnalysisWorkspaceContext';
 import { NodeLayer } from './NodeLayer';
 import { EdgeLayer } from './EdgeLayer';
 
@@ -16,7 +16,7 @@ export function CanvasCore() {
   const { nodes } = useStudioGraph();
   const { activeRun } = useStudioRuntime();
   const { transform, setTransform, openAddModal, registerCanvasElement, clearSelectedNodes, setSelectedNodeIds, getNodeElement } = useStudioUi();
-  const { workspaceLifecycle } = useAnalysisWorkspace();
+  const { workspaceLifecycle } = useStudioWorkspace();
   
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });

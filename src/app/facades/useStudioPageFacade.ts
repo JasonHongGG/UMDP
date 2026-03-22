@@ -1,11 +1,11 @@
-import { useAnalysisWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
+import { useStudioWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
 
 export function useStudioPageFacade() {
   const {
     studioRuntimeData,
     pendingClassNode,
     clearPendingClassNode,
-  } = useAnalysisWorkspace();
+  } = useStudioWorkspace();
 
   return {
     studioRuntimeData,

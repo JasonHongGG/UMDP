@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStableId } from '../../domain/contracts/shared-identity';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createLiteralExpressionSource } from './expression';
-import { executeStudioFlow } from './executionEngine';
-import { getNodeOutputPreview, type StudioNodeQueryContext } from './nodeQueryService';
+import { executeStudioFlow } from '../../application/studio/runtime/executeStudioFlow';
+import { getNodeOutputPreview, type StudioNodeQueryContext } from '../../application/studio/query/nodeQueryService';
 import type { NodeExecutionSnapshot, StudioNode, StudioNodeDefinition } from './types';
 import { studioNodeCatalog } from '../../nodes';
 

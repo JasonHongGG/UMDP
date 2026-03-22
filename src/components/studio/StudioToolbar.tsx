@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Cpu, Download, FolderOpen, History, Play, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
 import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
-import { useAnalysisWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
+import { useStudioWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -35,7 +35,7 @@ export function StudioToolbar() {
     clearWorkflow,
   } = useStudioGraph();
   const { activeRun, runHistory } = useStudioRuntime();
-  const { workspaceLifecycle } = useAnalysisWorkspace();
+  const { workspaceLifecycle } = useStudioWorkspace();
   const [statusMessage, setStatusMessage] = useState<string>('');
 
   const countsLabel = useMemo(() => `${nodes.length} nodes · ${edges.length} edges`, [edges.length, nodes.length]);

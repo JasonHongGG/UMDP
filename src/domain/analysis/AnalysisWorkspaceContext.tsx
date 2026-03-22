@@ -6,10 +6,10 @@ import type {
   RuntimeClassOverlayDescriptor,
 } from './contracts';
 import type { WorkspaceLifecycleState } from '../../shared/contracts';
+import type { SystemContractVersions } from '../../shared/contracts';
 import {
   buildStudioClassCatalog,
   createClassInfoCatalogFromClassDescriptor,
-  createPendingClassNodeRequest,
   type ClassBinding,
   type ClassInfoCatalog,
   type PendingClassNodeRequest,
@@ -19,6 +19,7 @@ import type { StableId } from '../contracts/shared-identity';
 import { formatHexAddress } from '../../core/addressFormat';
 import type { ResolvedMemberRuntimeValue } from '../../core/studio/contracts';
 import { useAnalysisRepository } from './hooks/useAnalysisRepository';
+import { useAnalysisWorkspaceNavigation } from './hooks/useAnalysisWorkspaceNavigation';
 import { useAnalysisRuntimeState } from './hooks/useAnalysisRuntimeState';
 import { useAnalysisSessionState } from './hooks/useAnalysisSessionState';
 import type {
@@ -59,6 +60,7 @@ interface AnalysisWorkspaceContextValue {
   attachError: string | null;
   analysisSnapshot: AnalysisSnapshot | null;
   workspaceLifecycle: WorkspaceLifecycleState;
+  contractVersions: SystemContractVersions | null;
   runtimeOverlays: Record<string, RuntimeClassOverlayDescriptor>;
   images: AnalysisImageInfo[];
   classesByImage: Record<string, AnalysisClassSummary[]>;
@@ -123,21 +125,88 @@ interface AnalysisWorkspaceContextValue {
   clearPendingScrollTarget: () => void;
 }
 
+type WorkspaceShellContextValue = Pick<AnalysisWorkspaceContextValue,
+  'processSession'
+  | 'contractVersions'
+  | 'workspaceLifecycle'
+  | 'activePage'
+  | 'setActivePage'
+>;
+
+type StudioWorkspaceContextValue = Pick<AnalysisWorkspaceContextValue,
+  'studioRuntimeData'
+  | 'pendingClassNode'
+  | 'clearPendingClassNode'
+  | 'workspaceLifecycle'
+>;
+
+type InspectorWorkspaceContextValue = Pick<AnalysisWorkspaceContextValue,
+  'attachError'
+  | 'images'
+  | 'classLookupMap'
+  | 'selectedImageStableId'
+  | 'setSelectedImageStableId'
+  | 'loadingImages'
+  | 'imageSearch'
+  | 'setImageSearch'
+  | 'classSearch'
+  | 'setClassSearch'
+  | 'filteredImages'
+  | 'selectedImage'
+  | 'currentClasses'
+  | 'filteredClasses'
+  | 'tabs'
+  | 'activeTabIndex'
+  | 'setActiveTabIndex'
+  | 'openTabForClass'
+  | 'handleCloseTab'
+  | 'activeTab'
+  | 'selectedClass'
+  | 'displayStaticFields'
+  | 'displayFields'
+  | 'activeRuntimeFieldError'
+  | 'isLoadingRuntimeFields'
+  | 'isGlobalSearchOpen'
+  | 'setGlobalSearchOpen'
+  | 'globalSearchMode'
+  | 'setGlobalSearchMode'
+  | 'globalSearchQuery'
+  | 'setGlobalSearchQuery'
+  | 'globalSearchResults'
+  | 'isGlobalSearching'
+  | 'handleGlobalSearchResultClick'
+  | 'isReferenceOpen'
+  | 'setReferenceOpen'
+  | 'referenceSearchMode'
+  | 'setReferenceSearchMode'
+  | 'referenceTargetInput'
+  | 'setReferenceTargetInput'
+  | 'referenceTargetError'
+  | 'referenceResults'
+  | 'isReferenceSearching'
+  | 'executeReferenceSearch'
+  | 'handleReferenceResultClick'
+  | 'setReferenceTargetFromClass'
+  | 'handleAddClassToStudio'
+  | 'pendingScrollImageStableId'
+  | 'pendingScrollClassStableId'
+  | 'clearPendingScrollTarget'
+>;
+
 const AnalysisWorkspaceContext = createContext<AnalysisWorkspaceContextValue | null>(null);
+const WorkspaceShellContext = createContext<WorkspaceShellContextValue | null>(null);
+const StudioWorkspaceContext = createContext<StudioWorkspaceContextValue | null>(null);
+const InspectorWorkspaceContext = createContext<InspectorWorkspaceContextValue | null>(null);
 
 export function AnalysisWorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [selectedImageStableId, setSelectedImageStableId] = useState<StableId | null>(null);
+  const [contractVersions, setContractVersions] = useState<SystemContractVersions | null>(null);
 
   const [tabs, setTabs] = useState<InspectorTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
 
-  const [activePage, setActivePage] = useState<ActivePage>('inspector');
-  const [pendingClassNode, setPendingClassNode] = useState<PendingClassNodeRequest | null>(null);
-
   const [imageSearch, setImageSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
-  const [pendingScrollImageStableId, setPendingScrollImageStableId] = useState<StableId | null>(null);
-  const [pendingScrollClassStableId, setPendingScrollClassStableId] = useState<StableId | null>(null);
 
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [globalSearchMode, setGlobalSearchMode] = useState<GlobalSearchMode>('Class');
@@ -151,6 +220,7 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   const [referenceTargetError, setReferenceTargetError] = useState<string | null>(null);
   const [referenceResults, setReferenceResults] = useState<ClassReferenceResult[]>([]);
   const [isReferenceSearching, setIsReferenceSearching] = useState(false);
+  const resetNavigationStateRef = useRef<() => void>(() => undefined);
 
   const repository = useAnalysisRepository();
 
@@ -158,14 +228,12 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     setSelectedImageStableId(null);
     setTabs([]);
     setActiveTabIndex(-1);
-    setPendingClassNode(null);
+    resetNavigationStateRef.current();
     setGlobalSearchQuery('');
     setGlobalSearchResults([]);
     setReferenceTargetInput('');
     setReferenceResults([]);
     setReferenceTargetError(null);
-    setPendingScrollImageStableId(null);
-    setPendingScrollClassStableId(null);
   }, []);
 
   const {
@@ -175,6 +243,13 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     loadingImages,
     workspaceLifecycle,
   } = useAnalysisSessionState({ repository, onResetWorkspace: resetWorkspace });
+
+  useEffect(() => {
+    repository
+      .getContractVersions()
+      .then((versions) => setContractVersions(versions))
+      .catch((error) => console.error('Failed to load contract versions', error));
+  }, [repository]);
 
   const {
     runtimeOverlays,
@@ -295,6 +370,29 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
       ]),
     );
   }, [analysisSnapshot, runtimeOverlays]);
+
+  const {
+    activePage,
+    setActivePage,
+    pendingClassNode,
+    clearPendingClassNode,
+    pendingScrollImageStableId,
+    pendingScrollClassStableId,
+    clearPendingScrollTarget,
+    handleAddClassToStudio,
+    handleOpenInspectorForBinding,
+    setPendingScrollImageStableId,
+    setPendingScrollClassStableId,
+  } = useAnalysisWorkspaceNavigation({
+    classInfoCatalogByStableId,
+    setSelectedImageStableId,
+    openTabForClass,
+  });
+
+  resetNavigationStateRef.current = () => {
+    clearPendingClassNode();
+    clearPendingScrollTarget();
+  };
 
   const staticFieldAddressByClassAndMember = useMemo(() => {
     if (!analysisSnapshot) {
@@ -633,33 +731,17 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     setIsGlobalSearchOpen(false);
   }, []);
 
-  const handleAddClassToStudio = useCallback((binding: ClassBinding) => {
-    const availableInfo = classInfoCatalogByStableId[binding.classStableId];
-    if (!availableInfo) {
-      return;
-    }
-
-    setPendingClassNode(createPendingClassNodeRequest(binding));
+  const handleAddClassToStudioAndClosePanels = useCallback((binding: ClassBinding) => {
+    handleAddClassToStudio(binding);
     setIsReferenceOpen(false);
     setIsGlobalSearchOpen(false);
-    setActivePage('studio');
-  }, [classInfoCatalogByStableId]);
+  }, [handleAddClassToStudio]);
 
-  const handleOpenInspectorForBinding = useCallback((binding: ClassBinding) => {
-    setSelectedImageStableId(binding.imageStableId);
-    openTabForClass({
-      imageStableId: binding.imageStableId,
-      classStableId: binding.classStableId,
-      name: binding.name,
-      namespace: binding.namespace,
-      imageName: binding.imageName,
-    });
-    setPendingScrollImageStableId(binding.imageStableId);
-    setPendingScrollClassStableId(binding.classStableId);
+  const handleOpenInspectorForBindingAndClosePanels = useCallback((binding: ClassBinding) => {
+    handleOpenInspectorForBinding(binding);
     setIsReferenceOpen(false);
     setIsGlobalSearchOpen(false);
-    setActivePage('inspector');
-  }, [openTabForClass]);
+  }, [handleOpenInspectorForBinding]);
 
   const studioRuntimeData = useMemo(() => createStudioRuntimeDataState({
     classes: studioClassCatalogEntries,
@@ -668,12 +750,12 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     runtimeMemberValuesByClassAndAddress,
     ensureRuntimeOverlayLoaded,
     ensureRuntimeInstanceFieldsLoaded,
-    openInspectorForBinding: handleOpenInspectorForBinding,
+    openInspectorForBinding: handleOpenInspectorForBindingAndClosePanels,
   }), [
     classInfoCatalogByStableId,
     ensureRuntimeInstanceFieldsLoaded,
     ensureRuntimeOverlayLoaded,
-    handleOpenInspectorForBinding,
+    handleOpenInspectorForBindingAndClosePanels,
     runtimeMemberValuesByClassAndAddress,
     staticFieldAddressByClassAndMember,
     studioClassCatalogEntries,
@@ -693,28 +775,28 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     }
   }, []);
 
-  const value = useMemo<AnalysisWorkspaceContextValue>(() => ({
+  const workspaceShellValue = useMemo<WorkspaceShellContextValue>(() => ({
     processSession,
-    attachError,
-    analysisSnapshot,
+    contractVersions,
     workspaceLifecycle,
-    runtimeOverlays,
-    images,
-    classesByImage,
-    classDetailsByStableId,
-    staticFieldAddressByClassAndMember,
-    studioClassCatalogEntries,
-    classInfoCatalogByStableId,
+    activePage,
+    setActivePage,
+  }), [activePage, contractVersions, processSession, workspaceLifecycle]);
+
+  const studioWorkspaceValue = useMemo<StudioWorkspaceContextValue>(() => ({
     studioRuntimeData,
-    ensureRuntimeOverlayLoaded,
+    pendingClassNode,
+    clearPendingClassNode,
+    workspaceLifecycle,
+  }), [clearPendingClassNode, pendingClassNode, studioRuntimeData, workspaceLifecycle]);
+
+  const inspectorWorkspaceValue = useMemo<InspectorWorkspaceContextValue>(() => ({
+    attachError,
+    images,
     classLookupMap,
     selectedImageStableId,
     setSelectedImageStableId,
     loadingImages,
-    activePage,
-    setActivePage,
-    pendingClassNode,
-    clearPendingClassNode: () => setPendingClassNode(null),
     imageSearch,
     setImageSearch,
     classSearch,
@@ -755,14 +837,124 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     executeReferenceSearch,
     handleReferenceResultClick,
     setReferenceTargetFromClass,
-    handleAddClassToStudio,
-    handleOpenInspectorForBinding,
+    handleAddClassToStudio: handleAddClassToStudioAndClosePanels,
     pendingScrollImageStableId,
     pendingScrollClassStableId,
-    clearPendingScrollTarget: () => {
-      setPendingScrollImageStableId(null);
-      setPendingScrollClassStableId(null);
-    },
+    clearPendingScrollTarget,
+  }), [
+    activeRuntimeFieldError,
+    activeTab,
+    activeTabIndex,
+    attachError,
+    classLookupMap,
+    classSearch,
+    currentClasses,
+    displayFields,
+    displayStaticFields,
+    executeReferenceSearch,
+    filteredClasses,
+    filteredImages,
+    globalSearchMode,
+    globalSearchQuery,
+    globalSearchResults,
+    clearPendingScrollTarget,
+    handleAddClassToStudioAndClosePanels,
+    handleCloseTab,
+    handleGlobalSearchResultClick,
+    handleReferenceResultClick,
+    imageSearch,
+    images,
+    isGlobalSearchOpen,
+    isGlobalSearching,
+    isLoadingRuntimeFields,
+    isReferenceOpen,
+    isReferenceSearching,
+    loadingImages,
+    openTabForClass,
+    pendingScrollClassStableId,
+    pendingScrollImageStableId,
+    referenceResults,
+    referenceSearchMode,
+    referenceTargetError,
+    referenceTargetInput,
+    selectedClass,
+    selectedImage,
+    selectedImageStableId,
+    setGlobalSearchOpen,
+    setReferenceOpen,
+    setReferenceSearchMode,
+    setReferenceTargetFromClass,
+    tabs,
+  ]);
+
+  const value = useMemo<AnalysisWorkspaceContextValue>(() => ({
+    processSession,
+    attachError,
+    analysisSnapshot,
+    workspaceLifecycle,
+    contractVersions,
+    runtimeOverlays,
+    images,
+    classesByImage,
+    classDetailsByStableId,
+    staticFieldAddressByClassAndMember,
+    studioClassCatalogEntries,
+    classInfoCatalogByStableId,
+    studioRuntimeData,
+    ensureRuntimeOverlayLoaded,
+    classLookupMap,
+    selectedImageStableId,
+    setSelectedImageStableId,
+    loadingImages,
+    activePage,
+    setActivePage,
+    pendingClassNode,
+    clearPendingClassNode,
+    imageSearch,
+    setImageSearch,
+    classSearch,
+    setClassSearch,
+    filteredImages,
+    selectedImage,
+    currentClasses,
+    filteredClasses,
+    tabs,
+    activeTabIndex,
+    setActiveTabIndex,
+    openTabForClass,
+    handleCloseTab,
+    activeTab,
+    selectedClass,
+    displayStaticFields,
+    displayFields,
+    activeRuntimeFieldError,
+    isLoadingRuntimeFields,
+    isGlobalSearchOpen,
+    setGlobalSearchOpen,
+    globalSearchMode,
+    setGlobalSearchMode,
+    globalSearchQuery,
+    setGlobalSearchQuery,
+    globalSearchResults,
+    isGlobalSearching,
+    handleGlobalSearchResultClick,
+    isReferenceOpen,
+    setReferenceOpen,
+    referenceSearchMode,
+    setReferenceSearchMode,
+    referenceTargetInput,
+    setReferenceTargetInput,
+    referenceTargetError,
+    referenceResults,
+    isReferenceSearching,
+    executeReferenceSearch,
+    handleReferenceResultClick,
+    setReferenceTargetFromClass,
+    handleAddClassToStudio: handleAddClassToStudioAndClosePanels,
+    handleOpenInspectorForBinding: handleOpenInspectorForBindingAndClosePanels,
+    pendingScrollImageStableId,
+    pendingScrollClassStableId,
+    clearPendingScrollTarget,
   }), [
     activePage,
     activeRuntimeFieldError,
@@ -775,19 +967,22 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     classLookupMap,
     classSearch,
     classesByImage,
+    contractVersions,
     currentClasses,
     displayFields,
     displayStaticFields,
+    clearPendingClassNode,
+    clearPendingScrollTarget,
     executeReferenceSearch,
     filteredClasses,
     filteredImages,
     globalSearchMode,
     globalSearchQuery,
     globalSearchResults,
-    handleAddClassToStudio,
+    handleAddClassToStudioAndClosePanels,
     handleCloseTab,
     handleGlobalSearchResultClick,
-    handleOpenInspectorForBinding,
+    handleOpenInspectorForBindingAndClosePanels,
     handleReferenceResultClick,
     imageSearch,
     images,
@@ -823,10 +1018,40 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
   ]);
 
   return (
-    <AnalysisWorkspaceContext.Provider value={value}>
-      {children}
-    </AnalysisWorkspaceContext.Provider>
+    <WorkspaceShellContext.Provider value={workspaceShellValue}>
+      <StudioWorkspaceContext.Provider value={studioWorkspaceValue}>
+        <InspectorWorkspaceContext.Provider value={inspectorWorkspaceValue}>
+          <AnalysisWorkspaceContext.Provider value={value}>
+            {children}
+          </AnalysisWorkspaceContext.Provider>
+        </InspectorWorkspaceContext.Provider>
+      </StudioWorkspaceContext.Provider>
+    </WorkspaceShellContext.Provider>
   );
+}
+
+export function useWorkspaceShellState() {
+  const context = useContext(WorkspaceShellContext);
+  if (!context) {
+    throw new Error('useWorkspaceShellState must be used within an AnalysisWorkspaceProvider');
+  }
+  return context;
+}
+
+export function useStudioWorkspace() {
+  const context = useContext(StudioWorkspaceContext);
+  if (!context) {
+    throw new Error('useStudioWorkspace must be used within an AnalysisWorkspaceProvider');
+  }
+  return context;
+}
+
+export function useInspectorWorkspace() {
+  const context = useContext(InspectorWorkspaceContext);
+  if (!context) {
+    throw new Error('useInspectorWorkspace must be used within an AnalysisWorkspaceProvider');
+  }
+  return context;
 }
 
 export function useAnalysisWorkspace() {

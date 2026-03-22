@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLiteralExpressionSource } from './expression';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
-import { executeStudioFlow } from './executionEngine';
+import { executeStudioFlow } from '../../application/studio/runtime/executeStudioFlow';
 import { NodeExecutionSnapshot, StudioNodeDefinition } from './types';
 import ForLoopNodeDef from '../../nodes/ForLoopNode/ForLoopNode';
 

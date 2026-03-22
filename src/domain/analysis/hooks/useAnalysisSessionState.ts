@@ -1,9 +1,9 @@
-import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useState } from 'react';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import type { WorkspaceLifecycleState } from '../../../shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '../../../app/shell/workspaceLifecycle';
+import { onProcessSelected } from '../../../infrastructure/tauri/TauriWorkspaceGateway';
 
 interface UseAnalysisSessionStateOptions {
   repository: AnalysisRepository;
@@ -68,13 +68,13 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
   }, [refreshWorkspaceLifecycle]);
 
   useEffect(() => {
-    const unlisten = listen<ProcessInfo>('process-selected', async (event) => {
+    const unlisten = onProcessSelected(async (process) => {
       setAttachError(null);
       setLoadingImages(true);
       try {
         const session = await repository.attachToProcess({
-          pid: event.payload.pid,
-          name: event.payload.name,
+          pid: process.pid,
+          name: process.name,
         });
 
         setProcessSession(session);

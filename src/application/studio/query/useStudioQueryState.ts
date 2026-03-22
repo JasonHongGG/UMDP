@@ -6,9 +6,9 @@ import {
   getNodeQueryState,
   type InputPortBindingState,
 } from './nodeQueryService';
-import type { StudioNodeQueryContext } from './queryTypes';
-import type { StudioRuntimeDataState } from './runtimeData';
-import type { NodeExecutionOutputMap, NodeExecutionSnapshot, StudioEdge, StudioNode } from './types';
+import type { StudioNodeQueryContext } from '../../../core/studio/queryTypes';
+import type { StudioRuntimeDataState } from '../../../core/studio/runtimeData';
+import type { NodeExecutionOutputMap, NodeExecutionSnapshot, StudioEdge, StudioNode } from '../../../core/studio/types';
 
 export interface StudioQueryState {
   context: StudioNodeQueryContext;

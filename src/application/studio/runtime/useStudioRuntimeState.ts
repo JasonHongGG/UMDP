@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GraphDocument } from '../../domain/studio/contracts';
-import { executeStudioFlow } from './executionEngine';
-import { StudioRuntimeDataState } from './runtimeData';
-import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from './types';
+import type { GraphDocument } from '../../../domain/studio/contracts';
+import { executeStudioFlow } from './executeStudioFlow';
+import { StudioRuntimeDataState } from '../../../core/studio/runtimeData';
+import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '../../../core/studio/types';
 
 export type StudioExecutionRunStatus = 'running' | 'success' | 'error' | 'aborted';
 

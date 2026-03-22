@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createInputExpressionSource, createLiteralExpressionSource, resolveExpressionSource } from './expression';
-import { getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, getNodePreviewCapability, getNodeQuerySnapshot, getNodeQueryState, type StudioNodeQueryContext } from './nodeQueryService';
+import { getConnectedClassInfoPayload, getNodeInputBindingStates, getNodeOutputPreview, getNodePreviewCapability, getNodeQuerySnapshot, getNodeQueryState, type StudioNodeQueryContext } from '../../application/studio/query/nodeQueryService';
 import type { StudioRuntimeDataState } from './runtimeData';
 import type { StudioEdge, StudioNode } from './types';
 import {

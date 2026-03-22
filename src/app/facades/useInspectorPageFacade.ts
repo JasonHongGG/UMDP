@@ -1,4 +1,4 @@
-import { useAnalysisWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
+import { useInspectorWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
 
 export function useInspectorPageFacade() {
   const {
@@ -52,7 +52,7 @@ export function useInspectorPageFacade() {
     pendingScrollImageStableId,
     pendingScrollClassStableId,
     clearPendingScrollTarget,
-  } = useAnalysisWorkspace();
+  } = useInspectorWorkspace();
 
   return {
     attachError,

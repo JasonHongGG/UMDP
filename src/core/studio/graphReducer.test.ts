@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphDocument, NodeInstance } from '../../domain/studio/contracts';
-import { createEmptyGraphDocument } from './persistence';
+import { createEmptyGraphDocument } from '../../infrastructure/studio/persistence/graphPersistence';
 import { reduceStudioGraphDocument } from './graphReducer';
 
 function createNode(id: string): NodeInstance {

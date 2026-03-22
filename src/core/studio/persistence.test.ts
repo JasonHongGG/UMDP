@@ -8,14 +8,14 @@ import {
   readStoredGraphDocument,
   serializeGraphDocument,
   writeStoredGraphDocument,
-} from './persistence';
+} from '../../infrastructure/studio/persistence/graphPersistence';
 import {
   bootstrapStudioPersistencePolicy,
   readStudioWorkflowPersistenceSnapshot,
   readStudioWorkflowSlot,
   resetStudioWorkflowPersistence,
   writeStudioWorkflowSlot,
-} from './persistencePolicy';
+} from '../../infrastructure/studio/persistence/studioWorkflowPersistence';
 
 describe('studio persistence', () => {
   beforeEach(() => {
@@ -117,12 +117,26 @@ describe('studio persistence', () => {
     const record = readStoredGraphDocument('studio.test.workflow');
 
     expect(savedAt).toBe(1_700_000_000_000);
-    expect(record).toEqual({
-      savedAt: 1_700_000_000_000,
-      document,
-    });
+    expect(record?.savedAt).toBe(1_700_000_000_000);
+    expect(record?.envelope.document).toEqual(document);
+    expect(record?.envelope.format).toBe('studio-graph');
+    expect(record?.checksum.startsWith('djb2:')).toBe(true);
 
     nowSpy.mockRestore();
+  });
+
+  it('rejects stored workflow records when envelope integrity is corrupted', () => {
+    const document = createEmptyGraphDocument();
+    writeStoredGraphDocument('studio.test.workflow', document);
+
+    const raw = window.localStorage.getItem('studio.test.workflow');
+    expect(raw).not.toBeNull();
+
+    const parsed = JSON.parse(raw ?? '{}') as { envelope: { document: { id: string } } };
+    parsed.envelope.document.id = 'tampered';
+    window.localStorage.setItem('studio.test.workflow', JSON.stringify(parsed));
+
+    expect(readStoredGraphDocument('studio.test.workflow')).toBeNull();
   });
 
   it('clears stored workflow records from localStorage', () => {
@@ -134,17 +148,21 @@ describe('studio persistence', () => {
     expect(readStoredGraphDocument('studio.test.workflow')).toBeNull();
   });
 
-  it('boots v2 persistence by removing legacy v1 slots', () => {
+  it('boots v3 persistence by removing legacy v1 and v2 slots', () => {
     window.localStorage.setItem('unity-mono-studio.workflow.autosave.v1', '{"legacy":true}');
     window.localStorage.setItem('unity-mono-studio.workflow.manual-save.v1', '{"legacy":true}');
+    window.localStorage.setItem('unity-mono-studio.workflow.autosave.v2', '{"legacy":true}');
+    window.localStorage.setItem('unity-mono-studio.workflow.manual-save.v2', '{"legacy":true}');
 
     bootstrapStudioPersistencePolicy();
 
     expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v1')).toBeNull();
     expect(window.localStorage.getItem('unity-mono-studio.workflow.manual-save.v1')).toBeNull();
+    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v2')).toBeNull();
+    expect(window.localStorage.getItem('unity-mono-studio.workflow.manual-save.v2')).toBeNull();
   });
 
-  it('reads and writes v2 workflow slots through the persistence policy', () => {
+  it('reads and writes v3 workflow slots through the persistence policy', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const document = createEmptyGraphDocument();
     document.id = 'workflow-v2';
@@ -154,13 +172,13 @@ describe('studio persistence', () => {
     const snapshot = readStudioWorkflowPersistenceSnapshot();
 
     expect(savedAt).toBe(1_800_000_000_000);
-    expect(manualRecord?.document.id).toBe('workflow-v2');
+    expect(manualRecord?.envelope.document.id).toBe('workflow-v2');
     expect(snapshot.manualSave?.savedAt).toBe(1_800_000_000_000);
 
     nowSpy.mockRestore();
   });
 
-  it('resets v2 workflow slots through the persistence policy', () => {
+  it('resets v3 workflow slots through the persistence policy', () => {
     writeStudioWorkflowSlot('autosave', createEmptyGraphDocument());
     writeStudioWorkflowSlot('manual-save', createEmptyGraphDocument());
 

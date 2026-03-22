@@ -7,11 +7,11 @@ export interface GraphDocumentEnvelope {
   document: GraphDocument;
 }
 
-export function createGraphDocumentEnvelope(document: GraphDocument): GraphDocumentEnvelope {
+export function createGraphDocumentEnvelope(document: GraphDocument, savedAt = new Date().toISOString()): GraphDocumentEnvelope {
   return {
     format: 'studio-graph',
     schemaVersion: 1,
-    savedAt: new Date().toISOString(),
+    savedAt,
     document,
   };
 }

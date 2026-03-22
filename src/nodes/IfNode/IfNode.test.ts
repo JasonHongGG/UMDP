@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInputExpressionSource, createLiteralExpressionSource } from '../../core/studio/expression';
-import { executeStudioFlow } from '../../core/studio/executionEngine';
+import { executeStudioFlow } from '../../application/studio/runtime/executeStudioFlow';
 import { initializeStudioNodeRegistry } from '../../core/studio/NodeRegistry';
-import { getNodeQueryState, type StudioNodeQueryContext } from '../../core/studio/nodeQueryService';
+import { getNodeQueryState, type StudioNodeQueryContext } from '../../application/studio/query/nodeQueryService';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from '../../core/studio/contracts';
 import type { StudioRuntimeDataState } from '../../core/studio/runtimeData';
 import type { StudioNodeDefinition } from '../../core/studio/types';

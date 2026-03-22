@@ -27,13 +27,13 @@ import {
   cloneGraphDocument,
   createEmptyGraphDocument,
   serializeGraphDocument,
-} from './persistence';
+} from '../../infrastructure/studio/persistence/graphPersistence';
 import {
   readStudioWorkflowPersistenceSnapshot,
   readStudioWorkflowSlot,
   resetStudioWorkflowPersistence,
   writeStudioWorkflowSlot,
-} from './persistencePolicy';
+} from '../../infrastructure/studio/persistence/studioWorkflowPersistence';
 import { BaseNodeData, ConnectPortsOptions, getConnectionChannelForPortType, NodeTransform, StudioEdge, StudioNode, StudioNodeDefinition } from './types';
 
 const EMPTY_WORKFLOW_SNAPSHOT = serializeGraphDocument(createEmptyGraphDocument());
@@ -147,12 +147,12 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
     if (manualRecord) {
       setHasSavedWorkflow(true);
       setLastSavedAt(manualRecord.savedAt);
-      setSavedDocumentSnapshot(serializeGraphDocument(manualRecord.document));
+      setSavedDocumentSnapshot(serializeGraphDocument(manualRecord.envelope.document));
     }
 
     const autosaveRecord = autosave;
     if (autosaveRecord) {
-      replaceDocumentState(autosaveRecord.document, {
+      replaceDocumentState(autosaveRecord.envelope.document, {
         resetHistory: true,
         loadedAt: autosaveRecord.savedAt,
       });
@@ -367,8 +367,8 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
 
     setHasSavedWorkflow(true);
     setLastSavedAt(record.savedAt);
-    setSavedDocumentSnapshot(serializeGraphDocument(record.document));
-    replaceDocumentState(record.document, {
+    setSavedDocumentSnapshot(serializeGraphDocument(record.envelope.document));
+    replaceDocumentState(record.envelope.document, {
       resetHistory: true,
       loadedAt: Date.now(),
     });

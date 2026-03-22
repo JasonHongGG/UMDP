@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { emit, listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { ProcessInfo } from './types';
+import {
+  emitProcessSelected,
+  fetchSystemProcesses,
+  onRefreshProcesses,
+} from './infrastructure/tauri/TauriWorkspaceGateway';
+import {
+  hideCurrentWindow,
+  onCurrentWindowFocusChanged,
+} from './infrastructure/tauri/TauriWindowGateway';
 import './styles.css';
 
 export default function ProcessSelectorApp() {
@@ -27,27 +33,26 @@ export default function ProcessSelectorApp() {
 
   useEffect(() => {
     const load = async () => {
-      const next = await invoke<ProcessInfo[]>('fetch_system_processes');
+      const next = await fetchSystemProcesses();
       setProcesses(next);
     };
 
     load().catch((error) => console.error('Failed to load processes', error));
     setTimeout(() => inputRef.current?.focus(), 50);
 
-    const win = getCurrentWindow();
     let unlistenFocus: (() => void) | undefined;
 
     const timer = setTimeout(() => {
-      win.onFocusChanged(({ payload }) => {
-        if (!payload) {
-          win.hide().catch(() => undefined);
+      onCurrentWindowFocusChanged((focused) => {
+        if (!focused) {
+          hideCurrentWindow().catch(() => undefined);
         }
       }).then((dispose) => {
         unlistenFocus = dispose;
       }).catch(() => undefined);
     }, 300);
 
-    const refreshPromise = listen('refresh-processes', () => {
+    const refreshPromise = onRefreshProcesses(() => {
       load().catch((error) => console.error('Failed to refresh processes', error));
       setTimeout(() => inputRef.current?.focus(), 50);
     });
@@ -65,14 +70,14 @@ export default function ProcessSelectorApp() {
   }, [selectedIndex]);
 
   const selectProcess = async (process: ProcessInfo) => {
-    await emit('process-selected', process);
-    await getCurrentWindow().hide();
+    await emitProcessSelected(process);
+    await hideCurrentWindow();
     setSearch('');
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
-      getCurrentWindow().hide().catch(() => undefined);
+      hideCurrentWindow().catch(() => undefined);
       return;
     }
 

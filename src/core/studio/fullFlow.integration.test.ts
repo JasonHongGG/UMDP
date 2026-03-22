@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClassStableId, createImageStableId, createMethodStableId, createStableId } from '../../domain/contracts/shared-identity';
 import { createLiteralExpressionSource } from './expression';
-import { executeStudioFlow } from './executionEngine';
+import { executeStudioFlow } from '../../application/studio/runtime/executeStudioFlow';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import type { NodeExecutionSnapshot, StudioNode } from './types';
 import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { Box } from 'lucide-react';
 import { formatHexAddress } from '../../core/addressFormat';
 import {
@@ -17,6 +16,7 @@ import type { RuntimeInstanceFieldSnapshot } from '../../domain/analysis/contrac
 import type { ValidationIssue, WorkflowJsonValue } from '../../domain/studio/contracts';
 import { parseClassNodeDocumentState } from '../../domain/studio/contracts';
 import { reconcileClassInfoSelection } from '../../domain/studio/editor';
+import { getRuntimeInstanceFields } from '../../infrastructure/tauri/TauriRuntimeGateway';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { ClassNodeBindingEditor } from './ClassNodeBindingEditor';
 import { ClassNodeCanvas } from './ClassNodeCanvas';
@@ -282,10 +282,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
 
       if (binding && normalizedInstanceAddress && selection.members.length > 0) {
         try {
-          const snapshot = await invoke<RuntimeInstanceFieldSnapshot>('get_runtime_instance_fields', {
-            classStableId: binding.classStableId,
-            instanceAddress: normalizedInstanceAddress,
-          });
+          const snapshot = await getRuntimeInstanceFields(binding.classStableId, normalizedInstanceAddress);
           resolvedMemberValues = createResolvedMemberValueMap(snapshot);
         } catch (error) {
           issues = [

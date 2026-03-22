@@ -1,10 +1,10 @@
-import type { GraphDocument } from '../../domain/studio/contracts';
+import type { GraphDocument } from '../../../domain/studio/contracts';
 import {
   clearStoredGraphDocument,
   readStoredGraphDocument,
   writeStoredGraphDocument,
   type StoredGraphDocumentRecord,
-} from './persistence';
+} from './graphPersistence';
 
 export type StudioWorkflowPersistenceSlot = 'autosave' | 'manual-save';
 
@@ -12,11 +12,13 @@ const STUDIO_PERSISTENCE_BOOTSTRAP_KEY = 'unity-mono-studio.workflow.persistence
 const LEGACY_STORAGE_KEYS = [
   'unity-mono-studio.workflow.autosave.v1',
   'unity-mono-studio.workflow.manual-save.v1',
+  'unity-mono-studio.workflow.autosave.v2',
+  'unity-mono-studio.workflow.manual-save.v2',
 ];
 
 const STORAGE_KEYS: Record<StudioWorkflowPersistenceSlot, string> = {
-  autosave: 'unity-mono-studio.workflow.autosave.v2',
-  'manual-save': 'unity-mono-studio.workflow.manual-save.v2',
+  autosave: 'unity-mono-studio.workflow.autosave.v3',
+  'manual-save': 'unity-mono-studio.workflow.manual-save.v3',
 };
 
 function canUseLocalStorage() {

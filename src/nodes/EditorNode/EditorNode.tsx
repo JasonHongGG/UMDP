@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { PencilLine } from 'lucide-react';
 import {
   CLASS_INFO_SCHEMA,
@@ -22,6 +21,7 @@ import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import { getClassInfoPayloadFromValue } from '../CallFunctionNode/callFunctionNodeModel';
+import { setRuntimeFieldValue } from '../../infrastructure/tauri/TauriRuntimeGateway';
 import { EditorNodeCanvas } from './EditorNodeCanvas';
 import { EditorNodeEditor } from './EditorNodeEditor';
 import {
@@ -419,7 +419,7 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
             serializedValue: parsedValue.serializedValue,
           };
 
-          const result = await invoke<RuntimeFieldSetResult>('set_runtime_field_value', { request });
+          const result = await setRuntimeFieldValue(request);
           targetResults.push({
             memberStableId: target.memberStableId,
             name: target.memberName,

@@ -1,25 +1,22 @@
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useAnalysisWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
+import { useWorkspaceShellState } from '../../domain/analysis/AnalysisWorkspaceContext';
+import { openProcessSelectorWindow } from '../../infrastructure/tauri/TauriWorkspaceGateway';
 
 export function useWorkspaceShellFacade() {
   const {
     processSession,
+    contractVersions,
     workspaceLifecycle,
     activePage,
     setActivePage,
-  } = useAnalysisWorkspace();
+  } = useWorkspaceShellState();
 
   const openSelector = async () => {
-    const selector = await WebviewWindow.getByLabel('process-selector');
-    if (selector) {
-      await selector.show();
-      await selector.setFocus();
-      await selector.emit('refresh-processes');
-    }
+    await openProcessSelectorWindow();
   };
 
   return {
     workspace: workspaceLifecycle,
+    contractVersions,
     processSession,
     activePage,
     setActivePage,

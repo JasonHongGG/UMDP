@@ -1,7 +1,7 @@
 import type { GraphDocument, NodeInstance } from '../../../domain/studio/contracts';
 import type { StudioNodeCatalog } from '../catalog/StudioNodeCatalog';
 import { createStudioNodeInitialData, dehydrateStudioNodeData, getStudioNodePort, hydrateStudioNodeData } from '../NodeRegistry';
-import { cloneGraphDocument, createEmptyGraphDocument, serializeGraphDocument } from '../persistence';
+import { cloneGraphDocument, createEmptyGraphDocument, serializeGraphDocument } from '../../../infrastructure/studio/persistence/graphPersistence';
 import type { BaseNodeData, NodeTransform, StudioEdge, StudioNode, StudioNodeDefinition } from '../types';
 
 export interface DuplicateNodesOptions {

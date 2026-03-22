@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphDocument } from '../../domain/studio/contracts';
-import { createEmptyGraphDocument } from './persistence';
+import { createEmptyGraphDocument } from '../../infrastructure/studio/persistence/graphPersistence';
 import { deriveStudioGraphCounters, duplicateStudioGraphSelection, isStudioGraphDocumentDirty, MAX_STUDIO_GRAPH_HISTORY_ENTRIES, pushStudioGraphHistoryEntry } from './graphStore';
 
 describe('graphStore helpers', () => {

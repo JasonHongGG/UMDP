@@ -47,3 +47,10 @@ export interface WorkspaceLifecycleState {
   errorMessage: string | null;
   runtimeSession: RuntimeSessionState;
 }
+
+export interface SystemContractVersions {
+  tauriCommandVersion: number;
+  bridgeProtocolVersion: number;
+  analysisSchemaVersion: number;
+  workflowSchemaVersion: number;
+}

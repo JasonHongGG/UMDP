@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { Code2 } from 'lucide-react';
 import {
   CALL_FUNCTION_RESULT_SCHEMA,
@@ -13,6 +12,7 @@ import type { INodeDefinition, IPort, NodeExecutionOutputMap, StudioNodeRuntimeS
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from '../../domain/analysis/contracts';
 import { parseCallFunctionNodeDocumentState, type CallFunctionClassInfoQueryState, type ValidationIssue, type WorkflowJsonValue } from '../../domain/studio/contracts';
 import type { StableId } from '../../domain/contracts/shared-identity';
+import { invokeRuntimeMethod } from '../../infrastructure/tauri/TauriRuntimeGateway';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { CallFunctionNodeCanvas } from './CallFunctionNodeCanvas';
@@ -332,7 +332,7 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       };
 
       try {
-        const result = await invoke<RuntimeMethodInvokeResult>('invoke_runtime_method', { request });
+        const result = await invokeRuntimeMethod(request);
         const resultPayload = toCallFunctionResultPayload(method, classInfo.instanceAddress, resolvedArgumentValues, result);
         return {
           state: result.success ? 'success' : 'error',

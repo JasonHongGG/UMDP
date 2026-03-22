@@ -1,6 +1,6 @@
 import type { ConnectionChannel, GraphDocument, NodeInstance } from '../../domain/studio/contracts';
 import { StudioEdge } from './types';
-import { createEmptyGraphDocument } from './persistence';
+import { createEmptyGraphDocument } from '../../infrastructure/studio/persistence/graphPersistence';
 
 export interface StudioGraphState {
   document: GraphDocument;

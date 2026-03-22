@@ -98,3 +98,21 @@ impl Default for WorkspaceLifecycleState {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemContractVersions {
+    pub tauri_command_version: u32,
+    pub bridge_protocol_version: u32,
+    pub analysis_schema_version: u32,
+    pub workflow_schema_version: u32,
+}
+
+pub fn current_contract_versions() -> SystemContractVersions {
+    SystemContractVersions {
+        tauri_command_version: 1,
+        bridge_protocol_version: 2,
+        analysis_schema_version: 1,
+        workflow_schema_version: 1,
+    }
+}

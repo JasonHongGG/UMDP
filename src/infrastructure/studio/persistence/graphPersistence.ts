@@ -1,11 +1,23 @@
-import type { GraphDocument, NodeInstance } from '../../domain/studio/contracts';
-
-export const STUDIO_WORKFLOW_AUTOSAVE_KEY = 'unity-mono-studio.workflow.autosave.v1';
-export const STUDIO_WORKFLOW_MANUAL_SAVE_KEY = 'unity-mono-studio.workflow.manual-save.v1';
+import {
+  createGraphDocumentEnvelope,
+  type GraphDocument,
+  type GraphDocumentEnvelope,
+  type NodeInstance,
+} from '../../../domain/studio/contracts';
 
 export interface StoredGraphDocumentRecord {
   savedAt: number;
-  document: GraphDocument;
+  envelope: GraphDocumentEnvelope;
+  checksum: string;
+}
+
+function computeChecksum(raw: string) {
+  let hash = 5381;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ raw.charCodeAt(index);
+  }
+
+  return `djb2:${(hash >>> 0).toString(16)}`;
 }
 
 function isStudioNodeInstance(value: unknown): value is NodeInstance {
@@ -69,6 +81,18 @@ export function createEmptyGraphDocument(): GraphDocument {
   };
 }
 
+function isGraphDocumentEnvelope(value: unknown): value is GraphDocumentEnvelope {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<GraphDocumentEnvelope>;
+  return candidate.format === 'studio-graph'
+    && candidate.schemaVersion === 1
+    && typeof candidate.savedAt === 'string'
+    && isGraphDocument(candidate.document);
+}
+
 export function cloneGraphDocument(document: GraphDocument): GraphDocument {
   return JSON.parse(JSON.stringify(document)) as GraphDocument;
 }
@@ -112,7 +136,9 @@ function isStoredGraphDocumentRecord(value: unknown): value is StoredGraphDocume
   }
 
   const candidate = value as Partial<StoredGraphDocumentRecord>;
-  return typeof candidate.savedAt === 'number' && isGraphDocument(candidate.document);
+  return typeof candidate.savedAt === 'number'
+    && typeof candidate.checksum === 'string'
+    && isGraphDocumentEnvelope(candidate.envelope);
 }
 
 export function readStoredGraphDocument(storageKey: string): StoredGraphDocumentRecord | null {
@@ -131,9 +157,18 @@ export function readStoredGraphDocument(storageKey: string): StoredGraphDocument
       return null;
     }
 
+    const expectedChecksum = computeChecksum(JSON.stringify(parsed.envelope));
+    if (parsed.checksum !== expectedChecksum) {
+      return null;
+    }
+
     return {
       savedAt: parsed.savedAt,
-      document: cloneGraphDocument(parsed.document),
+      checksum: parsed.checksum,
+      envelope: {
+        ...parsed.envelope,
+        document: cloneGraphDocument(parsed.envelope.document),
+      },
     };
   } catch {
     return null;
@@ -145,9 +180,14 @@ export function writeStoredGraphDocument(storageKey: string, document: GraphDocu
     return null;
   }
 
+  const savedAt = Date.now();
+  const envelope = createGraphDocumentEnvelope(cloneGraphDocument(document), new Date(savedAt).toISOString());
+  const checksum = computeChecksum(JSON.stringify(envelope));
+
   const record: StoredGraphDocumentRecord = {
-    savedAt: Date.now(),
-    document: cloneGraphDocument(document),
+    savedAt,
+    envelope,
+    checksum,
   };
 
   window.localStorage.setItem(storageKey, JSON.stringify(record));

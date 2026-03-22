@@ -1,12 +1,12 @@
-import { getNodePortsByDirection } from './NodeRegistry';
-import { materializeNodeQuerySnapshot } from './graphInterpreter';
-import type { IPort, StudioEdge, StudioNode } from './types';
-import { getNodePreviewMode, supportsNodePreview, type NodePreviewMode, type NodeQueryIssue } from '../../domain/studio/contracts';
-import { getClassInfoPayloadFromValue } from '../../nodes/CallFunctionNode/callFunctionNodeModel';
-import type { StudioNodeQueryContext } from './queryTypes';
-import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
+import { getNodePortsByDirection } from '../../../core/studio/NodeRegistry';
+import { materializeNodeQuerySnapshot } from '../../../core/studio/graphInterpreter';
+import type { IPort, StudioEdge, StudioNode } from '../../../core/studio/types';
+import { getNodePreviewMode, supportsNodePreview, type NodePreviewMode, type NodeQueryIssue } from '../../../domain/studio/contracts';
+import { getClassInfoPayloadFromValue } from '../../../nodes/CallFunctionNode/callFunctionNodeModel';
+import type { StudioNodeQueryContext } from '../../../core/studio/queryTypes';
+import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 
-export type { StudioNodeQueryContext } from './queryTypes';
+export type { StudioNodeQueryContext } from '../../../core/studio/queryTypes';
 
 export interface InputPortBindingSource {
   edge: StudioEdge;
@@ -23,10 +23,6 @@ export interface InputPortBindingState {
 
 function getNodeById(nodeId: string, nodes: StudioNode[]) {
   return nodes.find((node) => node.id === nodeId) ?? null;
-}
-
-function getIncomingEdges(nodeId: string, edges: StudioEdge[]) {
-  return edges.filter((edge) => edge.targetNodeId === nodeId);
 }
 
 export function getNodeQuerySnapshot(nodeId: string, context: StudioNodeQueryContext) {

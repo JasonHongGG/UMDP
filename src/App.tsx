@@ -24,12 +24,13 @@ export default function App() {
 }
 
 function AppContent() {
-  const { workspace, processSession, activePage, setActivePage, openSelector } = useWorkspaceShellFacade();
+  const { workspace, contractVersions, processSession, activePage, setActivePage, openSelector } = useWorkspaceShellFacade();
 
   return (
     <MainLayout>
       <TopBar
         workspace={workspace}
+        contractVersions={contractVersions}
         attachedProcess={processSession ? `${processSession.processName} (${processSession.pid})` : null}
         onOpenSelector={openSelector}
         activePage={activePage}

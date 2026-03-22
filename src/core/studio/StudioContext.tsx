@@ -5,8 +5,8 @@ import { ExpressionDragProvider } from './drag/ExpressionDragContext';
 import { StudioGraphStore, useStudioGraphStore } from './graphStore';
 import { StudioRuntimeDataProvider, type StudioRuntimeDataState } from './runtimeData';
 import type { StudioEdge, StudioNode } from './types';
-import { type StudioQueryState, useStudioQueryState } from './studioQueryState';
-import { type StudioRuntimeState, useStudioRuntimeState } from './studioRuntimeState';
+import { type StudioQueryState, useStudioQueryState } from '../../application/studio/query/useStudioQueryState';
+import { type StudioRuntimeState, useStudioRuntimeState } from '../../application/studio/runtime/useStudioRuntimeState';
 import { type StudioUiState, useStudioUiState } from './studioUiState';
 
 const StudioGraphContext = createContext<StudioGraphStore | null>(null);

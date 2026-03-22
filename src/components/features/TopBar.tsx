@@ -1,8 +1,12 @@
 import { Target, X, Square, Minus, Cpu } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopNavigation } from './TopNavigation';
-import type { WorkspaceLifecycleState } from '../../shared/contracts';
+import type { SystemContractVersions, WorkspaceLifecycleState } from '../../shared/contracts';
 import { getWorkspaceLifecycleLabel, getWorkspaceLifecycleTone } from '../../app/shell/workspaceLifecycle';
+import {
+    closeCurrentWindow,
+    minimizeCurrentWindow,
+    toggleCurrentWindowMaximized,
+} from '../../infrastructure/tauri/TauriWindowGateway';
 
 interface TopBarProps {
     attachedProcess: string | null;
@@ -10,10 +14,10 @@ interface TopBarProps {
     activePage: 'inspector' | 'studio';
     onPageChange: (page: 'inspector' | 'studio') => void;
     workspace: WorkspaceLifecycleState;
+    contractVersions: SystemContractVersions | null;
 }
 
-export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChange, workspace }: TopBarProps) {
-    const window = getCurrentWindow();
+export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChange, workspace, contractVersions }: TopBarProps) {
     const lifecycleLabel = getWorkspaceLifecycleLabel(workspace);
     const lifecycleTone = getWorkspaceLifecycleTone(workspace);
     const runtimeSessionLabel = workspace.runtimeSession.status.replace(/-/g, ' ');
@@ -28,19 +32,15 @@ export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChan
                     : 'text-slate-400';
 
     const handleMinimize = () => {
-        window.minimize();
+        minimizeCurrentWindow().catch(() => undefined);
     };
 
     const handleToggleMaximize = async () => {
-        if (await window.isMaximized()) {
-            window.unmaximize();
-        } else {
-            window.maximize();
-        }
+        await toggleCurrentWindowMaximized();
     };
 
     const handleClose = () => {
-        window.close();
+        closeCurrentWindow().catch(() => undefined);
     };
 
     return (
@@ -66,6 +66,11 @@ export function TopBar({ attachedProcess, onOpenSelector, activePage, onPageChan
                         <span className={`text-[10px] uppercase tracking-wider ${workspace.runtimeSession.bridgeConnected ? 'text-emerald-300' : 'text-amber-300'}`}>
                             Runtime {runtimeSessionLabel}
                         </span>
+                        {contractVersions ? (
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                                Contracts T{contractVersions.tauriCommandVersion}/B{contractVersions.bridgeProtocolVersion}/A{contractVersions.analysisSchemaVersion}/W{contractVersions.workflowSchemaVersion}
+                            </span>
+                        ) : null}
                     </div>
                 </div>
             </div>
