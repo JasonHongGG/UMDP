@@ -74,7 +74,7 @@ const InstanceAddressInput: React.FC<{
           type="text"
           value={getExpressionSourceDisplayValue(value)}
           placeholder="Type literal address or drop expression..."
-          onChange={(event) => onChange(createLiteralExpressionSource(event.target.value))}
+          onChange={(event) => onChange(createLiteralExpressionSource(event.target.value, 'address'))}
           readOnly={Boolean(activeExpressionDrag)}
           className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-200 outline-none placeholder:text-slate-500/60 font-mono tracking-tight"
         />

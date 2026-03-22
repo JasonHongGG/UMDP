@@ -1,57 +1,26 @@
-import { formatHexAddress } from '../../core/addressFormat';
+import { normalizeExplicitAddressValue, classifySchemaTypeSemantic } from '../../core/studio/expression/semantic';
 import { createLiteralExpressionSource } from '../../core/studio/expression';
 import type { ExpressionSource, WorkflowJsonValue } from '../../domain/studio/contracts';
 import type { RuntimeFieldValueKind } from '../../domain/analysis/contracts';
 
 export type EditorScalarKind = 'boolean' | 'integer' | 'float' | 'string' | 'address' | 'unsupported';
 
-const BOOLEAN_TYPES = new Set(['system.boolean', 'bool']);
-const INTEGER_TYPES = new Set([
-  'system.byte',
-  'system.sbyte',
-  'system.int16',
-  'system.uint16',
-  'system.int32',
-  'system.uint32',
-  'system.int64',
-  'system.uint64',
-  'byte',
-  'sbyte',
-  'short',
-  'ushort',
-  'int',
-  'uint',
-  'long',
-  'ulong',
-]);
-const FLOAT_TYPES = new Set(['system.single', 'system.double', 'float', 'double']);
-const STRING_TYPES = new Set(['system.string', 'string']);
-const ADDRESS_TYPES = new Set(['system.intptr', 'system.uintptr', 'intptr', 'uintptr']);
-
-function normalizeTypeName(typeName: string) {
-  return typeName.trim().toLowerCase();
-}
-
 export function classifyEditorScalarKind(typeName: string): EditorScalarKind {
-  const normalized = normalizeTypeName(typeName);
+  const semantic = classifySchemaTypeSemantic(typeName);
 
-  if (BOOLEAN_TYPES.has(normalized)) {
+  if (semantic.kind === 'boolean') {
     return 'boolean';
   }
 
-  if (INTEGER_TYPES.has(normalized)) {
-    return 'integer';
+  if (semantic.kind === 'number') {
+    return semantic.numericKind === 'float' ? 'float' : 'integer';
   }
 
-  if (FLOAT_TYPES.has(normalized)) {
-    return 'float';
-  }
-
-  if (STRING_TYPES.has(normalized)) {
+  if (semantic.kind === 'string') {
     return 'string';
   }
 
-  if (ADDRESS_TYPES.has(normalized)) {
+  if (semantic.kind === 'address') {
     return 'address';
   }
 
@@ -182,14 +151,14 @@ function parseFloatValue(raw: string): EditorValueParseResult {
 }
 
 function parseAddressValue(raw: string): EditorValueParseResult {
-  const normalized = formatHexAddress(raw);
+  const normalized = normalizeExplicitAddressValue(raw);
   if (!normalized) {
     return {
       valid: false,
       normalizedDisplay: raw,
       value: raw,
       serializedValue: null,
-      error: 'Address fields require a hexadecimal value.',
+      error: 'Address fields require an explicit hexadecimal value with a 0x prefix.',
     };
   }
 

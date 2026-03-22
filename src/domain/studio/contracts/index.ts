@@ -6,8 +6,13 @@ export type {
   NodeInstance,
 } from './graph';
 export type {
+  ExpressionNumericKind,
   ExpressionReferenceDragPayload,
+  ExpressionSemanticKind,
+  ExpressionSemanticOrigin,
   ExpressionSource,
+  ExpressionTypeHintCarrier,
+  ExpressionValueType,
   InputExpressionSource,
   LiteralSource,
   StaticExpressionSource,

@@ -1,6 +1,6 @@
-import { formatHexAddress } from '../../core/addressFormat';
+import { normalizeExplicitAddressValue, classifyExpressionSemantic } from '../../core/studio/expression/semantic';
 import { createLiteralExpressionSource } from '../../core/studio/expression';
-import type { LiteralSource } from '../../domain/studio/contracts';
+import type { ExpressionSemanticOrigin, ExpressionSource, LiteralSource } from '../../domain/studio/contracts';
 import type { IfOperator, IfScalarKind } from '../../domain/studio/contracts';
 
 export interface IfLiteralParseResult {
@@ -15,6 +15,11 @@ export interface IfComparablePairResult {
   left: unknown;
   right: unknown;
   error?: string;
+}
+
+export interface IfScalarResolution {
+  kind: IfScalarKind;
+  origin: ExpressionSemanticOrigin;
 }
 
 export const IF_OPERATOR_LABELS: Record<IfOperator, string> = {
@@ -36,29 +41,18 @@ const NUMBER_OPERATORS: IfOperator[] = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte'];
 const STRING_OPERATORS: IfOperator[] = ['eq', 'ne', 'contains', 'starts-with', 'ends-with'];
 const ADDRESS_OPERATORS: IfOperator[] = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte'];
 
-function isHexLike(value: string) {
-  const trimmed = value.trim();
-  const normalized = trimmed.startsWith('0x') || trimmed.startsWith('0X')
-    ? trimmed.slice(2)
-    : trimmed;
+export function classifyIfScalarKind(source: ExpressionSource | null | undefined, value: unknown): IfScalarResolution {
+  const semantic = classifyExpressionSemantic(source, value);
 
-  return normalized.length > 0 && /^[0-9a-fA-F]+$/.test(normalized);
-}
-
-export function classifyIfScalarKind(value: unknown): IfScalarKind {
-  if (typeof value === 'boolean') {
-    return 'boolean';
+  switch (semantic.kind) {
+    case 'boolean':
+    case 'number':
+    case 'string':
+    case 'address':
+      return { kind: semantic.kind, origin: semantic.origin };
+    default:
+      return { kind: 'unsupported', origin: semantic.origin };
   }
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return 'number';
-  }
-
-  if (typeof value === 'string') {
-    return isHexLike(value) ? 'address' : 'string';
-  }
-
-  return 'unsupported';
 }
 
 export function getAllowedIfOperators(kind: IfScalarKind): IfOperator[] {
@@ -147,8 +141,8 @@ export function parseLiteralForIfKind(kind: IfScalarKind, raw: string): IfLitera
   }
 
   if (kind === 'address') {
-    const normalized = formatHexAddress(raw);
-    if (normalized && isHexLike(raw)) {
+    const normalized = normalizeExplicitAddressValue(raw);
+    if (normalized) {
       return {
         valid: true,
         normalizedRaw: normalized,
@@ -160,7 +154,7 @@ export function parseLiteralForIfKind(kind: IfScalarKind, raw: string): IfLitera
       valid: false,
       normalizedRaw: raw,
       value: raw,
-      error: 'Address comparisons require a hexadecimal value.',
+      error: 'Address comparisons require an explicit hexadecimal value with a 0x prefix.',
     };
   }
 
@@ -190,13 +184,13 @@ function normalizeComparableValue(kind: IfScalarKind, value: unknown): IfLiteral
 
   if (kind === 'address') {
     if (typeof value === 'string') {
-      const normalized = formatHexAddress(value);
-      if (normalized && isHexLike(value)) {
+      const normalized = normalizeExplicitAddressValue(value);
+      if (normalized) {
         return { valid: true, normalizedRaw: normalized, value: normalized };
       }
     }
 
-    return { valid: false, normalizedRaw: String(value ?? ''), value, error: 'Expected a hexadecimal address value.' };
+    return { valid: false, normalizedRaw: String(value ?? ''), value, error: 'Expected an explicit hexadecimal address value.' };
   }
 
   if (kind === 'string') {

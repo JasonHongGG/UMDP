@@ -100,7 +100,8 @@ function buildIfNodeQueryState(
   const issues: NodeQueryIssue[] = [];
 
   const leftValue = resolveOperandValue(state.leftSource, context);
-  const leftScalarKind = classifyIfScalarKind(leftValue);
+  const leftScalar = classifyIfScalarKind(state.leftSource, leftValue);
+  const leftScalarKind = leftScalar.kind;
   const availableOperators = getAllowedIfOperators(leftScalarKind).map((operator) => ({
     value: operator,
     label: IF_OPERATOR_LABELS[operator],
@@ -120,9 +121,10 @@ function buildIfNodeQueryState(
   const rightValue = rightMode === 'expression'
     ? resolveOperandValue(state.rightSource, context)
     : undefined;
-  const rightScalarKind = rightMode === 'expression'
-    ? classifyIfScalarKind(rightValue)
-    : leftScalarKind;
+  const rightScalar = rightMode === 'expression'
+    ? classifyIfScalarKind(state.rightSource, rightValue)
+    : leftScalar;
+  const rightScalarKind = rightMode === 'expression' ? rightScalar.kind : leftScalarKind;
 
   if (!state.rightSource) {
     issues.push(createIssue('if.right.missing', rightMode === 'expression'
@@ -213,7 +215,7 @@ function validateIfNode(context: NodeExecutionContext) {
   }
 
   const leftValue = context.resolvedBindings.leftSource;
-  const leftScalarKind = classifyIfScalarKind(leftValue);
+  const leftScalarKind = classifyIfScalarKind(state.leftSource, leftValue).kind;
   if (leftScalarKind === 'unsupported') {
     issues.push(createValidationIssue('if.left.unsupported', 'Left operand resolves to an unsupported value type.'));
   }
@@ -268,7 +270,7 @@ function executeIfNode(context: NodeExecutionContext) {
 
   const state = parseIfNodeDocumentState(context.documentState);
   const leftValue = context.resolvedBindings.leftSource;
-  const leftScalarKind = classifyIfScalarKind(leftValue);
+  const leftScalarKind = classifyIfScalarKind(state.leftSource, leftValue).kind;
   const rightValue = state.rightMode === 'literal' && state.rightSource?.kind === 'literal'
     ? parseLiteralForIfKind(leftScalarKind, state.rightSource.raw).value
     : context.resolvedBindings.rightSource;

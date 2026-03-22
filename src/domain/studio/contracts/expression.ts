@@ -2,6 +2,14 @@ import type { StableId } from '../../contracts/shared-identity';
 
 export type ExpressionValueType = 'string' | 'number' | 'boolean' | 'address' | 'json';
 
+export type ExpressionSemanticKind = 'boolean' | 'number' | 'string' | 'address' | 'json' | 'unknown' | 'unsupported';
+export type ExpressionNumericKind = 'integer' | 'float' | null;
+export type ExpressionSemanticOrigin = 'literal-declared' | 'source-hint' | 'schema' | 'runtime' | 'empty-literal' | 'unresolved' | 'unsupported';
+
+export interface ExpressionTypeHintCarrier {
+  valueTypeHint?: ExpressionValueType | null;
+}
+
 export interface LiteralSource {
   kind: 'literal';
   valueType: ExpressionValueType;
@@ -15,6 +23,7 @@ export interface InputExpressionSource {
   sourceNodeId?: string;
   sourcePath: string[];
   displayText: string;
+  valueTypeHint?: ExpressionValueType | null;
 }
 
 export interface StaticExpressionSource {
@@ -23,6 +32,7 @@ export interface StaticExpressionSource {
   classStableId: StableId;
   memberStableId: StableId;
   displayText: string;
+  valueTypeHint?: ExpressionValueType | null;
 }
 
 export type ExpressionSource = LiteralSource | InputExpressionSource | StaticExpressionSource;

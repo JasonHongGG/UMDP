@@ -30,7 +30,13 @@ export function createLiteralExpressionSource(raw: string, valueType: LiteralSou
   };
 }
 
-export function createInputExpressionSource(sourceNodeId: string, sourcePortId: string, path: string[], displayText: string): InputExpressionSource {
+export function createInputExpressionSource(
+  sourceNodeId: string,
+  sourcePortId: string,
+  path: string[],
+  displayText: string,
+  valueTypeHint: InputExpressionSource['valueTypeHint'] = null,
+): InputExpressionSource {
   const pathExpression = path.length > 0 ? `.${path.join('.')}` : '';
   return {
     kind: 'input-expression',
@@ -39,16 +45,23 @@ export function createInputExpressionSource(sourceNodeId: string, sourcePortId: 
     sourceNodeId,
     sourcePath: path,
     displayText,
+    valueTypeHint,
   };
 }
 
-export function createStaticExpressionSource(classStableId: StableId, memberStableId: StableId, displayText: string): StaticExpressionSource {
+export function createStaticExpressionSource(
+  classStableId: StableId,
+  memberStableId: StableId,
+  displayText: string,
+  valueTypeHint: StaticExpressionSource['valueTypeHint'] = 'address',
+): StaticExpressionSource {
   return {
     kind: 'static-expression',
     expression: `={{ $class["${classStableId}"].static["${memberStableId}"] }}`,
     classStableId,
     memberStableId,
     displayText,
+    valueTypeHint,
   };
 }
 
@@ -210,5 +223,5 @@ export function readExpressionDragData(dataTransfer: DataTransfer): ExpressionSo
     return null;
   }
 
-  return parseExpressionSource(textPayload) ?? createLiteralExpressionSource(textPayload, 'address');
+  return parseExpressionSource(textPayload) ?? createLiteralExpressionSource(textPayload, 'string');
 }

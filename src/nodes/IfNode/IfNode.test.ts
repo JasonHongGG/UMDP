@@ -109,6 +109,41 @@ describe('IfNode', () => {
     });
   });
 
+  it('keeps plain string payloads out of address comparison mode', () => {
+    const context: StudioNodeQueryContext = {
+      nodes: [
+        { id: 'stats-a-1', type: 'stats-a', position: { x: 0, y: 0 }, data: {} },
+        {
+          id: 'if-1',
+          type: 'if',
+          position: { x: 240, y: 0 },
+          data: {
+            leftSource: createInputExpressionSource('stats-a-1', 'json-out', ['name'], 'stats-a.name'),
+            operator: 'contains',
+            rightMode: 'literal',
+            rightSource: createLiteralExpressionSource('ea', 'string'),
+          },
+        },
+      ],
+      edges: [
+        { id: 'edge-a', channel: 'data', sourceNodeId: 'stats-a-1', sourcePortId: 'json-out', targetNodeId: 'if-1', targetPortId: 'value-in' },
+      ],
+      nodeSnapshots: {},
+      runtimeData: createRuntimeData(),
+    };
+
+    const queryState = getNodeQueryState<IfNodeQueryState>('if-1', context);
+    expect(queryState).not.toBeNull();
+
+    expect(queryState).toMatchObject({
+      kind: 'resolved',
+      predictedResult: false,
+      leftPreview: { value: 'Boss', scalarKind: 'string' },
+      rightPreview: { value: 'ea', scalarKind: 'string' },
+    });
+    expect(queryState!.availableOperators.map((operator) => operator.value)).toContain('contains');
+  });
+
   it('routes runtime execution to the true branch based on resolved operands', async () => {
     vi.useFakeTimers();
 
