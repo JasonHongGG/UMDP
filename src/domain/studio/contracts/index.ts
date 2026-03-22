@@ -51,6 +51,7 @@ export type {
   ValidationIssue,
 } from './nodes';
 export type {
+  NodeExecutionFailureReason,
   NodeExecutionInputMap,
   NodeExecutionOriginKind,
   NodeExecutionOutputMap,
@@ -58,6 +59,7 @@ export type {
   NodeExecutionProgress,
   NodeExecutionSnapshot,
   NodeExecutionStatus,
+  StudioExecutionAbortReason,
   NodeExecutionTiming,
 } from './execution';
 export type {

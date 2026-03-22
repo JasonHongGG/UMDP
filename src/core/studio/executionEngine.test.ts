@@ -14,6 +14,7 @@ describe('executeStudioFlow', () => {
 
   it('uses definition-level validation instead of hardcoded node types', async () => {
     vi.useFakeTimers();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const executeSpy = vi.fn(() => ({ state: 'success' as const, outputs: {} }));
     const guardedNode: StudioNodeDefinition = {
@@ -38,7 +39,7 @@ describe('executeStudioFlow', () => {
 
     initializeStudioNodeRegistry([guardedNode]);
 
-    const snapshots: Array<{ status: string; errorMessage?: string }> = [];
+    const snapshots: Array<{ status: string; errorMessage?: string; failureReason?: string }> = [];
     executeStudioFlow({
       startNodeId: 'guarded-1',
       nodes: [
@@ -53,7 +54,7 @@ describe('executeStudioFlow', () => {
       onReset: vi.fn(),
       onNodeStateChange: vi.fn(),
       onNodeSnapshot: (snapshot) => {
-        snapshots.push({ status: snapshot.status, errorMessage: snapshot.errorMessage });
+        snapshots.push({ status: snapshot.status, errorMessage: snapshot.errorMessage, failureReason: snapshot.failureReason });
       },
       stepDelayMs: 25,
     });
@@ -61,7 +62,97 @@ describe('executeStudioFlow', () => {
     await vi.runAllTimersAsync();
 
     expect(executeSpy).not.toHaveBeenCalled();
-    expect(snapshots).toContainEqual({ status: 'error', errorMessage: 'Guard rejected execution.' });
+    expect(snapshots).toContainEqual({ status: 'error', errorMessage: 'Guard rejected execution.', failureReason: 'validation-error' });
+    expect(consoleLogSpy).toHaveBeenCalledWith('[StudioFrontendError]', expect.objectContaining({
+      nodeId: 'guarded-1',
+      phase: 'validate',
+      reason: 'validation-error',
+      message: 'Guard rejected execution.',
+    }));
+
+    consoleLogSpy.mockRestore();
+  });
+
+  it('publishes aborted snapshots and run completion reason when an active node is cancelled', async () => {
+    vi.useFakeTimers();
+
+    const hangingNode: StudioNodeDefinition = {
+      manifest: {
+        type: 'hanging',
+        typeVersion: 1,
+        family: 'control',
+        displayName: 'Hanging',
+        description: 'Waits until aborted',
+        category: 'Test',
+        inputs: [],
+        outputs: [{ key: 'flow-out', displayName: 'Flow Out', direction: 'output', channel: 'control', cardinality: 'multiple' }],
+        parameters: [],
+      },
+      icon: () => null,
+      executionContract: {
+        validate: () => [],
+        execute: ({ abortSignal }) => new Promise((_resolve, reject) => {
+          const abortHandler = () => {
+            const error = new Error('Execution cancelled.');
+            error.name = 'AbortError';
+            reject(error);
+          };
+
+          if (abortSignal?.aborted) {
+            abortHandler();
+            return;
+          }
+
+          abortSignal?.addEventListener('abort', abortHandler, { once: true });
+        }),
+      },
+      CanvasComponent: () => null,
+    };
+
+    initializeStudioNodeRegistry([hangingNode]);
+
+    const snapshots: Array<{ status: string; errorMessage?: string; failureReason?: string; abortReason?: string }> = [];
+    const runComplete = vi.fn();
+
+    const cleanup = executeStudioFlow({
+      startNodeId: 'hang-1',
+      nodes: [
+        {
+          id: 'hang-1',
+          type: 'hanging',
+          position: { x: 0, y: 0 },
+          data: {},
+        },
+      ],
+      edges: [],
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: (snapshot) => {
+        snapshots.push({
+          status: snapshot.status,
+          errorMessage: snapshot.errorMessage,
+          failureReason: snapshot.failureReason,
+          abortReason: snapshot.abortReason,
+        });
+      },
+      onRunComplete: runComplete,
+      stepDelayMs: 0,
+    });
+
+    await vi.runAllTimersAsync();
+    cleanup('rerun');
+    await vi.runAllTimersAsync();
+
+    expect(snapshots).toContainEqual({
+      status: 'aborted',
+      errorMessage: 'Execution aborted.',
+      failureReason: 'aborted',
+      abortReason: 'rerun',
+    });
+    expect(runComplete).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'aborted',
+      abortReason: 'rerun',
+    }));
   });
 
   it('materializes passive json provider nodes for downstream inputs without flow edges', async () => {

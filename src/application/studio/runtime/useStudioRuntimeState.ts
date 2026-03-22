@@ -4,6 +4,7 @@ import { executeStudioFlow } from './executeStudioFlow';
 import { StudioRuntimeDataState } from '../../../core/studio/runtimeData';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '../../../core/studio/types';
 import type { WorkspaceLifecycleState } from '../../../shared/contracts';
+import type { StudioExecutionAbortReason } from '../../../domain/studio/contracts';
 
 export type StudioExecutionRunStatus = 'running' | 'success' | 'error' | 'aborted';
 
@@ -13,7 +14,10 @@ export interface StudioExecutionRun {
   startedAt: number;
   completedAt?: number;
   status: StudioExecutionRunStatus;
+  abortReason?: StudioExecutionAbortReason;
 }
+
+type StudioExecutionCleanup = (reason?: StudioExecutionAbortReason) => void;
 
 export interface StudioRuntimeState {
   nodeStates: Record<string, NodeExecutionState>;
@@ -28,16 +32,17 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
   const [nodeSnapshots, setNodeSnapshots] = useState<Record<string, NodeExecutionSnapshot>>({});
   const [activeRun, setActiveRun] = useState<StudioExecutionRun | null>(null);
   const [runHistory, setRunHistory] = useState<StudioExecutionRun[]>([]);
-  const executionCleanupRef = useRef<(() => void) | null>(null);
+  const executionCleanupRef = useRef<StudioExecutionCleanup | null>(null);
 
   useEffect(() => {
     return () => {
-      executionCleanupRef.current?.();
+      executionCleanupRef.current?.('component-dispose');
     };
   }, []);
 
   useEffect(() => {
-    executionCleanupRef.current?.();
+    executionCleanupRef.current?.('document-reset');
+    executionCleanupRef.current = null;
     setNodeStates({});
     setNodeSnapshots({});
     setActiveRun(null);
@@ -54,7 +59,7 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
       return;
     }
 
-    executionCleanupRef.current?.();
+    executionCleanupRef.current?.('workspace-reset');
     executionCleanupRef.current = null;
     setNodeStates({});
     setNodeSnapshots({});
@@ -62,7 +67,7 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
   }, [workspaceLifecycle]);
 
   const executeFlow = useCallback((startNodeId: string) => {
-    executionCleanupRef.current?.();
+    executionCleanupRef.current?.('rerun');
     executionCleanupRef.current = executeStudioFlow({
       documentId: document.id,
       startNodeId,

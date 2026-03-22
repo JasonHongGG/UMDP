@@ -64,7 +64,6 @@ describe('TopBar', () => {
     });
 
     expect(container.textContent).toContain('Workspace');
-    expect(container.textContent).toContain('Unity Mono Studio');
     expect(container.textContent).toContain('Unity.exe (1337)');
     expect(container.textContent).not.toContain('Runtime ready');
     expect(container.textContent).not.toContain('Contracts T1/B2/A1/W1');

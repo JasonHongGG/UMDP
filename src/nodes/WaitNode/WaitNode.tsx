@@ -31,8 +31,22 @@ function waitForDelay(
   abortSignal: AbortSignal | null,
   reportProgress: (progress: { kind: string; label?: string; totalMs?: number; remainingMs?: number; displayText?: string } | null) => void,
 ) {
+  const safeReportProgress = (progress: Parameters<typeof reportProgress>[0]) => {
+    try {
+      reportProgress(progress);
+    } catch (error) {
+      console.log('[StudioFrontendError]', {
+        nodeType: 'wait',
+        phase: 'execute',
+        reason: 'execution-error',
+        message: 'Wait node progress reporting failed.',
+        error,
+      });
+    }
+  };
+
   if (delayMs <= 0) {
-    reportProgress(null);
+    safeReportProgress(null);
     return Promise.resolve();
   }
 
@@ -40,6 +54,7 @@ function waitForDelay(
     const startedAt = Date.now();
     const tickMs = Math.min(250, Math.max(100, Math.round(delayMs / 20)));
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
 
     const cleanup = () => {
       if (timer) {
@@ -51,12 +66,21 @@ function waitForDelay(
     };
 
     const handleAbort = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
       cleanup();
-      reportProgress(null);
+      safeReportProgress(null);
       reject(createAbortError());
     };
 
     const tick = () => {
+      if (settled) {
+        return;
+      }
+
       if (abortSignal?.aborted) {
         handleAbort();
         return;
@@ -64,7 +88,7 @@ function waitForDelay(
 
       const elapsedMs = Date.now() - startedAt;
       const remainingMs = Math.max(0, delayMs - elapsedMs);
-      reportProgress({
+      safeReportProgress({
         kind: 'countdown',
         label: 'Waiting',
         totalMs: delayMs,
@@ -73,8 +97,9 @@ function waitForDelay(
       });
 
       if (remainingMs <= 0) {
+        settled = true;
         cleanup();
-        reportProgress(null);
+        safeReportProgress(null);
         resolve();
         return;
       }
@@ -113,6 +138,7 @@ const WaitNodeCanvas: React.FC<INodeComponentProps<WaitNodeData>> = ({ id, data,
     <div className="relative flex flex-col items-center group">
       <div className={`bg-[#1e293b]/95 backdrop-blur-md rounded-2xl border w-16 h-16 shadow-lg flex items-center justify-center relative z-10 transition-colors cursor-grab active:cursor-grabbing
         ${executionState === 'running' ? 'border-cyan-400 shadow-[0_0_22px_rgba(34,211,238,0.28)] scale-110' :
+          executionState === 'aborted' ? 'border-amber-400/60 shadow-[0_0_12px_rgba(251,191,36,0.16)]' :
           executionState === 'success' ? 'border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]' :
           executionState === 'error' ? 'border-red-500/60 shadow-[0_0_12px_rgba(239,68,68,0.18)]' :
           'border-slate-700 hover:border-cyan-500/60'}
@@ -141,7 +167,7 @@ const WaitNodeCanvas: React.FC<INodeComponentProps<WaitNodeData>> = ({ id, data,
         <span className="text-xs text-white font-medium tracking-wide">
           {data.nodeName?.trim() || 'Wait'}
         </span>
-        <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">{executionState === 'running' ? 'Timing' : getWaitSubtitle(data.delaySeconds)}</span>
+        <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">{executionState === 'running' ? 'Timing' : executionState === 'aborted' ? 'Aborted' : getWaitSubtitle(data.delaySeconds)}</span>
       </div>
     </div>
   );

@@ -289,6 +289,7 @@ const IfNodeCanvas: React.FC<INodeComponentProps<IfNodeData>> = ({ id, data, inp
   const snapshot = nodeSnapshots[id] ?? null;
   const resultBadge = snapshot?.status === 'success'
     ? snapshot.nextControlPorts?.includes('true-out') ? 'TRUE' : 'FALSE'
+    : snapshot?.status === 'aborted' ? 'ABORTED'
     : snapshot?.status === 'error' ? 'ERROR' : null;
 
   return (
@@ -316,7 +317,7 @@ const IfNodeCanvas: React.FC<INodeComponentProps<IfNodeData>> = ({ id, data, inp
           {data.nodeName?.trim() || 'If'}
         </span>
         {resultBadge ? (
-          <span className={`mt-0.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-wider ${resultBadge === 'TRUE' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : resultBadge === 'FALSE' ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-red-500/30 bg-red-500/10 text-red-200'}`}>
+          <span className={`mt-0.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-wider ${resultBadge === 'TRUE' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : resultBadge === 'FALSE' ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : resultBadge === 'ABORTED' ? 'border-amber-400/30 bg-amber-500/10 text-amber-200' : 'border-red-500/30 bg-red-500/10 text-red-200'}`}>
             {resultBadge}
           </span>
         ) : (

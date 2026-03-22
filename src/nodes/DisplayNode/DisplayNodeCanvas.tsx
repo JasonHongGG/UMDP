@@ -8,7 +8,7 @@ import { createPayloadSummary, formatMetaValue, type DisplayNodeData } from './d
 
 interface ResolvedDisplayState {
   sourceKind: 'runtime' | 'preview' | 'empty';
-  status: 'idle' | 'running' | 'success' | 'error';
+  status: 'idle' | 'running' | 'success' | 'error' | 'aborted';
   envelope: WorkflowJsonEnvelope | null;
   summaryText: string;
   countText: string | null;
@@ -143,6 +143,8 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
 
   const stateClass = resolvedState.status === 'error'
     ? 'border-red-500/60'
+    : resolvedState.status === 'aborted'
+      ? 'border-amber-400/60'
     : resolvedState.status === 'running'
       ? 'border-amber-400/60'
       : resolvedState.sourceKind === 'runtime'
@@ -180,6 +182,7 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
               {resolvedState.sourceKind === 'empty' ? 'Empty' : resolvedState.sourceKind}
             </span>
             {resolvedState.status === 'running' ? <PlayCircle size={14} className="text-amber-300" /> : null}
+            {resolvedState.status === 'aborted' ? <AlertTriangle size={14} className="text-amber-300" /> : null}
             {resolvedState.status === 'error' ? <AlertTriangle size={14} className="text-red-300" /> : null}
             {resolvedState.status === 'success' ? <ActivitySquare size={14} className="text-emerald-300" /> : null}
           </div>

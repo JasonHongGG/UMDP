@@ -95,6 +95,9 @@ export function EdgeLayer() {
     if (sourceState === 'running') {
       return '#34d399';
     }
+    if (sourceState === 'aborted') {
+      return '#fbbf24';
+    }
     if (sourceState === 'error') {
       return '#fb7185';
     }

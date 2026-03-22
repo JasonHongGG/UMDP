@@ -15,6 +15,9 @@ function resolveExecutionClass(executionState: NodeExecutionState, isRunActive: 
   if (executionState === 'running') {
     return 'ring-2 ring-emerald-400/80 shadow-[0_0_30px_rgba(52,211,153,0.28)]';
   }
+  if (executionState === 'aborted') {
+    return 'ring-2 ring-amber-300/70 shadow-[0_0_22px_rgba(251,191,36,0.18)]';
+  }
   if (executionState === 'error') {
     return 'ring-2 ring-rose-400/75 shadow-[0_0_26px_rgba(244,63,94,0.25)]';
   }
@@ -40,6 +43,16 @@ export function NodeWrapper({ node, executionState = 'idle', executionSnapshot =
     ? null
     : executionState === 'running'
       ? executionSnapshot?.progress?.displayText ?? 'Running'
+      : executionState === 'aborted'
+        ? executionSnapshot?.abortReason === 'rerun'
+          ? 'Aborted (rerun)'
+          : executionSnapshot?.abortReason === 'workspace-reset'
+            ? 'Aborted (workspace reset)'
+            : executionSnapshot?.abortReason === 'document-reset'
+              ? 'Aborted (document reset)'
+              : executionSnapshot?.abortReason === 'component-dispose'
+                ? 'Aborted (dispose)'
+                : executionSnapshot?.errorMessage ?? 'Aborted'
       : executionState === 'success'
         ? 'Done'
         : executionSnapshot?.errorMessage ?? 'Error';
@@ -139,7 +152,7 @@ export function NodeWrapper({ node, executionState = 'idle', executionSnapshot =
       onMouseLeave={() => setIsHovered(false)}
     >
       {executionBadgeLabel ? (
-        <div className={`absolute -top-3 right-3 z-[95] max-w-[180px] truncate rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${executionState === 'running' ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : executionState === 'success' ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : 'border-rose-400/40 bg-rose-500/10 text-rose-200'}`}>
+        <div className={`absolute -top-3 right-3 z-[95] max-w-[180px] truncate rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${executionState === 'running' ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : executionState === 'success' ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : executionState === 'aborted' ? 'border-amber-400/40 bg-amber-500/10 text-amber-200' : 'border-rose-400/40 bg-rose-500/10 text-rose-200'}`}>
           {executionBadgeLabel}
         </div>
       ) : null}

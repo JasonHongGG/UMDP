@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
-import React, { act } from 'react';
+import React, { act, createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { NodeWrapper } from '../../components/studio/canvas/NodeWrapper';
-import WaitNodeDef from './WaitNode';
 import { executeStudioFlow } from '../../application/studio/runtime/executeStudioFlow';
 import { initializeStudioNodeRegistry } from '../../core/studio/NodeRegistry';
 import type { StudioNodeDefinition } from '../../core/studio/types';
+import WaitNodeDef from './WaitNode';
 
 const openEditModal = vi.fn();
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock('../../components/studio/canvas/Port', () => ({
   Port: () => null,
@@ -55,7 +57,7 @@ vi.mock('../../core/studio/StudioContext', () => ({
   }),
 }));
 
-describe('WaitNode Canvas', () => {
+describe('WaitNode runtime', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -69,14 +71,18 @@ describe('WaitNode Canvas', () => {
   it('renders countdown text in running state and keeps double click opening the edit modal', async () => {
     await act(async () => {
       root.render(
-        <NodeWrapper node={{ id: 'wait-1', type: 'wait', position: { x: 0, y: 0 }, data: { delaySeconds: 0.2 } }}>
-          <WaitNodeDef.CanvasComponent
-            id="wait-1"
-            data={{ delaySeconds: 0.2 }}
-            inputs={[]}
-            outputs={[]}
-          />
-        </NodeWrapper>,
+        createElement(
+          NodeWrapper,
+          {
+            node: { id: 'wait-1', type: 'wait', position: { x: 0, y: 0 }, data: { delaySeconds: 0.2 } },
+            children: createElement(WaitNodeDef.CanvasComponent, {
+              id: 'wait-1',
+              data: { delaySeconds: 0.2 },
+              inputs: [],
+              outputs: [],
+            }),
+          },
+        ),
       );
     });
 
@@ -150,5 +156,42 @@ describe('WaitNode Canvas', () => {
     await vi.runAllTimersAsync();
 
     expect(sinkSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fail the wait when progress publication throws', async () => {
+    vi.useFakeTimers();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    initializeStudioNodeRegistry([WaitNodeDef]);
+
+    const snapshots: Array<{ status: string }> = [];
+    executeStudioFlow({
+      startNodeId: 'wait-1',
+      nodes: [
+        { id: 'wait-1', type: 'wait', position: { x: 0, y: 0 }, data: { delaySeconds: 0.2 } },
+      ],
+      edges: [],
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: (snapshot) => {
+        if (snapshot.status === 'running' && snapshot.progress) {
+          throw new Error('render failed');
+        }
+
+        snapshots.push({ status: snapshot.status });
+      },
+      stepDelayMs: 0,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(snapshots).toContainEqual({ status: 'success' });
+    expect(consoleLogSpy).toHaveBeenCalledWith('[StudioFrontendError]', expect.objectContaining({
+      nodeType: 'wait',
+      phase: 'execute',
+      reason: 'execution-error',
+      message: 'Wait node progress reporting failed.',
+    }));
+
+    consoleLogSpy.mockRestore();
   });
 });

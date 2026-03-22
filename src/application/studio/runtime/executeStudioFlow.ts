@@ -3,6 +3,7 @@ import {
 } from '../../../core/studio/runtimeGraph';
 import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '../../../core/studio/types';
 import type { ClassBinding, ClassInfoCatalog } from '../../../domain/studio/editor';
+import type { StudioExecutionAbortReason } from '../../../domain/studio/contracts';
 import {
   createExecutionTiming,
   executePreparedNode,
@@ -10,6 +11,23 @@ import {
   canMaterializePassiveJsonNode,
   type GraphInterpreterEnvironment,
 } from '../../../core/studio/graphInterpreter';
+
+function logRuntimeFlowError(context: {
+  runId: string;
+  nodeId: string;
+  reason: 'node-not-found' | 'execution-error';
+  message: string;
+  error?: unknown;
+}) {
+  console.log('[StudioFrontendError]', {
+    runId: context.runId,
+    nodeId: context.nodeId,
+    phase: 'execute',
+    reason: context.reason,
+    message: context.message,
+    error: context.error,
+  });
+}
 
 interface ExecuteStudioFlowOptions {
   documentId?: string;
@@ -22,7 +40,7 @@ interface ExecuteStudioFlowOptions {
   onNodeStateChange: (nodeId: string, state: NodeExecutionState) => void;
   onNodeSnapshot: (snapshot: NodeExecutionSnapshot) => void;
   onRunStart?: (run: { runId: string; startNodeId: string; startedAt: number }) => void;
-  onRunComplete?: (run: { runId: string; startNodeId: string; startedAt: number; completedAt: number; status: 'success' | 'error' | 'aborted' }) => void;
+  onRunComplete?: (run: { runId: string; startNodeId: string; startedAt: number; completedAt: number; status: 'success' | 'error' | 'aborted'; abortReason?: StudioExecutionAbortReason }) => void;
   stepDelayMs?: number;
 }
 
@@ -49,7 +67,9 @@ export function executeStudioFlow({
   const runStartedAt = Date.now();
   let pendingNodeCount = 0;
   let runHasErrors = false;
+  let runWasAborted = false;
   let completionPublished = false;
+  let cleanupReason: StudioExecutionAbortReason | undefined;
 
   const schedule = (callback: () => void, delay: number) => {
     if (disposed) {
@@ -96,7 +116,7 @@ export function executeStudioFlow({
     reportNodeProgress: publishNodeProgress,
   };
 
-  const publishRunCompletion = (status: 'success' | 'error' | 'aborted') => {
+  const publishRunCompletion = (status: 'success' | 'error' | 'aborted', abortReason?: StudioExecutionAbortReason) => {
     if (completionPublished) {
       return;
     }
@@ -108,6 +128,7 @@ export function executeStudioFlow({
       startedAt: runStartedAt,
       completedAt: Date.now(),
       status,
+      abortReason,
     });
   };
 
@@ -116,10 +137,35 @@ export function executeStudioFlow({
       runHasErrors = true;
     }
 
+    if (status === 'aborted') {
+      runWasAborted = true;
+    }
+
     pendingNodeCount = Math.max(0, pendingNodeCount - 1);
     if (!disposed && pendingNodeCount === 0) {
-      publishRunCompletion(runHasErrors ? 'error' : 'success');
+      publishRunCompletion(runHasErrors ? 'error' : runWasAborted ? 'aborted' : 'success', cleanupReason);
     }
+  };
+
+  const publishAbortedSnapshots = (reason: StudioExecutionAbortReason) => {
+    Object.values(snapshots).forEach((snapshot) => {
+      if (snapshot.status !== 'running') {
+        return;
+      }
+
+      onNodeStateChange(snapshot.nodeId, 'aborted');
+      publishSnapshot({
+        ...snapshot,
+        status: 'aborted',
+        phase: 'execute',
+        failureReason: 'aborted',
+        abortReason: reason,
+        errorMessage: 'Execution aborted.',
+        timing: createExecutionTiming(snapshot.timing?.startedAt, Date.now()),
+        progress: undefined,
+      });
+      settleNode('aborted');
+    });
   };
 
   const materializePassiveJsonNode = async (nodeId: string, resolving = new Set<string>()) => {
@@ -154,7 +200,7 @@ export function executeStudioFlow({
     schedule(() => {
       void (async () => {
         if (disposed) {
-          settleNode('error');
+          settleNode('aborted');
           return;
         }
 
@@ -188,6 +234,13 @@ export function executeStudioFlow({
             }
 
             if (!prepared) {
+              logRuntimeFlowError({
+                runId,
+                nodeId,
+                reason: 'node-not-found',
+                message: 'Node not found.',
+              });
+
               onNodeStateChange(nodeId, 'error');
               publishSnapshot({
                 nodeId,
@@ -198,6 +251,7 @@ export function executeStudioFlow({
                 inputs: incoming,
                 outputs: {},
                 errorMessage: 'Node not found.',
+                failureReason: 'node-not-found',
                 timing: createExecutionTiming(startedAt, Date.now()),
                 progress: undefined,
               });
@@ -214,7 +268,7 @@ export function executeStudioFlow({
                   delete nodeRuntimeStateById[nodeId];
                 }
               }
-              onNodeStateChange(nodeId, snapshot.status === 'success' ? 'success' : 'error');
+              onNodeStateChange(nodeId, snapshot.status);
               publishSnapshot(snapshot);
 
               if (snapshot.status === 'success') {
@@ -223,22 +277,36 @@ export function executeStudioFlow({
                 });
               }
 
-              settleNode(snapshot.status === 'success' ? 'success' : 'error');
+              settleNode(snapshot.status);
             } catch (error) {
+              const isAbortError = error instanceof Error && error.name === 'AbortError';
+              const status: NodeExecutionState = isAbortError ? 'aborted' : 'error';
+              if (!isAbortError) {
+                logRuntimeFlowError({
+                  runId,
+                  nodeId,
+                  reason: 'execution-error',
+                  message: error instanceof Error ? error.message : 'Node execution failed.',
+                  error,
+                });
+              }
               onNodeStateChange(nodeId, 'error');
               publishSnapshot({
                 nodeId,
-                status: 'error',
+                status,
                 originKind: 'runtime',
                 phase: 'execute',
                 runId,
                 inputs: incoming,
                 outputs: {},
-                errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
+                errorMessage: error instanceof Error ? error.message : isAbortError ? 'Execution aborted.' : 'Node execution failed.',
+                failureReason: isAbortError ? 'aborted' : 'execution-error',
+                abortReason: isAbortError ? cleanupReason : undefined,
                 timing: createExecutionTiming(startedAt, Date.now()),
                 progress: undefined,
               });
-              settleNode('error');
+              onNodeStateChange(nodeId, status);
+              settleNode(status);
             }
           })();
         }, stepDelayMs);
@@ -247,6 +315,14 @@ export function executeStudioFlow({
         if (disposed) {
           return;
         }
+
+        logRuntimeFlowError({
+          runId,
+          nodeId,
+          reason: 'execution-error',
+          message: error instanceof Error ? error.message : 'Node execution failed.',
+          error,
+        });
 
         onNodeStateChange(nodeId, 'error');
         publishSnapshot({
@@ -258,6 +334,7 @@ export function executeStudioFlow({
           inputs: {},
           outputs: {},
           errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
+          failureReason: 'execution-error',
           timing: createExecutionTiming(startedAt, Date.now()),
           progress: undefined,
         });
@@ -274,10 +351,16 @@ export function executeStudioFlow({
   });
   runNode(startNodeId, 0);
 
-  return () => {
+  return (reason: StudioExecutionAbortReason = 'manual-stop') => {
+    if (disposed) {
+      return;
+    }
+
+    cleanupReason = reason;
+    publishAbortedSnapshots(reason);
     disposed = true;
     abortController.abort();
     timers.forEach((timer) => clearTimeout(timer));
-    publishRunCompletion('aborted');
+    publishRunCompletion('aborted', reason);
   };
 }

@@ -117,4 +117,33 @@ describe('useStudioRuntimeState', () => {
     expect(latestState?.state.nodeSnapshots).toEqual({});
     expect(latestState?.state.activeRun).toBeNull();
   });
+
+  it('passes structured abort reasons into execution cleanup for reruns and workspace resets', () => {
+    const cleanupSpy = vi.fn();
+    executeStudioFlowMock.mockReturnValue(cleanupSpy);
+
+    act(() => {
+      root.render(createElement(HookHarness, {
+        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'ready', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'ready', bridgeConnected: true } },
+      }));
+    });
+
+    act(() => {
+      latestState?.state.executeFlow('node-1');
+    });
+
+    act(() => {
+      latestState?.state.executeFlow('node-2');
+    });
+
+    expect(cleanupSpy).toHaveBeenCalledWith('rerun');
+
+    act(() => {
+      root.render(createElement(HookHarness, {
+        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', bridgeConnected: false } },
+      }));
+    });
+
+    expect(cleanupSpy).toHaveBeenCalledWith('workspace-reset');
+  });
 });

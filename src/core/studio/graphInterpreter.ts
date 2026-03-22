@@ -37,6 +37,30 @@ function getPrimaryIssueMessage(issues: ValidationIssue[] | undefined, fallback:
   return issue?.message ?? fallback;
 }
 
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function logStudioFrontendError(context: {
+  nodeId: string;
+  nodeType: string;
+  phase: 'validate' | 'execute';
+  reason: 'validation-error' | 'execution-error';
+  message: string;
+  issues?: ValidationIssue[];
+  error?: unknown;
+}) {
+  console.log('[StudioFrontendError]', {
+    nodeId: context.nodeId,
+    nodeType: context.nodeType,
+    phase: context.phase,
+    reason: context.reason,
+    message: context.message,
+    issues: context.issues,
+    error: context.error,
+  });
+}
+
 export function createExecutionTiming(startedAt?: number, completedAt?: number) {
   return {
     startedAt,
@@ -79,6 +103,8 @@ export function createExecutionNodeSnapshot(
     nextControlPorts?: NodeExecutionSnapshot['nextControlPorts'];
     nextRuntimeState?: NodeExecutionSnapshot['nextRuntimeState'];
     errorMessage?: string;
+    failureReason?: NodeExecutionSnapshot['failureReason'];
+    abortReason?: NodeExecutionSnapshot['abortReason'];
     runId?: string;
     queryRevision?: number;
     phase?: NodeExecutionSnapshot['phase'];
@@ -97,6 +123,8 @@ export function createExecutionNodeSnapshot(
     nextControlPorts: options?.nextControlPorts,
     nextRuntimeState: options?.nextRuntimeState,
     errorMessage: options?.errorMessage,
+    failureReason: options?.failureReason,
+    abortReason: options?.abortReason,
     timing,
   };
 }
@@ -199,6 +227,15 @@ export async function executePreparedNode(
   const blockingIssues = validationIssues.filter((issue) => issue.severity === 'error');
 
   if (blockingIssues.length > 0) {
+    logStudioFrontendError({
+      nodeId: prepared.node.id,
+      nodeType: prepared.node.type,
+      phase: 'validate',
+      reason: 'validation-error',
+      message: getPrimaryIssueMessage(validationIssues, 'Node validation failed.'),
+      issues: validationIssues,
+    });
+
     return createExecutionNodeSnapshot(
       prepared.node.id,
       originKind,
@@ -212,6 +249,7 @@ export async function executePreparedNode(
         queryRevision: options?.queryRevision,
         issues: validationIssues,
         errorMessage: getPrimaryIssueMessage(validationIssues, 'Node validation failed.'),
+        failureReason: 'validation-error',
       },
     );
   }
@@ -221,6 +259,15 @@ export async function executePreparedNode(
     const resolvedResult = result instanceof Promise ? await result : result;
 
     if (resolvedResult.state === 'error') {
+      logStudioFrontendError({
+        nodeId: prepared.node.id,
+        nodeType: prepared.node.type,
+        phase: 'execute',
+        reason: 'execution-error',
+        message: getPrimaryIssueMessage(resolvedResult.issues, 'Node execution failed.'),
+        issues: resolvedResult.issues,
+      });
+
       return createExecutionNodeSnapshot(
         prepared.node.id,
         originKind,
@@ -234,6 +281,7 @@ export async function executePreparedNode(
           queryRevision: options?.queryRevision,
           issues: resolvedResult.issues,
           errorMessage: getPrimaryIssueMessage(resolvedResult.issues, 'Node execution failed.'),
+          failureReason: 'execution-error',
           nextRuntimeState: resolvedResult.nextRuntimeState,
         },
       );
@@ -256,10 +304,21 @@ export async function executePreparedNode(
       },
     );
   } catch (error) {
+    if (!isAbortError(error)) {
+      logStudioFrontendError({
+        nodeId: prepared.node.id,
+        nodeType: prepared.node.type,
+        phase: 'execute',
+        reason: 'execution-error',
+        message: error instanceof Error ? error.message : 'Node execution failed.',
+        error,
+      });
+    }
+
     return createExecutionNodeSnapshot(
       prepared.node.id,
       originKind,
-      'error',
+      isAbortError(error) ? 'aborted' : 'error',
       prepared.inputs,
       {},
       createExecutionTiming(startedAt, Date.now()),
@@ -267,7 +326,8 @@ export async function executePreparedNode(
         phase: options?.phase,
         runId: options?.runId,
         queryRevision: options?.queryRevision,
-        errorMessage: error instanceof Error ? error.message : 'Node execution failed.',
+        errorMessage: error instanceof Error ? error.message : isAbortError(error) ? 'Execution aborted.' : 'Node execution failed.',
+        failureReason: isAbortError(error) ? 'aborted' : 'execution-error',
       },
     );
   }
