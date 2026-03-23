@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Layers3, Search, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
+import { useStudioRuntimeDataState } from '../../application/studio/useStudioRuntimeDataState';
 import type { INodeEditProps } from '../../core/studio/types';
 import { filterStudioClassCatalog, reconcileClassInfoSelection } from '../../domain/studio/editor';
-import { useStudioRuntimeData } from '../../core/studio/runtimeData';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
 import {
   createLiteralExpressionSource,
   getExpressionSourceDisplayValue,
@@ -18,7 +18,7 @@ const InstanceAddressInput: React.FC<{
 }> = ({ value, onChange }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
 
   return (
     <div
@@ -89,7 +89,7 @@ const InstanceAddressInput: React.FC<{
 };
 
 export const ClassNodeBindingEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
-  const runtimeData = useStudioRuntimeData();
+  const runtimeData = useStudioRuntimeDataState();
   const [bindingSearchQuery, setBindingSearchQuery] = useState('');
   const [isBindingPickerOpen, setIsBindingPickerOpen] = useState(!data.binding);
 

@@ -109,14 +109,30 @@ export interface StudioNodeRuntimeState {
   documentState: Record<string, unknown>;
 }
 
-export interface INodeDefinition<T extends BaseNodeData = BaseNodeData> {
+export interface StudioNodeIdentityDefinition {
   manifest: NodeManifest;
+}
+
+export interface StudioNodePresentationDefinition<T extends BaseNodeData = BaseNodeData> {
   icon: React.ComponentType<{ className?: string; size?: number }>;
+  resolveDisplayName?: (data: T) => string | undefined;
+  CanvasComponent: React.ComponentType<INodeComponentProps<T>>;
+  EditComponent?: React.ComponentType<INodeEditProps<T>>;
+  EditFooterComponent?: React.ComponentType<INodeEditProps<T>>;
+}
+
+export interface StudioNodeSerializationDefinition<T extends BaseNodeData = BaseNodeData> {
   createInitialData?: () => T;
   hydrateData?: (instance: import('../../domain/studio/contracts').NodeInstance, baseData: BaseNodeData) => T;
   dehydrateData?: (data: T, instance: import('../../domain/studio/contracts').NodeInstance) => StudioNodeRuntimeState;
   createRuntimeState?: (node: StudioNode<T>) => StudioNodeRuntimeState;
+}
+
+export interface StudioNodeExecutionDefinition {
   executionContract?: NodeExecutionContract;
+}
+
+export interface StudioNodeLifecycleDefinition<T extends BaseNodeData = BaseNodeData> {
   observeGraphNode?: (
     node: StudioNode<T>,
     context: import('./nodeCapabilities').StudioNodeLifecycleContext,
@@ -125,6 +141,9 @@ export interface INodeDefinition<T extends BaseNodeData = BaseNodeData> {
     node: StudioNode<T>,
     context: import('./nodeCapabilities').StudioNodeLifecycleContext,
   ) => Partial<T> | null;
+}
+
+export interface StudioNodeQueryDefinition<T extends BaseNodeData = BaseNodeData> {
   buildQueryOutputs?: (
     node: StudioNode<T>,
     context: import('./queryTypes').StudioNodeQueryContext,
@@ -134,14 +153,35 @@ export interface INodeDefinition<T extends BaseNodeData = BaseNodeData> {
     node: StudioNode<T>,
     context: import('./queryTypes').StudioNodeQueryContext,
   ) => unknown;
-  resolveDisplayName?: (data: T) => string | undefined;
-
-  CanvasComponent: React.ComponentType<INodeComponentProps<T>>;
-  EditComponent?: React.ComponentType<INodeEditProps<T>>;
-  EditFooterComponent?: React.ComponentType<INodeEditProps<T>>;
 }
 
-export type StudioNodeDefinition = INodeDefinition<BaseNodeData>;
+export interface StudioNodeDefinition<T extends BaseNodeData = BaseNodeData>
+  extends StudioNodeIdentityDefinition,
+    StudioNodePresentationDefinition<T>,
+    StudioNodeSerializationDefinition<T>,
+    StudioNodeExecutionDefinition,
+    StudioNodeLifecycleDefinition<T>,
+    StudioNodeQueryDefinition<T> {}
+
+export function getStudioNodePresentationDefinition<T extends BaseNodeData = BaseNodeData>(nodeDefinition: StudioNodeDefinition<T>): StudioNodePresentationDefinition<T> {
+  return nodeDefinition;
+}
+
+export function getStudioNodeSerializationDefinition<T extends BaseNodeData = BaseNodeData>(nodeDefinition: StudioNodeDefinition<T>): StudioNodeSerializationDefinition<T> {
+  return nodeDefinition;
+}
+
+export function getStudioNodeExecutionDefinition<T extends BaseNodeData = BaseNodeData>(nodeDefinition: StudioNodeDefinition<T>): StudioNodeExecutionDefinition {
+  return nodeDefinition;
+}
+
+export function getStudioNodeLifecycleDefinition<T extends BaseNodeData = BaseNodeData>(nodeDefinition: StudioNodeDefinition<T>): StudioNodeLifecycleDefinition<T> {
+  return nodeDefinition;
+}
+
+export function getStudioNodeQueryDefinition<T extends BaseNodeData = BaseNodeData>(nodeDefinition: StudioNodeDefinition<T>): StudioNodeQueryDefinition<T> {
+  return nodeDefinition;
+}
 
 export type NodeExecutionState = NodeExecutionStatus;
 

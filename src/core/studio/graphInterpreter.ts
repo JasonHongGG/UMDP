@@ -7,9 +7,17 @@ import {
   validateNodeExecution,
 } from './runtimeGraph';
 import type { StudioNodeQueryContext } from './queryTypes';
-import type { NodeExecutionSnapshot, StudioEdge, StudioNode, StudioNodeDefinition } from './types';
+import {
+  getStudioNodeExecutionDefinition,
+  getStudioNodeQueryDefinition,
+  type NodeExecutionSnapshot,
+  type StudioEdge,
+  type StudioNode,
+  type StudioNodeDefinition,
+} from './types';
 import { supportsNodePreview, type NodeExecutionContext, type ValidationIssue } from '../../domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog } from '../../domain/studio/editor';
+import { getStudioNodeDefinition } from './NodeRegistry';
 import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 
 export interface GraphInterpreterEnvironment {
@@ -182,7 +190,7 @@ export async function prepareNodeExecution(
     );
   }
 
-  const definition = getRegisteredStudioNodeCatalog().get(node.type);
+  const definition = getStudioNodeDefinition(node.type);
   if (!definition) {
     return null;
   }
@@ -255,7 +263,8 @@ export async function executePreparedNode(
   }
 
   try {
-    const result = prepared.definition.executionContract?.execute(prepared.context) ?? { state: 'success' as const, outputs: {} };
+    const execution = getStudioNodeExecutionDefinition(prepared.definition);
+    const result = execution.executionContract?.execute(prepared.context) ?? { state: 'success' as const, outputs: {} };
     const resolvedResult = result instanceof Promise ? await result : result;
 
     if (resolvedResult.state === 'error') {
@@ -363,14 +372,15 @@ export function materializeNodeQuerySnapshot(
     return acc;
   }, {});
 
-  const nodeDef = getRegisteredStudioNodeCatalog().get(node.type);
+  const nodeDef = getStudioNodeDefinition(node.type);
   const snapshots = {
     ...context.nodeSnapshots,
     ...dependencySnapshots,
   };
 
+  const query = nodeDef ? getStudioNodeQueryDefinition(nodeDef) : null;
   const queryOutputs = nodeDef && supportsNodePreview(nodeDef.manifest)
-    ? nodeDef.buildQueryOutputs?.(node as never, context, snapshots)
+    ? query?.buildQueryOutputs?.(node as never, context, snapshots)
     : null;
   if (queryOutputs) {
     resolving.delete(nodeId);

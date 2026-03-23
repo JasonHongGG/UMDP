@@ -1,16 +1,25 @@
 import React from 'react';
 import { Play } from 'lucide-react';
-import { INodeComponentProps, INodeDefinition, INodeEditProps, BaseNodeData, IPort } from '../../core/studio/types';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
+import {
+  INodeComponentProps,
+  INodeEditProps,
+  BaseNodeData,
+  IPort,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import { createFlowPort } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { Port } from '../../components/studio/canvas/Port';
-import { useStudioRuntime } from '../../core/studio/StudioContext';
 import { parseTriggerNodeDocumentState, type TriggerNodeDocumentState } from '../../domain/studio/contracts';
 
 interface TriggerNodeData extends BaseNodeData {}
 
 const TriggerNodeCanvas: React.FC<INodeComponentProps<TriggerNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { nodeStates, executeFlow, canExecuteFlow, executionBlockedReason } = useStudioRuntime();
+  const { nodeStates, executeFlow, canExecuteFlow, executionBlockedReason } = useStudioRuntimeViewState();
   const executionState = nodeStates?.[id] || 'idle';
   const triggerTitle = canExecuteFlow
     ? 'Run workflow'
@@ -74,7 +83,36 @@ const TriggerNodeEditorHelp: React.FC<INodeEditProps<TriggerNodeData>> = () => {
   );
 };
 
-const TriggerNodeDefinition: INodeDefinition<TriggerNodeData> = {
+const TriggerNodePresentation: StudioNodePresentationDefinition<TriggerNodeData> = {
+  icon: Play,
+  CanvasComponent: TriggerNodeCanvas,
+  EditFooterComponent: TriggerNodeEditorHelp,
+};
+
+const TriggerNodeSerialization: StudioNodeSerializationDefinition<TriggerNodeData> = {
+  createInitialData: () => ({}),
+  hydrateData: (instance, baseData) => ({
+    ...baseData,
+    nodeName: instance.displayName,
+    ...parseTriggerNodeDocumentState(instance.documentState),
+  }),
+  dehydrateData: (data) => ({
+    displayName: data.nodeName?.trim() || undefined,
+    parameters: {},
+    bindings: {},
+    documentState: { mode: 'manual' } satisfies TriggerNodeDocumentState,
+  }),
+  createRuntimeState: () => ({ parameters: {}, bindings: {}, documentState: { mode: 'manual' } satisfies TriggerNodeDocumentState }),
+};
+
+const TriggerNodeExecution: StudioNodeExecutionDefinition = {
+  executionContract: {
+    validate: () => [],
+    execute: () => ({ state: 'success', outputs: {} }),
+  },
+};
+
+const TriggerNodeDefinition: StudioNodeDefinition<TriggerNodeData> = {
   manifest: {
     type: 'trigger',
     typeVersion: 1,
@@ -92,27 +130,9 @@ const TriggerNodeDefinition: INodeDefinition<TriggerNodeData> = {
     },
     isTrigger: true,
   },
-  icon: Play,
-  createInitialData: () => ({
-  }),
-  hydrateData: (instance, baseData) => ({
-    ...baseData,
-    nodeName: instance.displayName,
-    ...parseTriggerNodeDocumentState(instance.documentState),
-  }),
-  dehydrateData: (data) => ({
-    displayName: data.nodeName?.trim() || undefined,
-    parameters: {},
-    bindings: {},
-    documentState: { mode: 'manual' } satisfies TriggerNodeDocumentState,
-  }),
-  createRuntimeState: () => ({ parameters: {}, bindings: {}, documentState: { mode: 'manual' } satisfies TriggerNodeDocumentState }),
-  executionContract: {
-    validate: () => [],
-    execute: () => ({ state: 'success', outputs: {} }),
-  },
-  CanvasComponent: TriggerNodeCanvas,
-  EditFooterComponent: TriggerNodeEditorHelp,
+  ...TriggerNodePresentation,
+  ...TriggerNodeSerialization,
+  ...TriggerNodeExecution,
 };
 
 export const TriggerNodeDef = defineStudioNode(TriggerNodeDefinition);

@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot } from '../../domain/analysis/contracts';
 import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '../../domain/studio/editor';
 import { createClassInfoEnvelope } from '../../core/studio/contracts';
+import { createInputExpressionSource } from '../../core/studio/expression';
 import DisplayNodeDef from './DisplayNode';
 
 const getRuntimeInstanceFieldsMock = vi.fn();
 const getRuntimeStaticFieldsMock = vi.fn();
 
-vi.mock('../../infrastructure/tauri/TauriRuntimeGateway', () => ({
-  getRuntimeInstanceFields: (...args: unknown[]) => getRuntimeInstanceFieldsMock(...args),
-  getRuntimeStaticFields: (...args: unknown[]) => getRuntimeStaticFieldsMock(...args),
+vi.mock('../../application/studio/runtime/StudioRuntimeBridge', () => ({
+  getStudioRuntimeInstanceFields: (...args: unknown[]) => getRuntimeInstanceFieldsMock(...args),
+  getStudioRuntimeStaticFields: (...args: unknown[]) => getRuntimeStaticFieldsMock(...args),
 }));
 
 const binding: ClassBinding = {
@@ -103,13 +104,7 @@ describe('DisplayNode execution', () => {
       documentState: { selectedFields: [] },
       runtimeState: {},
       inputBindings: {
-        'payload-in': [{
-          kind: 'input-expression',
-          sourceNodeId: 'class-node',
-          sourcePortId: 'info-out',
-          path: [],
-          displayText: 'class.info-out',
-        }],
+        'payload-in': [createInputExpressionSource('class-node', 'info-out', [], 'class.info-out')],
       },
       resolvedInputs: {
         'payload-in': [payload],
@@ -145,13 +140,7 @@ describe('DisplayNode execution', () => {
       documentState: { selectedFields: [] },
       runtimeState: {},
       inputBindings: {
-        'payload-in': [{
-          kind: 'input-expression',
-          sourceNodeId: 'class-node',
-          sourcePortId: 'info-out',
-          path: [],
-          displayText: 'class.info-out',
-        }],
+        'payload-in': [createInputExpressionSource('class-node', 'info-out', [], 'class.info-out')],
       },
       resolvedInputs: {
         'payload-in': [payload],

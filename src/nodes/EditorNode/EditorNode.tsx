@@ -7,7 +7,15 @@ import {
   createJsonPort,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, StudioNodeRuntimeState } from '../../core/studio/types';
+import type {
+  IPort,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeRuntimeState,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import type { RuntimeFieldSetRequest, RuntimeFieldSetResult } from '../../domain/analysis/contracts';
 import type {
   EditorNodeQueryState,
@@ -21,7 +29,7 @@ import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import { getClassInfoPayloadFromValue } from '../CallFunctionNode/callFunctionNodeModel';
-import { setRuntimeFieldValue } from '../../infrastructure/tauri/TauriRuntimeGateway';
+import { setStudioRuntimeFieldValue } from '../../application/studio/runtime/StudioRuntimeBridge';
 import { EditorNodeCanvas } from './EditorNodeCanvas';
 import { EditorNodeEditor } from './EditorNodeEditor';
 import {
@@ -223,41 +231,15 @@ function createEditorResultPayload(queryState: Extract<EditorNodeQueryState, { k
   };
 }
 
-const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
-  manifest: {
-    type: 'editor',
-    typeVersion: 1,
-    family: 'runtime',
-    displayName: 'Editor',
-    description: 'Writes new values into selected class members or static fields resolved from an upstream Class Info payload.',
-    category: 'Runtime',
-    tags: ['editor', 'memory', 'write', 'field', 'unity'],
-    inputs: EDITOR_INPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'input',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-      required: port.required,
-    })),
-    outputs: EDITOR_OUTPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'output',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-    })),
-    parameters: [],
-    preview: {
-      mode: 'degraded',
-      description: 'Editor previews describe intended writes, but live mutation results require execution.',
-    },
-  },
+const EditorNodePresentation: StudioNodePresentationDefinition<EditorNodeData> = {
   icon: PencilLine,
-  createInitialData: createEditorNodeData,
   resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+  CanvasComponent: EditorNodeCanvas,
+  EditComponent: EditorNodeEditor,
+};
+
+const EditorNodeSerialization: StudioNodeSerializationDefinition<EditorNodeData> = {
+  createInitialData: createEditorNodeData,
   hydrateData: (instance, baseData) => parseEditorNodeDataFromDocumentState(baseData, instance),
   dehydrateData: (data) => ({
     displayName: data.nodeName?.trim() || undefined,
@@ -271,6 +253,9 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
     bindings: Object.fromEntries(node.data.targets.map((target) => [getEditorTargetBindingKey(target), target.valueSource])),
     documentState: toEditorNodeDocumentState(node.data) as unknown as Record<string, unknown>,
   } satisfies StudioNodeRuntimeState),
+};
+
+const EditorNodeQuery: StudioNodeQueryDefinition<EditorNodeData> = {
   buildQueryState: buildEditorQueryState,
   buildQueryOutputs: (node, context) => {
     const queryState = buildEditorQueryState(node, context);
@@ -282,6 +267,9 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
       'result-out': createEditorResultEnvelope(createEditorResultPayload(queryState)),
     };
   },
+};
+
+const EditorNodeExecution: StudioNodeExecutionDefinition = {
   executionContract: {
     validate: ({ documentState, resolvedInputs, resolvedBindings }) => {
       const parsedState = parseEditorNodeDocumentState(documentState);
@@ -379,12 +367,12 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
             typeName: target.memberTypeName,
             isStatic: target.isStatic,
             address: typeof source.address === 'string' ? source.address : null,
-            previousValue: source.value,
-            nextValue: parsedValue.value,
+            previousValue: (source.value ?? null) as WorkflowJsonValue,
+            nextValue: (parsedValue.value ?? null) as WorkflowJsonValue,
             success: false,
             error,
           });
-          issues.push(createValidationIssue('editor.target.execution-invalid', error));
+          issues.push(createValidationIssue('editor.target.invalid', error));
           continue;
         }
 
@@ -396,9 +384,9 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
             name: target.memberName,
             typeName: target.memberTypeName,
             isStatic: target.isStatic,
-            address: source.address,
-            previousValue: source.value,
-            nextValue: parsedValue.value,
+            address: typeof source.address === 'string' ? source.address : null,
+            previousValue: (source.value ?? null) as WorkflowJsonValue,
+            nextValue: (parsedValue.value ?? null) as WorkflowJsonValue,
             success: false,
             error,
           });
@@ -406,74 +394,108 @@ const EditorNodeDefinition: INodeDefinition<EditorNodeData> = {
           continue;
         }
 
-        try {
-          const request: RuntimeFieldSetRequest = {
-            classStableId: source.runtimeRef.classStableId as StableId,
-            memberStableId: source.runtimeRef.memberStableId as StableId,
-            fieldName: source.name,
-            fieldTypeName: source.typeName,
-            isStatic: source.isStatic,
-            instanceAddress: typeof payload.instanceAddress === 'string' ? payload.instanceAddress : null,
-            targetAddress: typeof source.address === 'string' ? source.address : null,
-            valueKind,
-            serializedValue: parsedValue.serializedValue,
-          };
+        const request: RuntimeFieldSetRequest = {
+          classStableId: source.runtimeRef.classStableId as StableId,
+          memberStableId: source.runtimeRef.memberStableId as StableId,
+          fieldName: source.name,
+          fieldTypeName: source.typeName,
+          isStatic: source.isStatic,
+          instanceAddress: typeof payload.instanceAddress === 'string' ? payload.instanceAddress : null,
+          targetAddress: typeof source.address === 'string' ? source.address : null,
+          valueKind,
+          serializedValue: parsedValue.serializedValue,
+        };
 
-          const result = await setRuntimeFieldValue(request);
+        try {
+          const result: RuntimeFieldSetResult = await setStudioRuntimeFieldValue(request);
+          const error = result.success ? null : result.error ?? 'Failed to set runtime field value.';
           targetResults.push({
             memberStableId: target.memberStableId,
             name: target.memberName,
             typeName: target.memberTypeName,
             isStatic: target.isStatic,
-            address: result.address,
-            previousValue: result.previousValue,
-            nextValue: result.appliedValue ?? parsedValue.value,
+            address: typeof source.address === 'string' ? source.address : null,
+            previousValue: (source.value ?? null) as WorkflowJsonValue,
+            nextValue: (parsedValue.value ?? null) as WorkflowJsonValue,
             success: result.success,
-            error: result.error,
+            error,
           });
-          if (!result.success) {
-            issues.push(createValidationIssue(`editor.write.${result.failureKind}`, result.error ?? `Failed to write ${source.name}.`));
+          if (!result.success && error) {
+            issues.push(createValidationIssue('editor.target.write-failed', error));
           }
         } catch (error) {
-          const message = `Failed to write ${source.name}: ${String(error)}`;
+          const message = `Failed to set ${source.name}: ${String(error)}`;
           targetResults.push({
             memberStableId: target.memberStableId,
             name: target.memberName,
             typeName: target.memberTypeName,
             isStatic: target.isStatic,
-            address: source.address,
-            previousValue: source.value,
-            nextValue: parsedValue.value,
+            address: typeof source.address === 'string' ? source.address : null,
+            previousValue: (source.value ?? null) as WorkflowJsonValue,
+            nextValue: (parsedValue.value ?? null) as WorkflowJsonValue,
             success: false,
             error: message,
           });
-          issues.push(createValidationIssue('editor.write.transport', message));
+          issues.push(createValidationIssue('editor.target.write-error', message));
         }
       }
 
-      const succeeded = targetResults.filter((target) => target.success).length;
-      const resultPayload = {
-        basic: payload.basic,
-        instanceAddress: payload.instanceAddress,
-        targets: targetResults,
-        summary: {
-          total: targetResults.length,
-          succeeded,
-          failed: targetResults.length - succeeded,
-        },
-      };
-
       return {
-        state: issues.length === targetResults.length && targetResults.length > 0 ? 'error' : 'success',
+        state: issues.length > 0 ? 'error' : 'success',
         outputs: {
-          'result-out': createEditorResultEnvelope(resultPayload),
+          'result-out': createEditorResultEnvelope({
+            basic: payload.basic,
+            instanceAddress: payload.instanceAddress,
+            targets: targetResults,
+            summary: {
+              total: targetResults.length,
+              succeeded: targetResults.filter((entry) => entry.success).length,
+              failed: targetResults.filter((entry) => !entry.success).length,
+            },
+          }),
         },
         issues: issues.length > 0 ? issues : undefined,
       };
     },
   },
-  CanvasComponent: EditorNodeCanvas,
-  EditComponent: EditorNodeEditor,
+};
+
+const EditorNodeDefinition: StudioNodeDefinition<EditorNodeData> = {
+  manifest: {
+    type: 'editor',
+    typeVersion: 1,
+    family: 'runtime',
+    displayName: 'Editor',
+    description: 'Writes new values into selected class members or static fields resolved from an upstream Class Info payload.',
+    category: 'Runtime',
+    tags: ['editor', 'memory', 'write', 'field', 'unity'],
+    inputs: EDITOR_INPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'input',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+      required: port.required,
+    })),
+    outputs: EDITOR_OUTPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'output',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+    })),
+    parameters: [],
+    preview: {
+      mode: 'degraded',
+      description: 'Editor previews describe intended writes, but live mutation results require execution.',
+    },
+  },
+  ...EditorNodePresentation,
+  ...EditorNodeSerialization,
+  ...EditorNodeQuery,
+  ...EditorNodeExecution,
 };
 
 export const EditorNodeDef = defineStudioNode(EditorNodeDefinition);

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Search, ChevronRight, ChevronDown, List, Braces, AlignLeft, CircleDashed, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStudioQuery } from '../../core/studio/StudioContext';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { DisplayNodeAvailableField, DisplayNodeQueryState } from '../../domain/studio/contracts';
 import type { DisplayNodeData } from './displayNodeModel';
@@ -209,7 +209,7 @@ const AvailableFieldTree: React.FC<AvailableFieldTreeProps> = ({
 };
 
 export const DisplayNodeEditor: React.FC<INodeEditProps<DisplayNodeData>> = ({ nodeId, data, updateData }) => {
-  const query = useStudioQuery();
+  const query = useStudioQueryViewState();
   const queryState = useMemo(
     () => query.getNodeQueryState<DisplayNodeQueryState>(nodeId) ?? createFallbackQueryState('Connect a payload source to start selecting fields.'),
     [nodeId, query],

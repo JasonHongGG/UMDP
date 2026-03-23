@@ -1,54 +1,45 @@
-import React, { createContext, useContext, useEffect } from 'react';
-import type { GraphDocument } from '../../domain/studio/contracts';
+import React, { createContext, useContext } from 'react';
 import type { WorkspaceLifecycleState } from '../../shared/contracts';
-import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
 import { ExpressionDragProvider } from './drag/ExpressionDragContext';
-import { StudioGraphStore, useStudioGraphStore } from './graphStore';
+import { StudioGraphStore } from './graphStore';
 import { StudioRuntimeDataProvider, type StudioRuntimeDataState } from './runtimeData';
-import type { StudioEdge, StudioNode } from './types';
-import { type StudioQueryState, useStudioQueryState } from '../../application/studio/query/useStudioQueryState';
-import { type StudioRuntimeState, useStudioRuntimeState } from '../../application/studio/runtime/useStudioRuntimeState';
-import { type StudioUiState, useStudioUiState } from './studioUiState';
+import { useStudioComposition } from '../../application/studio/StudioComposition';
+import { type StudioQueryState } from '../../application/studio/query/useStudioQueryState';
+import { type StudioRuntimeState } from '../../application/studio/runtime/useStudioRuntimeState';
+import { type StudioUiState } from './studioUiState';
 
-const StudioGraphContext = createContext<StudioGraphStore | null>(null);
-const StudioUiContext = createContext<StudioUiState | null>(null);
-const StudioRuntimeContext = createContext<StudioRuntimeState | null>(null);
-const StudioQueryContext = createContext<StudioQueryState | null>(null);
+export interface StudioServices {
+  graph: StudioGraphStore;
+  ui: StudioUiState;
+  runtime: StudioRuntimeState;
+  query: StudioQueryState;
+}
 
-export function useStudioGraph() {
-  const context = useContext(StudioGraphContext);
+const StudioServicesContext = createContext<StudioServices | null>(null);
+
+export function useStudioServices() {
+  const context = useContext(StudioServicesContext);
   if (!context) {
-    throw new Error('useStudioGraph must be used within a StudioProvider');
+    throw new Error('useStudioServices must be used within a StudioProvider');
   }
 
   return context;
+}
+
+export function useStudioGraph() {
+  return useStudioServices().graph;
 }
 
 export function useStudioUi() {
-  const context = useContext(StudioUiContext);
-  if (!context) {
-    throw new Error('useStudioUi must be used within a StudioProvider');
-  }
-
-  return context;
+  return useStudioServices().ui;
 }
 
 export function useStudioRuntime() {
-  const context = useContext(StudioRuntimeContext);
-  if (!context) {
-    throw new Error('useStudioRuntime must be used within a StudioProvider');
-  }
-
-  return context;
+  return useStudioServices().runtime;
 }
 
 export function useStudioQuery() {
-  const context = useContext(StudioQueryContext);
-  if (!context) {
-    throw new Error('useStudioQuery must be used within a StudioProvider');
-  }
-
-  return context;
+  return useStudioServices().query;
 }
 
 export function useStudio() {
@@ -61,48 +52,20 @@ export function useStudio() {
 }
 
 export function StudioProvider({ children, runtimeData, workspaceLifecycle }: { children: React.ReactNode; runtimeData: StudioRuntimeDataState; workspaceLifecycle: WorkspaceLifecycleState }) {
-  const catalog = getRegisteredStudioNodeCatalog();
-  const graphStore = useStudioGraphStore(catalog);
-  const { nodes, edges, document, connectPorts } = graphStore;
-  const uiValue = useStudioUiState({ nodes, edges, connectPorts });
-  const runtimeValue = useStudioRuntimeState(document, nodes, edges, runtimeData, workspaceLifecycle);
-  const queryValue = useStudioQueryState(nodes, edges, runtimeValue.nodeSnapshots, runtimeData);
-
-  useEffect(() => {
-    for (const node of nodes) {
-      const nodeDef = catalog.get(node.type);
-      nodeDef?.observeGraphNode?.(node as never, { nodes, edges, runtimeData });
-    }
-  }, [catalog, edges, nodes, runtimeData]);
-
-  useEffect(() => {
-    for (const node of nodes) {
-      const nodeDef = catalog.get(node.type);
-      if (!nodeDef?.reconcileData) {
-        continue;
-      }
-
-      const patch = nodeDef.reconcileData(node as never, { nodes, edges, runtimeData });
-      if (!patch || Object.keys(patch).length === 0) {
-        continue;
-      }
-
-      graphStore.updateNodeData(node.id, patch);
-    }
-  }, [catalog, edges, graphStore, nodes, runtimeData]);
+  const { graph, ui, runtime, query } = useStudioComposition(runtimeData, workspaceLifecycle);
+  const services: StudioServices = {
+    graph,
+    ui,
+    runtime,
+    query,
+  };
 
   return (
     <StudioRuntimeDataProvider value={runtimeData}>
       <ExpressionDragProvider>
-        <StudioGraphContext.Provider value={graphStore}>
-          <StudioUiContext.Provider value={uiValue}>
-            <StudioRuntimeContext.Provider value={runtimeValue}>
-              <StudioQueryContext.Provider value={queryValue}>
-                {children}
-              </StudioQueryContext.Provider>
-            </StudioRuntimeContext.Provider>
-          </StudioUiContext.Provider>
-        </StudioGraphContext.Provider>
+        <StudioServicesContext.Provider value={services}>
+          {children}
+        </StudioServicesContext.Provider>
       </ExpressionDragProvider>
     </StudioRuntimeDataProvider>
   );

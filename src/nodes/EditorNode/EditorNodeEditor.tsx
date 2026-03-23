@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, Link2, PlusCircle, Trash2, Wand2 } from 'lucide-react';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
 import {
   createLiteralExpressionSource,
   getExpressionSourceDisplayValue,
   readExpressionDragData,
 } from '../../core/studio/expression';
-import { useStudioQuery } from '../../core/studio/StudioContext';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { EditorNodeAvailableTarget, EditorNodeQueryState, EditorNodeTargetPreview } from '../../domain/studio/contracts';
 import type { EditorNodeData } from './editorNodeModel';
@@ -136,7 +136,7 @@ function TargetRow({
   onResetLiteral: () => void;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
   const literalRaw = target.valueSource.kind === 'literal' ? target.valueSource.raw : '';
 
   return (
@@ -232,7 +232,7 @@ function TargetRow({
 }
 
 export const EditorNodeEditor: React.FC<INodeEditProps<EditorNodeData>> = ({ nodeId, data, updateData }) => {
-  const query = useStudioQuery();
+  const query = useStudioQueryViewState();
   const queryState = useMemo(
     () => query.getNodeQueryState<EditorNodeQueryState>(nodeId) ?? {
       kind: 'missing-edge' as const,

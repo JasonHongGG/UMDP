@@ -1,11 +1,19 @@
 import React from 'react';
 import { GitBranch } from 'lucide-react';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
 import { createFlowPort, createJsonPort, GENERIC_JSON_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { resolveExpressionSource, getExpressionSourceDisplayValue } from '../../core/studio/expression';
-import { useStudioRuntime } from '../../core/studio/StudioContext';
-import type { INodeComponentProps, INodeDefinition, IPort } from '../../core/studio/types';
+import type {
+  INodeComponentProps,
+  IPort,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import { Port } from '../../components/studio/canvas/Port';
 import type {
   IfNodeQueryState,
@@ -284,7 +292,7 @@ function executeIfNode(context: NodeExecutionContext) {
 }
 
 const IfNodeCanvas: React.FC<INodeComponentProps<IfNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { nodeStates, nodeSnapshots } = useStudioRuntime();
+  const { nodeStates, nodeSnapshots } = useStudioRuntimeViewState();
   const nodeState = nodeStates[id] ?? 'idle';
   const snapshot = nodeSnapshots[id] ?? null;
   const resultBadge = snapshot?.status === 'success'
@@ -328,7 +336,36 @@ const IfNodeCanvas: React.FC<INodeComponentProps<IfNodeData>> = ({ id, data, inp
   );
 };
 
-const IfNodeDefinition: INodeDefinition<IfNodeData> = {
+const IfNodePresentation: StudioNodePresentationDefinition<IfNodeData> = {
+  icon: GitBranch,
+  CanvasComponent: IfNodeCanvas,
+  EditComponent: IfNodeEditor,
+};
+
+const IfNodeSerialization: StudioNodeSerializationDefinition<IfNodeData> = {
+  createInitialData: createIfNodeData,
+  hydrateData: (instance, baseData) => parseIfNodeDataFromDocumentState(baseData, instance),
+  dehydrateData: (data) => ({
+    displayName: data.nodeName?.trim() || undefined,
+    parameters: {},
+    bindings: {},
+    documentState: toIfNodeDocumentState(data) as unknown as Record<string, unknown>,
+  }),
+  createRuntimeState: (node) => createIfNodeRuntimeState(node.data),
+};
+
+const IfNodeQuery: StudioNodeQueryDefinition<IfNodeData> = {
+  buildQueryState: buildIfNodeQueryState,
+};
+
+const IfNodeExecution: StudioNodeExecutionDefinition = {
+  executionContract: {
+    validate: validateIfNode,
+    execute: executeIfNode,
+  },
+};
+
+const IfNodeDefinition: StudioNodeDefinition<IfNodeData> = {
   manifest: {
     type: 'if',
     typeVersion: 1,
@@ -361,23 +398,10 @@ const IfNodeDefinition: INodeDefinition<IfNodeData> = {
       description: 'If nodes can preview predicted branch resolution when operands are materializable.',
     },
   },
-  icon: GitBranch,
-  createInitialData: createIfNodeData,
-  hydrateData: (instance, baseData) => parseIfNodeDataFromDocumentState(baseData, instance),
-  dehydrateData: (data) => ({
-    displayName: data.nodeName?.trim() || undefined,
-    parameters: {},
-    bindings: {},
-    documentState: toIfNodeDocumentState(data) as unknown as Record<string, unknown>,
-  }),
-  createRuntimeState: (node) => createIfNodeRuntimeState(node.data),
-  buildQueryState: buildIfNodeQueryState,
-  executionContract: {
-    validate: validateIfNode,
-    execute: executeIfNode,
-  },
-  CanvasComponent: IfNodeCanvas,
-  EditComponent: IfNodeEditor,
+  ...IfNodePresentation,
+  ...IfNodeSerialization,
+  ...IfNodeQuery,
+  ...IfNodeExecution,
 };
 
 export const IfNodeDef = defineStudioNode(IfNodeDefinition);

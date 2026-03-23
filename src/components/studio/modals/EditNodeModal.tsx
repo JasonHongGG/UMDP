@@ -1,14 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { X, ArrowRight, Settings2, Box, LogIn, LogOut, ChevronRight, ChevronDown, Braces, AlignLeft, Hash, ToggleLeft } from 'lucide-react';
-import { useStudioGraph, useStudioQuery, useStudioUi } from '../../../core/studio/StudioContext';
-import { BaseNodeData, IPort, StudioNode } from '../../../core/studio/types';
-import { getNodePortsByDirection, getStudioNodePort } from '../../../core/studio/NodeRegistry';
+import { useStudioExpressionDragState } from '../../../application/studio/useStudioExpressionDragState';
+import { useStudioEditNodeModalViewState } from '../../../application/studio/useStudioEditNodeModalViewState';
+import { IPort, StudioNode } from '../../../core/studio/types';
+import { getStudioNodePort } from '../../../core/studio/NodeRegistry';
 import { beginPointerExpressionDrag } from '../../../core/studio/drag/expressionPointerDrag';
-import { useExpressionDrag } from '../../../core/studio/drag/ExpressionDragContext';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '../../../core/studio/expression';
 import { NodeParameterEditor } from '../editor/NodeParameterEditor';
-import type { CallFunctionClassInfoQueryState } from '../../../domain/studio/contracts';
-import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -20,7 +18,7 @@ interface JsonTreeProps {
 }
 const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0, sourceNode, sourcePortId }) => {
   const [isExpanded, setIsExpanded] = useState(depth < 2);
-  const expressionDrag = useExpressionDrag();
+  const expressionDrag = useStudioExpressionDragState();
   
   const isObject = data !== null && typeof data === 'object' && !Array.isArray(data);
   const isArray = Array.isArray(data);
@@ -116,107 +114,33 @@ const JsonDraggableTreeItem: React.FC<JsonTreeProps> = ({ data, path, depth = 0,
 };
 
 export function EditNodeModal() {
-  const catalog = getRegisteredStudioNodeCatalog();
-  const { nodes, edges, updateNodeData } = useStudioGraph();
-  const { isEditModalOpen, closeEditModal, editingNodeId } = useStudioUi();
-  const query = useStudioQuery();
-  const expressionDrag = useExpressionDrag();
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [draftNodeName, setDraftNodeName] = useState('');
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  const node = useMemo(() => nodes.find(n => n.id === editingNodeId), [nodes, editingNodeId]);
-  const nodeDef = useMemo(() => node ? catalog.get(node.type) : null, [catalog, node]);
-  const resolvedNodeName = useMemo(() => {
-    if (!node || !nodeDef) {
-      return '';
-    }
-
-    return (node.data.nodeName && node.data.nodeName.trim())
-      || nodeDef.resolveDisplayName?.(node.data)
-      || nodeDef.manifest.displayName;
-  }, [node, nodeDef]);
-
-  const inputBindingStates = useMemo(() => node ? query.getNodeInputBindingStates(node.id) : [], [node, query]);
-  const callFunctionInputState = useMemo(
-    () => node?.type === 'call-function'
-      ? query.getNodeQueryState<CallFunctionClassInfoQueryState>(node.id)
-      : null,
-    [node, query],
-  );
-  const liveQuerySnapshot = useMemo(() => node ? query.getNodeSnapshot(node.id) : null, [node, query]);
-
-  const liveOutputPreview = useMemo(() => {
-    if (!node) {
-      return null;
-    }
-
-    return query.getNodeOutputPreview(node.id);
-  }, [node, query]);
-
-  const snapshotOriginLabel = useMemo(() => {
-    if (!liveQuerySnapshot) {
-      return null;
-    }
-
-    return liveQuerySnapshot.originKind === 'runtime' ? 'runtime' : 'preview';
-  }, [liveQuerySnapshot]);
-
-  const snapshotPhaseLabel = useMemo(() => {
-    if (!liveQuerySnapshot) {
-      return null;
-    }
-
-    switch (liveQuerySnapshot.phase) {
-      case 'running':
-        return 'running';
-      case 'execute':
-        return 'executed';
-      case 'materialize':
-      default:
-        return 'materialized';
-    }
-  }, [liveQuerySnapshot]);
-
-  const EditComponent = nodeDef?.EditComponent;
-  const EditFooterComponent = nodeDef?.EditFooterComponent;
-  const hasParameterSchema = (nodeDef?.manifest.parameters.length ?? 0) > 0;
-
-  const handleUpdateData = (newData: Partial<BaseNodeData>) => {
-    if (!node) {
-      return;
-    }
-
-    updateNodeData(node.id, newData);
-  };
-
-  const commitNodeName = () => {
-    if (!node || !nodeDef) {
-      return;
-    }
-
-    const trimmedName = draftNodeName.trim();
-    const fallbackName = nodeDef.resolveDisplayName?.(node.data) || nodeDef.manifest.displayName;
-
-    updateNodeData(node.id, {
-      nodeName: trimmedName && trimmedName !== fallbackName ? trimmedName : undefined,
-    });
-    setIsEditingName(false);
-  };
-
-  useEffect(() => {
-    setDraftNodeName(resolvedNodeName);
-    setIsEditingName(false);
-  }, [resolvedNodeName, node?.id]);
-
-  useEffect(() => {
-    if (isEditingName) {
-      nameInputRef.current?.focus();
-      nameInputRef.current?.select();
-    }
-  }, [isEditingName]);
-
-  const nodeOutputs = useMemo(() => nodeDef ? getNodePortsByDirection(nodeDef, 'output') : [], [nodeDef]);
+  const {
+    catalog,
+    expressionDrag,
+    isEditModalOpen,
+    closeEditModal,
+    node,
+    nodeDef,
+    presentation,
+    EditComponent,
+    EditFooterComponent,
+    hasParameterSchema,
+    nodeOutputs,
+    resolvedNodeName,
+    inputBindingStates,
+    callFunctionInputState,
+    liveQuerySnapshot,
+    liveOutputPreview,
+    snapshotOriginLabel,
+    snapshotPhaseLabel,
+    isEditingName,
+    setIsEditingName,
+    draftNodeName,
+    setDraftNodeName,
+    nameInputRef,
+    handleUpdateData,
+    commitNodeName,
+  } = useStudioEditNodeModalViewState();
 
   if (!isEditModalOpen || !node || !nodeDef) return null;
 
@@ -263,7 +187,7 @@ export function EditNodeModal() {
         <div className="h-14 border-b border-slate-700/50 bg-slate-900/50 flex items-center justify-between px-6 flex-shrink-0">
           <div className="flex items-center gap-3">
              <div className="w-8 h-8 rounded bg-cyan-500/20 flex items-center justify-center">
-                 <nodeDef.icon size={18} className="text-cyan-400" />
+                 {presentation ? <presentation.icon size={18} className="text-cyan-400" /> : null}
              </div>
              <div>
                  {isEditingName ? (

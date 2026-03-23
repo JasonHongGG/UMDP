@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { GraphDocument } from '../../../domain/studio/contracts';
 import { executeStudioFlow } from './executeStudioFlow';
 import { StudioRuntimeDataState } from '../../../core/studio/runtimeData';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '../../../core/studio/types';
 import type { WorkspaceLifecycleState } from '../../../shared/contracts';
 import type { StudioExecutionAbortReason } from '../../../domain/studio/contracts';
+import { createTraceEvent } from '../../../domain/studio/kernel';
+import {
+  createStudioEngineState,
+  reduceStudioEngineState,
+  selectLatestRun,
+  selectRunHistory,
+} from '../kernel';
 
 export type StudioExecutionRunStatus = 'running' | 'success' | 'error' | 'aborted';
 
@@ -113,13 +120,14 @@ function logWorkspaceExecutionInterruption(reason: 'blocked' | 'reset', blockedR
 export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode[], edges: StudioEdge[], runtimeData: StudioRuntimeDataState, workspaceLifecycle: WorkspaceLifecycleState): StudioRuntimeState {
   const [nodeStates, setNodeStates] = useState<Record<string, NodeExecutionState>>({});
   const [nodeSnapshots, setNodeSnapshots] = useState<Record<string, NodeExecutionSnapshot>>({});
-  const [activeRun, setActiveRun] = useState<StudioExecutionRun | null>(null);
-  const [runHistory, setRunHistory] = useState<StudioExecutionRun[]>([]);
+  const [engineState, dispatchEngine] = useReducer(reduceStudioEngineState, undefined, () => createStudioEngineState());
   const executionCleanupRef = useRef<StudioExecutionCleanup | null>(null);
   const workspaceExecutionReadiness = useMemo(
     () => getWorkspaceExecutionReadiness(workspaceLifecycle),
     [workspaceLifecycle],
   );
+  const activeRun = useMemo(() => selectLatestRun(engineState) as StudioExecutionRun | null, [engineState]);
+  const runHistory = useMemo(() => selectRunHistory(engineState).slice(0, 20) as StudioExecutionRun[], [engineState]);
 
   useEffect(() => {
     return () => {
@@ -132,8 +140,7 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
     executionCleanupRef.current = null;
     setNodeStates({});
     setNodeSnapshots({});
-    setActiveRun(null);
-    setRunHistory([]);
+    dispatchEngine({ type: 'reset-execution' });
   }, [document]);
 
   useEffect(() => {
@@ -149,7 +156,7 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
     executionCleanupRef.current = null;
     setNodeStates({});
     setNodeSnapshots({});
-    setActiveRun(null);
+    dispatchEngine({ type: 'reset-execution' });
   }, [workspaceExecutionReadiness, workspaceLifecycle]);
 
   const executeFlow = useCallback((startNodeId: string) => {
@@ -169,7 +176,7 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
       onReset: () => {
         setNodeStates({});
         setNodeSnapshots({});
-        setActiveRun(null);
+        dispatchEngine({ type: 'reset-execution' });
       },
       onNodeStateChange: (nodeId, state) => {
         setNodeStates((previous) => ({ ...previous, [nodeId]: state }));
@@ -178,12 +185,25 @@ export function useStudioRuntimeState(document: GraphDocument, nodes: StudioNode
         setNodeSnapshots((previous) => ({ ...previous, [snapshot.nodeId]: snapshot }));
       },
       onRunStart: (run) => {
-        setActiveRun({ ...run, status: 'running' });
+        dispatchEngine({
+          type: 'begin-run',
+          run: { ...run, status: 'running' },
+          event: createTraceEvent(run.runId, 1, 'run-started', run.startedAt, {
+            nodeId: run.startNodeId,
+          }),
+        });
       },
       onRunComplete: (run) => {
         const completedRun: StudioExecutionRun = run;
-        setActiveRun((previous) => previous?.runId === completedRun.runId ? completedRun : previous);
-        setRunHistory((previous) => [completedRun, ...previous.filter((entry) => entry.runId !== completedRun.runId)].slice(0, 20));
+        dispatchEngine({
+          type: 'complete-run',
+          runId: completedRun.runId,
+          status: completedRun.status,
+          completedAt: completedRun.completedAt ?? completedRun.startedAt,
+          event: createTraceEvent(completedRun.runId, 2, 'run-completed', completedRun.completedAt ?? completedRun.startedAt, {
+            nodeId: completedRun.startNodeId,
+          }),
+        });
       },
     });
   }, [document.id, edges, nodes, runtimeData, workspaceExecutionReadiness, workspaceLifecycle]);

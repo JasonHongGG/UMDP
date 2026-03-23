@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Download, FolderOpen, History, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
-import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
+import { useStudioToolbarState } from '../../application/studio/useStudioToolbarState';
 import { Tooltip } from '../common/Tooltip';
 
 function formatTimestamp(timestamp: number | null) {
@@ -33,8 +33,7 @@ export function StudioToolbar() {
     saveWorkflow,
     loadSavedWorkflow,
     clearWorkflow,
-  } = useStudioGraph();
-  useStudioRuntime();
+  } = useStudioToolbarState();
   const [statusMessage, setStatusMessage] = useState<string>('');
 
   const handleSave = () => {

@@ -15,8 +15,8 @@ vi.mock('../../components/studio/canvas/Port', () => ({
   Port: () => null,
 }));
 
-vi.mock('../../core/studio/StudioContext', () => ({
-  useStudioRuntime: () => ({
+vi.mock('../../application/studio/useStudioRuntimeViewState', () => ({
+  useStudioRuntimeViewState: () => ({
     nodeStates: {
       'wait-1': 'running',
     },
@@ -37,15 +37,16 @@ vi.mock('../../core/studio/StudioContext', () => ({
       },
     },
   }),
-  useStudioGraph: () => ({
+}));
+
+vi.mock('../../application/studio/useStudioNodeWrapperState', () => ({
+  useStudioNodeWrapperState: () => ({
     nodes: [{ id: 'wait-1', type: 'wait', position: { x: 0, y: 0 }, data: { delaySeconds: 0.2 } }],
     updateNodePosition: vi.fn(),
     updateNodePositions: vi.fn(),
     beginNodePositionSession: vi.fn(),
     commitNodePositionSession: vi.fn(),
     deleteNode: vi.fn(),
-  }),
-  useStudioUi: () => ({
     transform: { x: 0, y: 0, scale: 1 },
     openEditModal,
     selectedNodeIds: [],

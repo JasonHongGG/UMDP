@@ -1,14 +1,15 @@
 import React, { useMemo } from 'react';
 import { AlertCircle, PencilLine } from 'lucide-react';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
 import { Port } from '../../components/studio/canvas/Port';
-import { useStudioQuery, useStudioRuntime } from '../../core/studio/StudioContext';
 import type { INodeComponentProps, IPort } from '../../core/studio/types';
 import type { EditorNodeQueryState } from '../../domain/studio/contracts';
 import type { EditorNodeData } from './editorNodeModel';
 
 export const EditorNodeCanvas: React.FC<INodeComponentProps<EditorNodeData>> = ({ id, data, inputs, outputs }) => {
-  const query = useStudioQuery();
-  const { nodeStates } = useStudioRuntime();
+  const query = useStudioQueryViewState();
+  const { nodeStates } = useStudioRuntimeViewState();
   const queryState = useMemo(
     () => query.getNodeQueryState<EditorNodeQueryState>(id) ?? {
       kind: 'missing-edge' as const,

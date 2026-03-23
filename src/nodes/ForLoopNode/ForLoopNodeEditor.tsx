@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Repeat, Hash, Link2, Info, Activity } from 'lucide-react';
-import { useStudioQuery } from '../../core/studio/StudioContext';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
 import { createLiteralExpressionSource, getExpressionSourceDisplayValue, readExpressionDragData } from '../../core/studio/expression';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { ExpressionSource } from '../../domain/studio/contracts';
@@ -253,7 +253,7 @@ function DynamicValueInput({
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
   const isExpression = source?.kind === 'input-expression';
   const isHighlighted = isDragOver || isCustomDragOver;
 
@@ -367,7 +367,7 @@ function DynamicValueInput({
 export const ForLoopNodeEditor: React.FC<INodeEditProps<ForLoopNodeData>> = ({
   nodeId, data, updateData,
 }) => {
-  const query = useStudioQuery();
+  const query = useStudioQueryViewState();
   const countInputBinding = useMemo(
     () => query.getNodeInputBindingStates(nodeId).find((binding) => binding.port.id === FOR_LOOP_COUNT_INPUT_PORT_ID) ?? null,
     [nodeId, query],

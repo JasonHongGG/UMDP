@@ -1,9 +1,16 @@
 import React, { useMemo } from 'react';
 import { Clock3 } from 'lucide-react';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
 import { createFlowPort } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import { useStudioRuntime } from '../../core/studio/StudioContext';
-import type { INodeComponentProps, INodeDefinition, IPort } from '../../core/studio/types';
+import type {
+  INodeComponentProps,
+  IPort,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import { Port } from '../../components/studio/canvas/Port';
 import { formatWaitCountdownLabel, createWaitNodeData, createWaitNodeRuntimeState, clampWaitDelaySeconds, getWaitSubtitle, type WaitNodeData } from './waitNodeModel';
 import WaitNodeEditor from './WaitNodeEditor';
@@ -122,7 +129,7 @@ function createValidationIssue(code: string, message: string) {
 }
 
 const WaitNodeCanvas: React.FC<INodeComponentProps<WaitNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { nodeStates, nodeSnapshots } = useStudioRuntime();
+  const { nodeStates, nodeSnapshots } = useStudioRuntimeViewState();
   const executionState = nodeStates[id] ?? 'idle';
   const snapshot = nodeSnapshots[id] ?? null;
   const countdownText = useMemo(() => {
@@ -173,7 +180,59 @@ const WaitNodeCanvas: React.FC<INodeComponentProps<WaitNodeData>> = ({ id, data,
   );
 };
 
-const WaitNodeDefinition: INodeDefinition<WaitNodeData> = {
+const WaitNodePresentation: StudioNodePresentationDefinition<WaitNodeData> = {
+  icon: Clock3,
+  CanvasComponent: WaitNodeCanvas,
+  EditComponent: WaitNodeEditor,
+  resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+};
+
+const WaitNodeSerialization: StudioNodeSerializationDefinition<WaitNodeData> = {
+  createInitialData: createWaitNodeData,
+  hydrateData: (instance, baseData) => ({
+    ...baseData,
+    nodeName: instance.displayName,
+    delaySeconds: clampWaitDelaySeconds(instance.parameters?.delaySeconds),
+  }),
+  dehydrateData: (data) => ({
+    displayName: data.nodeName?.trim() || undefined,
+    parameters: {
+      delaySeconds: clampWaitDelaySeconds(data.delaySeconds),
+    },
+    bindings: {},
+    documentState: {},
+  }),
+  createRuntimeState: (node) => createWaitNodeRuntimeState(node.data),
+};
+
+const WaitNodeExecution: StudioNodeExecutionDefinition = {
+  executionContract: {
+    validate: ({ parameters }) => {
+      const delaySeconds = parameters.delaySeconds;
+      if (typeof delaySeconds !== 'number' || !Number.isFinite(delaySeconds)) {
+        return [createValidationIssue('wait.delay.invalid', 'Wait node requires a finite delay value in seconds.')];
+      }
+
+      if (delaySeconds < 0) {
+        return [createValidationIssue('wait.delay.negative', 'Wait node delay must be zero or greater.')];
+      }
+
+      return [];
+    },
+    execute: async ({ parameters, abortSignal, reportProgress }) => {
+      const delaySeconds = clampWaitDelaySeconds(parameters.delaySeconds);
+      const delayMs = Math.round(delaySeconds * 1000);
+      await waitForDelay(delayMs, abortSignal, reportProgress);
+
+      return {
+        state: 'success' as const,
+        outputs: {},
+      };
+    },
+  },
+};
+
+const WaitNodeDefinition: StudioNodeDefinition<WaitNodeData> = {
   manifest: {
     type: 'wait',
     typeVersion: 1,
@@ -218,49 +277,9 @@ const WaitNodeDefinition: INodeDefinition<WaitNodeData> = {
       },
     }],
   },
-  icon: Clock3,
-  createInitialData: createWaitNodeData,
-  resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
-  hydrateData: (instance, baseData) => ({
-    ...baseData,
-    nodeName: instance.displayName,
-    delaySeconds: clampWaitDelaySeconds(instance.parameters?.delaySeconds),
-  }),
-  dehydrateData: (data) => ({
-    displayName: data.nodeName?.trim() || undefined,
-    parameters: {
-      delaySeconds: clampWaitDelaySeconds(data.delaySeconds),
-    },
-    bindings: {},
-    documentState: {},
-  }),
-  createRuntimeState: (node) => createWaitNodeRuntimeState(node.data),
-  executionContract: {
-    validate: ({ parameters }) => {
-      const delaySeconds = parameters.delaySeconds;
-      if (typeof delaySeconds !== 'number' || !Number.isFinite(delaySeconds)) {
-        return [createValidationIssue('wait.delay.invalid', 'Wait node requires a finite delay value in seconds.')];
-      }
-
-      if (delaySeconds < 0) {
-        return [createValidationIssue('wait.delay.negative', 'Wait node delay must be zero or greater.')];
-      }
-
-      return [];
-    },
-    execute: async ({ parameters, abortSignal, reportProgress }) => {
-      const delaySeconds = clampWaitDelaySeconds(parameters.delaySeconds);
-      const delayMs = Math.round(delaySeconds * 1000);
-      await waitForDelay(delayMs, abortSignal, reportProgress);
-
-      return {
-        state: 'success' as const,
-        outputs: {},
-      };
-    },
-  },
-  CanvasComponent: WaitNodeCanvas,
-  EditComponent: WaitNodeEditor,
+  ...WaitNodePresentation,
+  ...WaitNodeSerialization,
+  ...WaitNodeExecution,
 };
 
 export const WaitNodeDef = defineStudioNode(WaitNodeDefinition);

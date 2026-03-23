@@ -1,0 +1,27 @@
+import { getNodePortsByDirection } from '../../core/studio/NodeRegistry';
+import { getRegisteredStudioNodeCatalog } from '../../core/studio/catalog/studioNodeCatalogRuntime';
+import { getStudioNodePresentationDefinition } from '../../core/studio/types';
+import { useStudioServices } from '../../core/studio/StudioContext';
+
+export function useStudioNodeLayerState() {
+  const { graph, runtime } = useStudioServices();
+  const catalog = getRegisteredStudioNodeCatalog();
+
+  return graph.nodes.map((node) => {
+    const definition = catalog.get(node.type);
+    if (!definition) {
+      return null;
+    }
+
+    return {
+      node,
+      definition,
+      Component: getStudioNodePresentationDefinition(definition).CanvasComponent,
+      inputs: getNodePortsByDirection(definition, 'input'),
+      outputs: getNodePortsByDirection(definition, 'output'),
+      executionState: runtime.nodeStates[node.id] ?? 'idle',
+      executionSnapshot: runtime.nodeSnapshots[node.id] ?? null,
+      isRunActive: runtime.activeRun?.status === 'running',
+    };
+  }).filter((entry) => entry !== null);
+}

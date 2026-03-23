@@ -8,11 +8,20 @@ import {
   INSTANCE_REFERENCE_SCHEMA,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, NodeExecutionOutputMap, StudioNodeRuntimeState } from '../../core/studio/types';
+import type {
+  IPort,
+  NodeExecutionOutputMap,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeRuntimeState,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from '../../domain/analysis/contracts';
 import { parseCallFunctionNodeDocumentState, type CallFunctionClassInfoQueryState, type ValidationIssue, type WorkflowJsonValue } from '../../domain/studio/contracts';
 import type { StableId } from '../../domain/contracts/shared-identity';
-import { invokeRuntimeMethod } from '../../infrastructure/tauri/TauriRuntimeGateway';
+import { invokeStudioRuntimeMethod } from '../../application/studio/runtime/StudioRuntimeBridge';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { CallFunctionNodeCanvas } from './CallFunctionNodeCanvas';
@@ -192,41 +201,15 @@ function buildCallFunctionClassInfoQueryState(
   };
 }
 
-const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
-  manifest: {
-    type: 'call-function',
-    typeVersion: 1,
-    family: 'runtime',
-    displayName: 'Call Function',
-    description: 'Invokes a selected runtime method from an upstream Class Info payload.',
-    category: 'Runtime',
-    tags: ['invoke', 'runtime', 'method', 'unity'],
-    inputs: CALL_FUNCTION_INPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'input',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-      required: port.required,
-    })),
-    outputs: CALL_FUNCTION_OUTPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'output',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-    })),
-    parameters: [],
-    preview: {
-      mode: 'degraded',
-      description: 'Invocation previews show the planned call shape, but not a real runtime result until execution.',
-    },
-  },
+const CallFunctionNodePresentation: StudioNodePresentationDefinition<CallFunctionNodeData> = {
   icon: Code2,
-  createInitialData: createCallFunctionNodeData,
   resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+  CanvasComponent: CallFunctionNodeCanvas,
+  EditComponent: CallFunctionNodeEditor,
+};
+
+const CallFunctionNodeSerialization: StudioNodeSerializationDefinition<CallFunctionNodeData> = {
+  createInitialData: createCallFunctionNodeData,
   hydrateData: (instance, baseData) => parseCallFunctionNodeDataFromDocumentState(baseData, instance),
   dehydrateData: (data) => ({
     displayName: data.nodeName?.trim() || undefined,
@@ -240,8 +223,14 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
     bindings: Object.fromEntries(node.data.arguments.map((entry) => [entry.id, entry.source])),
     documentState: toCallFunctionDocumentState(node.data) as unknown as Record<string, unknown>,
   } satisfies StudioNodeRuntimeState),
+};
+
+const CallFunctionNodeQuery: StudioNodeQueryDefinition<CallFunctionNodeData> = {
   buildQueryOutputs: buildCallFunctionQuerySnapshot,
   buildQueryState: buildCallFunctionClassInfoQueryState,
+};
+
+const CallFunctionNodeExecution: StudioNodeExecutionDefinition = {
   executionContract: {
     validate: ({ documentState, resolvedInputs }) => {
       const parsedState = parseCallFunctionNodeDocumentState(documentState);
@@ -332,7 +321,7 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       };
 
       try {
-        const result = await invokeRuntimeMethod(request);
+        const result = await invokeStudioRuntimeMethod(request);
         const resultPayload = toCallFunctionResultPayload(method, classInfo.instanceAddress, resolvedArgumentValues, result);
         return {
           state: result.success ? 'success' : 'error',
@@ -360,8 +349,44 @@ const CallFunctionNodeDefinition: INodeDefinition<CallFunctionNodeData> = {
       }
     },
   },
-  CanvasComponent: CallFunctionNodeCanvas,
-  EditComponent: CallFunctionNodeEditor,
+};
+
+const CallFunctionNodeDefinition: StudioNodeDefinition<CallFunctionNodeData> = {
+  manifest: {
+    type: 'call-function',
+    typeVersion: 1,
+    family: 'runtime',
+    displayName: 'Call Function',
+    description: 'Invokes a selected runtime method from an upstream Class Info payload.',
+    category: 'Runtime',
+    tags: ['invoke', 'runtime', 'method', 'unity'],
+    inputs: CALL_FUNCTION_INPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'input',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+      required: port.required,
+    })),
+    outputs: CALL_FUNCTION_OUTPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'output',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+    })),
+    parameters: [],
+    preview: {
+      mode: 'degraded',
+      description: 'Invocation previews show the planned call shape, but not a real runtime result until execution.',
+    },
+  },
+  ...CallFunctionNodePresentation,
+  ...CallFunctionNodeSerialization,
+  ...CallFunctionNodeQuery,
+  ...CallFunctionNodeExecution,
 };
 
 export const CallFunctionNodeDef = defineStudioNode(CallFunctionNodeDefinition);

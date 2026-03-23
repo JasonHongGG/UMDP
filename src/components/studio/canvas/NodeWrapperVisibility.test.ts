@@ -7,16 +7,14 @@ import { NodeWrapper } from './NodeWrapper';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('../../../core/studio/StudioContext', () => ({
-  useStudioGraph: () => ({
+vi.mock('../../../application/studio/useStudioNodeWrapperState', () => ({
+  useStudioNodeWrapperState: () => ({
     nodes: [{ id: 'node-1', type: 'wait', position: { x: 0, y: 0 }, data: {} }],
     updateNodePosition: vi.fn(),
     updateNodePositions: vi.fn(),
     beginNodePositionSession: vi.fn(),
     commitNodePositionSession: vi.fn(),
     deleteNode: vi.fn(),
-  }),
-  useStudioUi: () => ({
     transform: { x: 0, y: 0, scale: 1 },
     openEditModal: vi.fn(),
     selectedNodeIds: [],

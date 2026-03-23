@@ -10,13 +10,23 @@ import {
   type ResolvedMemberRuntimeValue,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, NodeExecutionOutputMap, StudioNodeRuntimeState } from '../../core/studio/types';
+import type {
+  IPort,
+  NodeExecutionOutputMap,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodeLifecycleDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeRuntimeState,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import type { StudioNodeLifecycleContext } from '../../core/studio/nodeCapabilities';
 import type { RuntimeInstanceFieldSnapshot } from '../../domain/analysis/contracts';
 import type { ValidationIssue, WorkflowJsonValue } from '../../domain/studio/contracts';
 import { parseClassNodeDocumentState } from '../../domain/studio/contracts';
 import { reconcileClassInfoSelection } from '../../domain/studio/editor';
-import { getRuntimeInstanceFields } from '../../infrastructure/tauri/TauriRuntimeGateway';
+import { getStudioRuntimeInstanceFields } from '../../application/studio/runtime/StudioRuntimeBridge';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { ClassNodeBindingEditor } from './ClassNodeBindingEditor';
 import { ClassNodeCanvas } from './ClassNodeCanvas';
@@ -137,40 +147,16 @@ function reconcileClassNodeData(
   return selectionChanged ? { infoSelection: reconciledSelection } : null;
 }
 
-const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
-  manifest: {
-    type: 'class-ref',
-    typeVersion: 1,
-    family: 'runtime',
-    displayName: 'Class Reference',
-    description: 'Resolves a concrete class binding and wraps selected metadata into a fixed info JSON output.',
-    category: 'Runtime',
-    tags: ['class', 'metadata', 'json', 'unity'],
-    inputs: CLASS_NODE_INPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'input',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-    })),
-    outputs: CLASS_NODE_OUTPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'output',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-    })),
-    parameters: [],
-    preview: {
-      mode: 'supported',
-      description: 'Class metadata and selected exports can be materialized without a live execution run.',
-    },
-  },
+const ClassNodePresentation: StudioNodePresentationDefinition<ClassNodeData> = {
   icon: Box,
-  createInitialData: createClassNodeData,
   resolveDisplayName: (data) => data.nodeName?.trim() || data.binding?.name || undefined,
+  CanvasComponent: ClassNodeCanvas,
+  EditComponent: ClassNodeBindingEditor,
+  EditFooterComponent: ClassNodeSelectionEditor,
+};
+
+const ClassNodeSerialization: StudioNodeSerializationDefinition<ClassNodeData> = {
+  createInitialData: createClassNodeData,
   hydrateData: (instance, baseData) => parseClassNodeDataFromDocumentState(baseData, instance),
   dehydrateData: (data) => {
     const bindings: StudioNodeRuntimeState['bindings'] = {};
@@ -202,9 +188,18 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       },
     };
   },
+};
+
+const ClassNodeLifecycle: StudioNodeLifecycleDefinition<ClassNodeData> = {
   observeGraphNode: observeClassNodeGraph,
   reconcileData: reconcileClassNodeData,
+};
+
+const ClassNodeQuery: StudioNodeQueryDefinition<ClassNodeData> = {
   buildQueryOutputs: buildClassNodeQuerySnapshot,
+};
+
+const ClassNodeExecution: StudioNodeExecutionDefinition = {
   executionContract: {
     validate: (context) => {
       const classDocumentState = parseClassNodeDocumentState(context.documentState);
@@ -282,7 +277,7 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
 
       if (binding && normalizedInstanceAddress && selection.members.length > 0) {
         try {
-          const snapshot = await getRuntimeInstanceFields(binding.classStableId, normalizedInstanceAddress);
+          const snapshot = await getStudioRuntimeInstanceFields(binding.classStableId, normalizedInstanceAddress);
           resolvedMemberValues = createResolvedMemberValueMap(snapshot);
         } catch (error) {
           issues = [
@@ -311,9 +306,44 @@ const ClassNodeDefinition: INodeDefinition<ClassNodeData> = {
       };
     },
   },
-  CanvasComponent: ClassNodeCanvas,
-  EditComponent: ClassNodeBindingEditor,
-  EditFooterComponent: ClassNodeSelectionEditor,
+};
+
+const ClassNodeDefinition: StudioNodeDefinition<ClassNodeData> = {
+  manifest: {
+    type: 'class-ref',
+    typeVersion: 1,
+    family: 'runtime',
+    displayName: 'Class Reference',
+    description: 'Resolves a concrete class binding and wraps selected metadata into a fixed info JSON output.',
+    category: 'Runtime',
+    tags: ['class', 'metadata', 'json', 'unity'],
+    inputs: CLASS_NODE_INPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'input',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+    })),
+    outputs: CLASS_NODE_OUTPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'output',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+    })),
+    parameters: [],
+    preview: {
+      mode: 'supported',
+      description: 'Class metadata and selected exports can be materialized without a live execution run.',
+    },
+  },
+  ...ClassNodePresentation,
+  ...ClassNodeSerialization,
+  ...ClassNodeLifecycle,
+  ...ClassNodeQuery,
+  ...ClassNodeExecution,
 };
 
 export const ClassNodeDef = defineStudioNode(ClassNodeDefinition);

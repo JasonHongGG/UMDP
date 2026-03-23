@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { ActivitySquare, AlertTriangle, Eye, PlayCircle } from 'lucide-react';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
 import { Port } from '../../components/studio/canvas/Port';
-import { useStudioQuery, useStudioRuntime } from '../../core/studio/StudioContext';
 import type { INodeComponentProps } from '../../core/studio/types';
 import type { DisplayNodeQueryState, DisplayNodeResolvedField, NodeExecutionSnapshot, WorkflowJsonEnvelope, WorkflowJsonValue } from '../../domain/studio/contracts';
 import {
@@ -82,8 +83,8 @@ function buildResolvedState(
 }
 
 export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { nodeSnapshots } = useStudioRuntime();
-  const query = useStudioQuery();
+  const { nodeSnapshots } = useStudioRuntimeViewState();
+  const query = useStudioQueryViewState();
 
   const previewState = query.getNodeQueryState<DisplayNodeQueryState>(id);
   const resolvedState = useMemo(

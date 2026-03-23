@@ -2,12 +2,23 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Type, Tag, Settings2, Hash, Text, ToggleLeft, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select } from '../../components/common/Select';
-import { BaseNodeData, INodeComponentProps, INodeDefinition, INodeEditProps, IPort, NodeExecutionOutputMap } from '../../core/studio/types';
+import {
+  BaseNodeData,
+  INodeComponentProps,
+  INodeEditProps,
+  IPort,
+  NodeExecutionOutputMap,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import { createJsonPort, createParameterDefinitionsEnvelope, PARAMETER_DEFINITIONS_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { Port } from '../../components/studio/canvas/Port';
 import { getExpressionSourceDisplayValue, readExpressionDragData } from '../../core/studio/expression';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
 import {
   parseParameterNodeDocumentState,
   type ExpressionSource,
@@ -214,7 +225,7 @@ const AnimatedToggle = ({ isOn, onToggle }: { isOn: boolean; onToggle: () => voi
 const ParameterValueInput: React.FC<ParameterValueInputProps> = ({ entry, onChange }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
   const validation = entry.source.kind === 'literal' ? coerceParameterValue(entry.type, entry.source.raw) : null;
   
   const isDropZoneActive = isDragOver || isCustomDragOver;
@@ -489,7 +500,76 @@ const ParametersNodeCanvas: React.FC<INodeComponentProps<ParametersNodeData>> = 
   );
 };
 
-const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
+const ParametersNodePresentation: StudioNodePresentationDefinition<ParametersNodeData> = {
+  icon: Type,
+  resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+  EditComponent: ParametersNodeEditor,
+  CanvasComponent: ParametersNodeCanvas,
+};
+
+const ParametersNodeSerialization: StudioNodeSerializationDefinition<ParametersNodeData> = {
+  createInitialData: createParametersNodeData,
+  hydrateData: (instance, baseData) => ({
+    ...baseData,
+    nodeName: instance.displayName,
+    parameters: hydrateParameterEntries(parseParameterNodeDocumentState(instance.documentState).symbols),
+  }),
+  dehydrateData: (data) => ({
+    displayName: data.nodeName?.trim() || undefined,
+    parameters: {},
+    bindings: Object.fromEntries(
+      createRuntimeSymbols(data.parameters).map((entry) => [entry.id, entry.source]),
+    ),
+    documentState: {
+      symbols: createRuntimeSymbols(data.parameters).map((entry) => ({
+        stableId: entry.id as ReturnType<typeof createStableId>,
+        name: entry.name,
+        valueType: entry.type,
+        valueSource: entry.source,
+      })),
+    } satisfies ParameterNodeDocumentState,
+  }),
+  createRuntimeState: (node) => ({
+    displayName: node.data.nodeName?.trim() || undefined,
+    parameters: {},
+    bindings: Object.fromEntries(
+      createRuntimeSymbols(node.data.parameters).map((entry) => [entry.id, entry.source]),
+    ),
+    documentState: {
+      symbols: createRuntimeSymbols(node.data.parameters).map((entry) => ({
+        stableId: entry.id as ReturnType<typeof createStableId>,
+        name: entry.name,
+        valueType: entry.type,
+        valueSource: entry.source,
+      })),
+    } satisfies ParameterNodeDocumentState,
+  }),
+};
+
+const ParametersNodeQuery: StudioNodeQueryDefinition<ParametersNodeData> = {
+  buildQueryOutputs: buildParametersNodeQuerySnapshot,
+};
+
+const ParametersNodeExecution: StudioNodeExecutionDefinition = {
+  executionContract: {
+    validate: ({ documentState, resolvedBindings }) => {
+      const symbols = hydrateParameterEntries(parseParameterNodeDocumentState(documentState).symbols);
+      return buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[getParameterBindingKey(entry)]).issues;
+    },
+    execute: ({ documentState, resolvedBindings }) => {
+      const symbols = hydrateParameterEntries(parseParameterNodeDocumentState(documentState).symbols);
+      const { payload } = buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[getParameterBindingKey(entry)]);
+      return {
+        state: 'success',
+        outputs: {
+          'params-out': createParameterDefinitionsEnvelope(payload),
+        },
+      };
+    },
+  },
+};
+
+const ParametersNodeDefinition: StudioNodeDefinition<ParametersNodeData> = {
   manifest: {
     type: 'string-params',
     typeVersion: 1,
@@ -547,63 +627,10 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
       },
     }],
   },
-  icon: Type,
-  createInitialData: createParametersNodeData,
-  resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
-  EditComponent: ParametersNodeEditor,
-  hydrateData: (instance, baseData) => ({
-    ...baseData,
-    nodeName: instance.displayName,
-    parameters: hydrateParameterEntries(parseParameterNodeDocumentState(instance.documentState).symbols),
-  }),
-  dehydrateData: (data, instance) => ({
-    displayName: data.nodeName?.trim() || undefined,
-    parameters: {},
-    bindings: Object.fromEntries(
-      createRuntimeSymbols(data.parameters).map((entry) => [entry.id, entry.source]),
-    ),
-    documentState: {
-      symbols: createRuntimeSymbols(data.parameters).map((entry, index) => ({
-        stableId: entry.id as ReturnType<typeof createStableId>,
-        name: entry.name,
-        valueType: entry.type,
-        valueSource: entry.source,
-      } satisfies ParameterNodeDocumentState['symbols'][number])),
-    } satisfies ParameterNodeDocumentState,
-  }),
-  createRuntimeState: (node) => ({
-    displayName: node.data.nodeName?.trim() || undefined,
-    parameters: {},
-    bindings: Object.fromEntries(
-      createRuntimeSymbols(node.data.parameters).map((entry) => [entry.id, entry.source]),
-    ),
-    documentState: {
-      symbols: createRuntimeSymbols(node.data.parameters).map((entry) => ({
-        stableId: entry.id as ReturnType<typeof createStableId>,
-        name: entry.name,
-        valueType: entry.type,
-        valueSource: entry.source,
-      })),
-    } satisfies ParameterNodeDocumentState,
-  }),
-  buildQueryOutputs: buildParametersNodeQuerySnapshot,
-  executionContract: {
-    validate: ({ documentState, resolvedBindings }) => {
-      const symbols = hydrateParameterEntries(parseParameterNodeDocumentState(documentState).symbols);
-      return buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[getParameterBindingKey(entry)]).issues;
-    },
-    execute: ({ documentState, resolvedBindings }) => {
-      const symbols = hydrateParameterEntries(parseParameterNodeDocumentState(documentState).symbols);
-      const { payload } = buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[getParameterBindingKey(entry)]);
-      return {
-        state: 'success',
-        outputs: {
-          'params-out': createParameterDefinitionsEnvelope(payload),
-        },
-      };
-    },
-  },
-  CanvasComponent: ParametersNodeCanvas,
+  ...ParametersNodePresentation,
+  ...ParametersNodeSerialization,
+  ...ParametersNodeQuery,
+  ...ParametersNodeExecution,
 };
 
 export const ParametersNodeDef = defineStudioNode(ParametersNodeDefinition);

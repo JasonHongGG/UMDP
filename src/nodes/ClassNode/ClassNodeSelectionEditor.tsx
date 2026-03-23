@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { Box, Check, CheckCheck, Code, User, XSquare } from 'lucide-react';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
+import { useStudioRuntimeDataState } from '../../application/studio/useStudioRuntimeDataState';
 import type { INodeEditProps } from '../../core/studio/types';
-import { useStudioRuntimeData } from '../../core/studio/runtimeData';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
 import { beginPointerExpressionDrag } from '../../core/studio/drag/expressionPointerDrag';
 import { createExpressionReferenceDragPayload, createStaticExpressionSource } from '../../core/studio/expression';
 import { reconcileClassInfoSelection, type ClassInfoCatalog } from '../../domain/studio/editor';
@@ -145,8 +145,8 @@ function renderDescriptorTitleRow(bucket: SelectionBucketKey, descriptor: Select
 }
 
 export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> = ({ data, updateData }) => {
-  const runtimeData = useStudioRuntimeData();
-  const drag = useExpressionDrag();
+  const runtimeData = useStudioRuntimeDataState();
+  const drag = useStudioExpressionDragState();
 
   useEffect(() => {
     if (!data.binding) {

@@ -1,10 +1,12 @@
 import { studioNodeCatalog as registeredDefinitions } from '../../../nodes';
-import { defaultStudioNodeCatalog, type StudioNodeCatalog } from './StudioNodeCatalog';
+import { getStudioNodeCatalog, initializeStudioNodeRegistry } from '../NodeRegistry';
+import type { StudioNodeCatalog } from './StudioNodeCatalog';
 
 export function getRegisteredStudioNodeCatalog(): StudioNodeCatalog {
-  if (defaultStudioNodeCatalog.getAll().length === 0) {
-    defaultStudioNodeCatalog.replaceAll(registeredDefinitions);
+  const catalog = getStudioNodeCatalog();
+  if (catalog.getAll().length === 0) {
+    initializeStudioNodeRegistry(registeredDefinitions, catalog);
   }
 
-  return defaultStudioNodeCatalog;
+  return catalog;
 }

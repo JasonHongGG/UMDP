@@ -1,12 +1,21 @@
 import React from 'react';
 import { Repeat } from 'lucide-react';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
 import { createEnvelope, createFlowPort, createJsonPort, GENERIC_JSON_SCHEMA } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
 import { resolveExpressionSource } from '../../core/studio/expression';
-import { useStudioRuntime } from '../../core/studio/StudioContext';
 import type { StudioNodeLifecycleContext } from '../../core/studio/nodeCapabilities';
-import type { INodeComponentProps, INodeDefinition, IPort } from '../../core/studio/types';
+import type {
+  INodeComponentProps,
+  IPort,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodeLifecycleDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import { Port } from '../../components/studio/canvas/Port';
 import type { NodeExecutionContext, NodeExecutionOutputMap, ValidationIssue } from '../../domain/studio/contracts';
 import { parseForLoopNodeDocumentState } from '../../domain/studio/contracts';
@@ -254,7 +263,7 @@ function buildForLoopQueryOutputs(
 }
 
 const ForLoopNodeCanvas: React.FC<INodeComponentProps<ForLoopNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { nodeStates, nodeSnapshots } = useStudioRuntime();
+  const { nodeStates, nodeSnapshots } = useStudioRuntimeViewState();
   const nodeState = nodeStates[id] ?? 'idle';
   const snapshot = nodeSnapshots[id] ?? null;
   const iterationPayload = snapshot?.outputs?.['iteration-out']?.payload as { index?: number; totalCount?: number } | undefined;
@@ -296,7 +305,36 @@ const ForLoopNodeCanvas: React.FC<INodeComponentProps<ForLoopNodeData>> = ({ id,
   );
 };
 
-const ForLoopNodeDefinition: INodeDefinition<ForLoopNodeData> = {
+const ForLoopNodePresentation: StudioNodePresentationDefinition<ForLoopNodeData> = {
+  icon: Repeat,
+  CanvasComponent: ForLoopNodeCanvas,
+  EditComponent: ForLoopNodeEditor,
+  resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+};
+
+const ForLoopNodeSerialization: StudioNodeSerializationDefinition<ForLoopNodeData> = {
+  createInitialData: createForLoopNodeData,
+  hydrateData: (instance, baseData) => parseForLoopNodeDataFromDocumentState(baseData, instance),
+  dehydrateData: (data) => createForLoopNodeRuntimeState(data),
+  createRuntimeState: (node) => createForLoopNodeRuntimeState(node.data),
+};
+
+const ForLoopNodeLifecycle: StudioNodeLifecycleDefinition<ForLoopNodeData> = {
+  reconcileData: reconcileForLoopNodeData,
+};
+
+const ForLoopNodeQuery: StudioNodeQueryDefinition<ForLoopNodeData> = {
+  buildQueryOutputs: buildForLoopQueryOutputs,
+};
+
+const ForLoopNodeExecution: StudioNodeExecutionDefinition = {
+  executionContract: {
+    validate: validateForLoopNode,
+    execute: executeForLoopNode,
+  },
+};
+
+const ForLoopNodeDefinition: StudioNodeDefinition<ForLoopNodeData> = {
   manifest: {
     type: 'for-loop',
     typeVersion: 1,
@@ -341,20 +379,11 @@ const ForLoopNodeDefinition: INodeDefinition<ForLoopNodeData> = {
       },
     }],
   },
-  icon: Repeat,
-  createInitialData: createForLoopNodeData,
-  hydrateData: (instance, baseData) => parseForLoopNodeDataFromDocumentState(baseData, instance),
-  dehydrateData: (data) => createForLoopNodeRuntimeState(data),
-  createRuntimeState: (node) => createForLoopNodeRuntimeState(node.data),
-  resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
-  reconcileData: reconcileForLoopNodeData,
-  buildQueryOutputs: buildForLoopQueryOutputs,
-  executionContract: {
-    validate: validateForLoopNode,
-    execute: executeForLoopNode,
-  },
-  CanvasComponent: ForLoopNodeCanvas,
-  EditComponent: ForLoopNodeEditor,
+  ...ForLoopNodePresentation,
+  ...ForLoopNodeSerialization,
+  ...ForLoopNodeLifecycle,
+  ...ForLoopNodeQuery,
+  ...ForLoopNodeExecution,
 };
 
 export const ForLoopNodeDef = defineStudioNode(ForLoopNodeDefinition);

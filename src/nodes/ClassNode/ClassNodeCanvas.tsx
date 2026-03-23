@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { AlertCircle, Box } from 'lucide-react';
+import { useStudioGraphState } from '../../application/studio/useStudioGraphState';
+import { useStudioRuntimeViewState } from '../../application/studio/useStudioRuntimeViewState';
+import { useStudioRuntimeDataState } from '../../application/studio/useStudioRuntimeDataState';
 import { Port } from '../../components/studio/canvas/Port';
-import { useStudioGraph, useStudioRuntime } from '../../core/studio/StudioContext';
-import { useStudioRuntimeData } from '../../core/studio/runtimeData';
 import type { INodeComponentProps, IPort } from '../../core/studio/types';
 import { hasExpressionSourceValue } from '../../core/studio/expression';
 import { reconcileClassInfoSelection } from '../../domain/studio/editor';
@@ -10,9 +11,9 @@ import type { ClassNodeData } from './classNodeModel';
 import { createEmptyCatalog, hasResolvedExecutionValue } from './classNodeModel';
 
 export const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ id, data, inputs, outputs }) => {
-  const { edges } = useStudioGraph();
-  const { nodeStates } = useStudioRuntime();
-  const runtimeData = useStudioRuntimeData();
+  const { edges } = useStudioGraphState();
+  const { nodeStates } = useStudioRuntimeViewState();
+  const runtimeData = useStudioRuntimeDataState();
 
   useEffect(() => {
     if (!data.binding) {

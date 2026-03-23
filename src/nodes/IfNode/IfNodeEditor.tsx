@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, GitBranch, Link2, Activity, Zap, Variable, Hash, FileCode2, Command } from 'lucide-react';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
 import {
   createLiteralExpressionSource,
   getExpressionSourceDisplayValue,
   readExpressionDragData,
 } from '../../core/studio/expression';
-import { useStudioQuery } from '../../core/studio/StudioContext';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { ExpressionSource, IfNodeQueryState, NodeQueryIssue } from '../../domain/studio/contracts';
 import { createDefaultIfRightLiteralSource, formatIfValuePreview, getDefaultIfOperator, IF_OPERATOR_LABELS } from './ifNodePredicate';
@@ -47,7 +47,7 @@ function ExpressionOperandDropZone({
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
 
   const isHighlighted = isDragOver || isCustomDragOver;
 
@@ -287,7 +287,7 @@ function SegmentedControl({
 }
 
 export const IfNodeEditor: React.FC<INodeEditProps<IfNodeData>> = ({ nodeId, data, updateData }) => {
-  const query = useStudioQuery();
+  const query = useStudioQueryViewState();
   const queryState = useMemo<IfNodeQueryState>(() => query.getNodeQueryState<IfNodeQueryState>(nodeId) ?? {
     kind: 'incomplete',
     leftPreview: {

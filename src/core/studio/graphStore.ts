@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
 import type { GraphDocument } from '../../domain/studio/contracts';
 import { createStudioNodeInitialData, hydrateStudioNodeData } from './NodeRegistry';
-import type { StudioNodeCatalog } from './catalog/StudioNodeCatalog';
 import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
+import type { StudioNodeCatalog } from './catalog/StudioNodeCatalog';
 import {
   buildNodeInstance,
   connectionKeyToEdge,
@@ -23,20 +23,9 @@ export {
   pushStudioGraphHistoryEntry,
 } from './document/StudioDocumentEngine';
 import { initialStudioGraphState, reduceStudioGraphDocument, StudioGraphAction, studioGraphReducer } from './graphReducer';
-import {
-  cloneGraphDocument,
-  createEmptyGraphDocument,
-  serializeGraphDocument,
-} from '../../infrastructure/studio/persistence/graphPersistence';
-import {
-  readStudioWorkflowPersistenceSnapshot,
-  readStudioWorkflowSlot,
-  resetStudioWorkflowPersistence,
-  writeStudioWorkflowSlot,
-} from '../../infrastructure/studio/persistence/studioWorkflowPersistence';
+import { localStudioGraphPersistenceGateway, type StudioGraphPersistenceGateway } from './StudioGraphPersistenceGateway';
 import { BaseNodeData, ConnectPortsOptions, getConnectionChannelForPortType, NodeTransform, StudioEdge, StudioNode, StudioNodeDefinition } from './types';
-
-const EMPTY_WORKFLOW_SNAPSHOT = serializeGraphDocument(createEmptyGraphDocument());
+import { useStudioGraphPersistence } from './useStudioGraphPersistence';
 
 export interface UpdateNodePositionOptions {
   trackHistory?: boolean;
@@ -76,17 +65,15 @@ export interface StudioGraphStore {
   clearWorkflow: () => void;
 }
 
-export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredStudioNodeCatalog()): StudioGraphStore {
+export function useStudioGraphStore(
+  catalog: StudioNodeCatalog = getRegisteredStudioNodeCatalog(),
+  persistenceGateway: StudioGraphPersistenceGateway = localStudioGraphPersistenceGateway,
+): StudioGraphStore {
   const [graphState, dispatch] = useReducer(studioGraphReducer, initialStudioGraphState);
   const [pastDocuments, setPastDocuments] = useState<GraphDocument[]>([]);
   const [futureDocuments, setFutureDocuments] = useState<GraphDocument[]>([]);
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
-  const [lastAutosavedAt, setLastAutosavedAt] = useState<number | null>(null);
-  const [hasSavedWorkflow, setHasSavedWorkflow] = useState(false);
-  const [savedDocumentSnapshot, setSavedDocumentSnapshot] = useState<string | null>(null);
   const dragHistorySnapshotsRef = useRef<Map<string, GraphDocument>>(new Map());
-  const hasHydratedPersistenceRef = useRef(false);
   const idCounter = useRef(1);
   const edgeCounter = useRef(1);
 
@@ -97,8 +84,10 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
     ...graphState.document.controlConnections.map((connection) => connectionKeyToEdge('control', connection)),
     ...graphState.document.dataConnections.map((connection) => connectionKeyToEdge('data', connection)),
   ]), [graphState.document.controlConnections, graphState.document.dataConnections]);
-  const currentSerializedDocument = useMemo(() => serializeGraphDocument(graphState.document), [graphState.document]);
-  const hasUnsavedChanges = useMemo(() => isStudioGraphDocumentDirty(graphState.document, savedDocumentSnapshot), [graphState.document, savedDocumentSnapshot]);
+  const currentSerializedDocument = useMemo(
+    () => persistenceGateway.serializeDocument(graphState.document),
+    [graphState.document, persistenceGateway],
+  );
 
   const syncCountersFromDocument = useCallback((document: GraphDocument) => {
     const { nextNodeCounter, nextEdgeCounter } = deriveStudioGraphCounters(document);
@@ -126,7 +115,7 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
   }, [graphState.document, pushDocumentIntoHistory]);
 
   const replaceDocumentState = useCallback((document: GraphDocument, options?: { resetHistory?: boolean; loadedAt?: number | null }) => {
-    const nextDocument = cloneGraphDocument(document);
+    const nextDocument = persistenceGateway.cloneDocument(document);
 
     dispatch({ type: 'replace-document', document: nextDocument });
     syncCountersFromDocument(nextDocument);
@@ -141,43 +130,19 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
     }
   }, [syncCountersFromDocument]);
 
-  useEffect(() => {
-    const { manualSave, autosave } = readStudioWorkflowPersistenceSnapshot();
-    const manualRecord = manualSave;
-    if (manualRecord) {
-      setHasSavedWorkflow(true);
-      setLastSavedAt(manualRecord.savedAt);
-      setSavedDocumentSnapshot(serializeGraphDocument(manualRecord.envelope.document));
-    }
-
-    const autosaveRecord = autosave;
-    if (autosaveRecord) {
-      replaceDocumentState(autosaveRecord.envelope.document, {
-        resetHistory: true,
-        loadedAt: autosaveRecord.savedAt,
-      });
-      setLastAutosavedAt(autosaveRecord.savedAt);
-    } else {
-      syncCountersFromDocument(initialStudioGraphState.document);
-    }
-
-    hasHydratedPersistenceRef.current = true;
-  }, [replaceDocumentState, syncCountersFromDocument]);
-
-  useEffect(() => {
-    if (!hasHydratedPersistenceRef.current) {
-      return undefined;
-    }
-
-    const timeout = window.setTimeout(() => {
-      const savedAt = writeStudioWorkflowSlot('autosave', graphState.document);
-      if (savedAt) {
-        setLastAutosavedAt(savedAt);
-      }
-    }, 250);
-
-    return () => window.clearTimeout(timeout);
-  }, [graphState.document]);
+  const {
+    hasUnsavedChanges,
+    hasSavedWorkflow,
+    lastSavedAt,
+    lastAutosavedAt,
+    saveWorkflow,
+    loadSavedWorkflow,
+    clearWorkflow,
+  } = useStudioGraphPersistence({
+    document: graphState.document,
+    persistenceGateway,
+    replaceDocumentState,
+  });
 
   const addNode = useCallback((typeId: string, position: NodeTransform, dataOverrides?: Partial<BaseNodeData>) => {
     const def = catalog.get(typeId);
@@ -213,7 +178,7 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
 
   const beginNodePositionSession = useCallback((nodeIds: string | string[]) => {
     const ids = Array.isArray(nodeIds) ? nodeIds : [nodeIds];
-    const snapshot = cloneGraphDocument(graphState.document);
+    const snapshot = persistenceGateway.cloneDocument(graphState.document);
     ids.forEach((nodeId) => {
       dragHistorySnapshotsRef.current.set(nodeId, snapshot);
     });
@@ -233,7 +198,7 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
       return;
     }
 
-    if (serializeGraphDocument(snapshot) === currentSerializedDocument) {
+    if (persistenceGateway.serializeDocument(snapshot) === currentSerializedDocument) {
       return;
     }
 
@@ -332,9 +297,9 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
     }
 
     setPastDocuments((current) => current.slice(0, -1));
-    setFutureDocuments((current) => [cloneGraphDocument(graphState.document), ...current]);
+    setFutureDocuments((current) => [persistenceGateway.cloneDocument(graphState.document), ...current]);
     replaceDocumentState(previous, { loadedAt: Date.now() });
-  }, [graphState.document, pastDocuments, replaceDocumentState]);
+  }, [graphState.document, pastDocuments, persistenceGateway, replaceDocumentState]);
 
   const redo = useCallback(() => {
     const [next, ...remaining] = futureDocuments;
@@ -346,43 +311,6 @@ export function useStudioGraphStore(catalog: StudioNodeCatalog = getRegisteredSt
     pushDocumentIntoHistory(graphState.document);
     replaceDocumentState(next, { loadedAt: Date.now() });
   }, [futureDocuments, graphState.document, pushDocumentIntoHistory, replaceDocumentState]);
-
-  const saveWorkflow = useCallback(() => {
-    const savedAt = writeStudioWorkflowSlot('manual-save', graphState.document);
-    if (!savedAt) {
-      return false;
-    }
-
-    setHasSavedWorkflow(true);
-    setLastSavedAt(savedAt);
-    setSavedDocumentSnapshot(currentSerializedDocument);
-    return true;
-  }, [currentSerializedDocument, graphState.document]);
-
-  const loadSavedWorkflow = useCallback(() => {
-    const record = readStudioWorkflowSlot('manual-save');
-    if (!record) {
-      return false;
-    }
-
-    setHasSavedWorkflow(true);
-    setLastSavedAt(record.savedAt);
-    setSavedDocumentSnapshot(serializeGraphDocument(record.envelope.document));
-    replaceDocumentState(record.envelope.document, {
-      resetHistory: true,
-      loadedAt: Date.now(),
-    });
-    return true;
-  }, [replaceDocumentState]);
-
-  const clearWorkflow = useCallback(() => {
-    resetStudioWorkflowPersistence();
-    setHasSavedWorkflow(false);
-    setLastSavedAt(null);
-    setLastAutosavedAt(null);
-    setSavedDocumentSnapshot(null);
-    replaceDocumentState(createEmptyGraphDocument(), { resetHistory: true, loadedAt: Date.now() });
-  }, [replaceDocumentState]);
 
   return useMemo<StudioGraphStore>(() => ({
     nodes,

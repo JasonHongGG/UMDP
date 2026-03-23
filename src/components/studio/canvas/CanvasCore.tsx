@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioCanvasState } from '../../../application/studio/useStudioCanvasState';
 import { NodeLayer } from './NodeLayer';
 import { EdgeLayer } from './EdgeLayer';
 
@@ -12,8 +12,7 @@ interface SelectionRect {
 
 export function CanvasCore() {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { nodes } = useStudioGraph();
-  const { transform, setTransform, openAddModal, registerCanvasElement, clearSelectedNodes, setSelectedNodeIds, getNodeElement } = useStudioUi();
+  const { nodes, transform, setTransform, openAddModal, registerCanvasElement, clearSelectedNodes, setSelectedNodeIds, getNodeElement } = useStudioCanvasState();
   
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });

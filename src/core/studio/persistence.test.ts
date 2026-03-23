@@ -147,7 +147,7 @@ describe('studio persistence', () => {
     expect(readStoredGraphDocument('studio.test.workflow')).toBeNull();
   });
 
-  it('reads and writes v3 workflow slots through the persistence policy', () => {
+  it('reads and writes workflow slots through the persistence policy', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const document = createEmptyGraphDocument();
     document.id = 'workflow-v2';
@@ -163,7 +163,7 @@ describe('studio persistence', () => {
     nowSpy.mockRestore();
   });
 
-  it('resets v3 workflow slots through the persistence policy', () => {
+  it('resets workflow slots through the persistence policy', () => {
     writeStudioWorkflowSlot('autosave', createEmptyGraphDocument());
     writeStudioWorkflowSlot('manual-save', createEmptyGraphDocument());
     window.localStorage.setItem('unity-mono-studio.workflow.autosave.v2', '{"legacy":true}');

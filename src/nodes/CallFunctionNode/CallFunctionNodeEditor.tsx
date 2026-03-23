@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Code2 } from 'lucide-react';
-import { useStudioQuery } from '../../core/studio/StudioContext';
+import { useStudioExpressionDragState } from '../../application/studio/useStudioExpressionDragState';
+import { useStudioQueryViewState } from '../../application/studio/useStudioQueryViewState';
 import {
   getExpressionSourceDisplayValue,
   readExpressionDragData,
   createLiteralExpressionSource,
 } from '../../core/studio/expression';
-import { useExpressionDrag } from '../../core/studio/drag/ExpressionDragContext';
 import type { INodeEditProps } from '../../core/studio/types';
 import type { StableId } from '../../domain/contracts/shared-identity';
 import type { CallFunctionClassInfoQueryState, ClassInfoFunctionPayload, ExpressionSource } from '../../domain/studio/contracts';
@@ -27,7 +27,7 @@ function ArgumentInput({
   onChange: (nextValue: ExpressionSource) => void;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
 
   return (
     <div
@@ -71,7 +71,7 @@ function ArgumentInput({
 }
 
 export const CallFunctionNodeEditor: React.FC<INodeEditProps<CallFunctionNodeData>> = ({ nodeId, data, updateData }) => {
-  const query = useStudioQuery();
+  const query = useStudioQueryViewState();
   const classInfoState = useMemo(
     () => query.getNodeQueryState<CallFunctionClassInfoQueryState>(nodeId) ?? {
       kind: 'missing-edge' as const,

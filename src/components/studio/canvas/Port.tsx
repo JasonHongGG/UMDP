@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { IPort, PORT_COLORS, PortHandleType, PortType } from '../../../core/studio/types';
 import { validateConnection } from '../../../core/studio/connectionPolicy';
-import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioPortState } from '../../../application/studio/useStudioPortState';
 
 interface PortProps {
   nodeId: string;
@@ -10,17 +10,7 @@ interface PortProps {
 }
 
 export function Port({ nodeId, port, type }: PortProps) {
-  const { nodes, edges } = useStudioGraph();
-  const {
-    startConnection,
-    finishConnection,
-    cancelConnection,
-    draftConnection,
-    updateConnectionTarget,
-    transform,
-    canvasElement,
-    registerPortElement,
-  } = useStudioUi();
+  const { nodes, edges, startConnection, finishConnection, cancelConnection, draftConnection, updateConnectionTarget, transform, canvasElement, registerPortElement } = useStudioPortState();
 
   const resolveCanvasElement = () => canvasElement || document.body;
 

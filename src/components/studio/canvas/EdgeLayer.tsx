@@ -1,6 +1,6 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { getStudioNodePort, getStudioNodePorts } from '../../../core/studio/NodeRegistry';
-import { useStudioGraph, useStudioRuntime, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioEdgeLayerState } from '../../../application/studio/useStudioEdgeLayerState';
 import { NodeExecutionSnapshot, NodeExecutionState, PORT_COLORS, PortType, StudioEdge } from '../../../core/studio/types';
 
 export function isEdgeExecutionActive(
@@ -40,9 +40,7 @@ export function isEdgeExecutionActive(
 }
 
 export function EdgeLayer() {
-  const { edges, nodes, disconnectEdge } = useStudioGraph();
-  const { nodeStates, nodeSnapshots } = useStudioRuntime();
-  const { transform, draftConnection, canvasElement, getPortElement } = useStudioUi();
+  const { edges, nodes, disconnectEdge, nodeStates, nodeSnapshots, transform, draftConnection, canvasElement, getPortElement } = useStudioEdgeLayerState();
   const [portPositions, setPortPositions] = useState<Record<string, { x: number, y: number }>>({});
 
   const resolvePortPosition = useCallback((nodeId: string, portId: string) => {

@@ -1,9 +1,9 @@
 import type { NodeInstance } from '../../domain/studio/contracts';
 import { defaultStudioNodeCatalog, StudioNodeCatalog } from './catalog/StudioNodeCatalog';
-import { BaseNodeData, INodeDefinition, IPort, StudioNode, StudioNodeDefinition, StudioNodeRuntimeState } from './types';
+import { BaseNodeData, IPort, StudioNode, StudioNodeDefinition, StudioNodeRuntimeState } from './types';
 import { resolveJsonSchemaReference } from './contracts';
 
-export function defineStudioNode<T extends BaseNodeData>(nodeDef: INodeDefinition<T>): StudioNodeDefinition {
+export function defineStudioNode<T extends BaseNodeData>(nodeDef: StudioNodeDefinition<T>): StudioNodeDefinition {
   return nodeDef as unknown as StudioNodeDefinition;
 }
 
@@ -48,7 +48,7 @@ export function hydrateStudioNodeData(nodeDef: StudioNodeDefinition, instance: N
   };
 }
 
-export function dehydrateStudioNodeData<T extends BaseNodeData>(nodeDef: INodeDefinition<T>, data: T, instance: NodeInstance): StudioNodeRuntimeState {
+export function dehydrateStudioNodeData<T extends BaseNodeData>(nodeDef: StudioNodeDefinition<T>, data: T, instance: NodeInstance): StudioNodeRuntimeState {
   return nodeDef.dehydrateData?.(data, instance) ?? {
     displayName: data.nodeName?.trim() || undefined,
     parameters: {},
@@ -59,6 +59,15 @@ export function dehydrateStudioNodeData<T extends BaseNodeData>(nodeDef: INodeDe
 
 export function initializeStudioNodeRegistry(nodeDefs: StudioNodeDefinition[], catalog: StudioNodeCatalog = defaultStudioNodeCatalog) {
   catalog.replaceAll(nodeDefs);
+  return catalog;
+}
+
+export function getStudioNodeCatalog(catalog: StudioNodeCatalog = defaultStudioNodeCatalog) {
+  return catalog;
+}
+
+export function getStudioNodeDefinition(typeId: string, catalog: StudioNodeCatalog = defaultStudioNodeCatalog) {
+  return getStudioNodeCatalog(catalog).get(typeId);
 }
 
 export function getNodePortsByDirection(nodeDef: StudioNodeDefinition, direction: 'input' | 'output') {

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { NodeExecutionSnapshot, NodeExecutionState, StudioNode } from '../../../core/studio/types';
-import { useStudioGraph, useStudioUi } from '../../../core/studio/StudioContext';
+import { useStudioNodeWrapperState } from '../../../application/studio/useStudioNodeWrapperState';
 import { Trash2 } from 'lucide-react';
 
 interface NodeWrapperProps {
@@ -28,8 +28,7 @@ function resolveExecutionClass(executionState: NodeExecutionState, isRunActive: 
 }
 
 export function NodeWrapper({ node, executionState = 'idle', executionSnapshot = null, isRunActive = false, children }: NodeWrapperProps) {
-  const { nodes, updateNodePosition, updateNodePositions, beginNodePositionSession, commitNodePositionSession, deleteNode } = useStudioGraph();
-  const { transform, openEditModal, selectedNodeIds, selectSingleNode, toggleSelectedNode, registerNodeElement } = useStudioUi();
+  const { nodes, updateNodePosition, updateNodePositions, beginNodePositionSession, commitNodePositionSession, deleteNode, transform, openEditModal, selectedNodeIds, selectSingleNode, toggleSelectedNode, registerNodeElement } = useStudioNodeWrapperState();
   const nodeRef = useRef<HTMLDivElement>(null);
   
   const [isDragging, setIsDragging] = useState(false);

@@ -9,7 +9,16 @@ import {
   type ResolvedMemberRuntimeValue,
 } from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
-import type { INodeDefinition, IPort, StudioNodeRuntimeState, NodeExecutionOutputMap } from '../../core/studio/types';
+import type {
+  IPort,
+  NodeExecutionOutputMap,
+  StudioNodeDefinition,
+  StudioNodeExecutionDefinition,
+  StudioNodePresentationDefinition,
+  StudioNodeQueryDefinition,
+  StudioNodeRuntimeState,
+  StudioNodeSerializationDefinition,
+} from '../../core/studio/types';
 import type { DisplayNodeQueryState, ExpressionSource, NodeQueryIssue, ClassInfoPayload } from '../../domain/studio/contracts';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
@@ -27,7 +36,7 @@ import {
   type DisplayNodeData,
 } from './displayNodeModel';
 import { getClassInfoPayloadFromValue } from '../CallFunctionNode/callFunctionNodeModel';
-import { getRuntimeInstanceFields, getRuntimeStaticFields } from '../../infrastructure/tauri/TauriRuntimeGateway';
+import { getStudioRuntimeInstanceFields, getStudioRuntimeStaticFields } from '../../application/studio/runtime/StudioRuntimeBridge';
 
 function createResolvedMemberValueMap(snapshot: RuntimeInstanceFieldSnapshot): Record<string, ResolvedMemberRuntimeValue> {
   return Object.fromEntries(
@@ -101,7 +110,7 @@ async function refreshObservedClassInfoPayload(
     return null;
   }
 
-  if (payloadBinding?.kind !== 'input-expression' || controlInputs.includes(payloadBinding.sourceNodeId)) {
+  if (payloadBinding?.kind !== 'input-expression' || !payloadBinding.sourceNodeId || controlInputs.includes(payloadBinding.sourceNodeId)) {
     return null;
   }
 
@@ -117,7 +126,7 @@ async function refreshObservedClassInfoPayload(
 
   const selection = createSelectionFromPayload(classInfo);
   const overlaySnapshot = selection.statics.length > 0
-    ? await getRuntimeStaticFields(binding.classStableId)
+    ? await getStudioRuntimeStaticFields(binding.classStableId)
     : null;
   const refreshedCatalog = mergeCatalogWithStaticOverlay(catalog, overlaySnapshot, binding.classStableId);
 
@@ -126,7 +135,7 @@ async function refreshObservedClassInfoPayload(
     ? formatHexAddress(classInfo.instanceAddress)
     : null;
   if (selection.members.length > 0 && normalizedInstanceAddress) {
-    const snapshot = await getRuntimeInstanceFields(binding.classStableId, normalizedInstanceAddress);
+    const snapshot = await getStudioRuntimeInstanceFields(binding.classStableId, normalizedInstanceAddress);
     resolvedMemberValues = createResolvedMemberValueMap(snapshot);
   }
 
@@ -223,41 +232,15 @@ function buildDisplayQueryState(
   };
 }
 
-const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
-  manifest: {
-    type: 'display',
-    typeVersion: 1,
-    family: 'runtime',
-    displayName: 'Display',
-    description: 'Observe runtime or preview payloads directly on the canvas.',
-    category: 'Runtime',
-    tags: ['display', 'inspect', 'debug', 'output'],
-    inputs: DISPLAY_INPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'input',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-      required: port.required,
-    })),
-    outputs: DISPLAY_OUTPUTS.map((port) => ({
-      key: port.id,
-      displayName: port.label,
-      direction: 'output',
-      channel: port.channel,
-      cardinality: port.cardinality,
-      dataType: port.dataType,
-    })),
-    preview: {
-      mode: 'degraded',
-      description: 'Display nodes can preview upstream payloads when available, but depend on upstream preview support.',
-    },
-    parameters: [],
-  },
+const DisplayNodePresentation: StudioNodePresentationDefinition<DisplayNodeData> = {
   icon: Eye,
-  createInitialData: createDisplayNodeData,
   resolveDisplayName: (data) => data.nodeName?.trim() || undefined,
+  CanvasComponent: DisplayNodeCanvas,
+  EditComponent: DisplayNodeEditor,
+};
+
+const DisplayNodeSerialization: StudioNodeSerializationDefinition<DisplayNodeData> = {
+  createInitialData: createDisplayNodeData,
   hydrateData: (instance, baseData) => hydrateDisplayNodeData(baseData, instance),
   dehydrateData: (data) => ({
     displayName: data.nodeName?.trim() || undefined,
@@ -271,7 +254,13 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
     bindings: {},
     documentState: toDisplayNodeDocumentState(node.data) as unknown as Record<string, unknown>,
   } satisfies StudioNodeRuntimeState),
+};
+
+const DisplayNodeQuery: StudioNodeQueryDefinition<DisplayNodeData> = {
   buildQueryState: buildDisplayQueryState,
+};
+
+const DisplayNodeExecution: StudioNodeExecutionDefinition = {
   executionContract: {
     validate: ({ resolvedInputs }) => {
       const payloads = resolvedInputs['payload-in'] ?? [];
@@ -315,8 +304,44 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
       };
     },
   },
-  CanvasComponent: DisplayNodeCanvas,
-  EditComponent: DisplayNodeEditor,
+};
+
+const DisplayNodeDefinition: StudioNodeDefinition<DisplayNodeData> = {
+  manifest: {
+    type: 'display',
+    typeVersion: 1,
+    family: 'runtime',
+    displayName: 'Display',
+    description: 'Observe runtime or preview payloads directly on the canvas.',
+    category: 'Runtime',
+    tags: ['display', 'inspect', 'debug', 'output'],
+    inputs: DISPLAY_INPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'input',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+      required: port.required,
+    })),
+    outputs: DISPLAY_OUTPUTS.map((port) => ({
+      key: port.id,
+      displayName: port.label,
+      direction: 'output',
+      channel: port.channel,
+      cardinality: port.cardinality,
+      dataType: port.dataType,
+    })),
+    preview: {
+      mode: 'degraded',
+      description: 'Display nodes can preview upstream payloads when available, but depend on upstream preview support.',
+    },
+    parameters: [],
+  },
+  ...DisplayNodePresentation,
+  ...DisplayNodeSerialization,
+  ...DisplayNodeQuery,
+  ...DisplayNodeExecution,
 };
 
 export const DisplayNodeDef = defineStudioNode(DisplayNodeDefinition);

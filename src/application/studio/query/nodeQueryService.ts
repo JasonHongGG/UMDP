@@ -1,11 +1,10 @@
-import { getNodePortsByDirection } from '../../../core/studio/NodeRegistry';
+import { getNodePortsByDirection, getStudioNodeDefinition } from '../../../core/studio/NodeRegistry';
+import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
 import { materializeNodeQuerySnapshot } from '../../../core/studio/graphInterpreter';
-import type { IPort, StudioEdge, StudioNode } from '../../../core/studio/types';
+import { getStudioNodeQueryDefinition, type IPort, type StudioEdge, type StudioNode } from '../../../core/studio/types';
 import { getNodePreviewMode, supportsNodePreview, type NodePreviewMode, type NodeQueryIssue } from '../../../domain/studio/contracts';
 import { getClassInfoPayloadFromValue } from '../../../nodes/CallFunctionNode/callFunctionNodeModel';
 import type { StudioNodeQueryContext } from '../../../core/studio/queryTypes';
-import { getRegisteredStudioNodeCatalog } from '../../../core/studio/catalog/studioNodeCatalogRuntime';
-
 export type { StudioNodeQueryContext } from '../../../core/studio/queryTypes';
 
 export interface InputPortBindingSource {
@@ -31,23 +30,24 @@ export function getNodeQuerySnapshot(nodeId: string, context: StudioNodeQueryCon
 
 export function getNodeQueryState<T>(nodeId: string, context: StudioNodeQueryContext): T | null {
   const node = getNodeById(nodeId, context.nodes);
-  const nodeDef = node ? getRegisteredStudioNodeCatalog().get(node.type) : null;
-  if (!node || !nodeDef?.buildQueryState) {
+  const nodeDef = node ? getStudioNodeDefinition(node.type) : null;
+  const query = nodeDef ? getStudioNodeQueryDefinition(nodeDef) : null;
+  if (!node || !query?.buildQueryState) {
     return null;
   }
 
-  return (nodeDef.buildQueryState(node as never, context) as T | null) ?? null;
+  return (query.buildQueryState(node as never, context) as T | null) ?? null;
 }
 
 export function getNodePreviewCapability(nodeId: string, context: StudioNodeQueryContext): NodePreviewMode | null {
   const node = getNodeById(nodeId, context.nodes);
-  const nodeDef = node ? getRegisteredStudioNodeCatalog().get(node.type) : null;
+  const nodeDef = node ? getStudioNodeDefinition(node.type) : null;
   return nodeDef ? getNodePreviewMode(nodeDef.manifest) : null;
 }
 
 export function getNodeOutputPreview(nodeId: string, context: StudioNodeQueryContext) {
   const node = getNodeById(nodeId, context.nodes);
-  const nodeDef = node ? getRegisteredStudioNodeCatalog().get(node.type) : null;
+  const nodeDef = node ? getStudioNodeDefinition(node.type) : null;
   if (!nodeDef || !supportsNodePreview(nodeDef.manifest)) {
     return null;
   }

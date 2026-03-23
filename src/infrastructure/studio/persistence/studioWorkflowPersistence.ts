@@ -9,8 +9,8 @@ import {
 export type StudioWorkflowPersistenceSlot = 'autosave' | 'manual-save';
 
 const STORAGE_KEYS: Record<StudioWorkflowPersistenceSlot, string> = {
-  autosave: 'unity-mono-studio.workflow.autosave.v3',
-  'manual-save': 'unity-mono-studio.workflow.manual-save.v3',
+  autosave: 'unity-mono-studio.workflow.autosave',
+  'manual-save': 'unity-mono-studio.workflow.manual-save',
 };
 
 export function readStudioWorkflowSlot(slot: StudioWorkflowPersistenceSlot): StoredGraphDocumentRecord | null {

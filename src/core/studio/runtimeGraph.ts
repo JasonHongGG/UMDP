@@ -1,6 +1,7 @@
 import {
   NodeExecutionInputMap,
   NodeExecutionSnapshot,
+  getStudioNodeExecutionDefinition,
   StudioNodeRuntimeState,
   StudioEdge,
   StudioNode,
@@ -205,9 +206,10 @@ export function validateNodeExecution(
   context: NodeExecutionContext,
   definition?: StudioNodeDefinition,
 ): ValidationIssue[] {
-  if (!definition?.executionContract) {
+  const execution = definition ? getStudioNodeExecutionDefinition(definition) : null;
+  if (!execution?.executionContract) {
     return EMPTY_ISSUES;
   }
 
-  return definition.executionContract.validate(context);
+  return execution.executionContract.validate(context);
 }

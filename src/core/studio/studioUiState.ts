@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { createInitialCanvasState } from '../../domain/studio/kernel';
+import { reduceCanvasState } from '../../application/studio/kernel';
 import { validateConnection } from './connectionPolicy';
 import type { ConnectPortsOptions, DraftConnection, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
-import { getConnectionChannelForPortType } from './types';
+import { getConnectionChannelForPortType, getPortTypeForConnectionChannel } from './types';
 
 export interface StudioUiState {
   transform: { x: number; y: number; scale: number };
@@ -39,73 +41,110 @@ interface UseStudioUiStateOptions {
 }
 
 export function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStateOptions): StudioUiState {
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [canvasState, dispatchCanvas] = useReducer(reduceCanvasState, undefined, createInitialCanvasState);
   const [canvasElement, setCanvasElement] = useState<HTMLDivElement | null>(null);
-  const [selectedNodeIds, setSelectedNodeIdsState] = useState<string[]>([]);
-  const [draftConnection, setDraftConnection] = useState<DraftConnection | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addModalPosition, setAddModalPosition] = useState<{ x: number; y: number } | null>(null);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const portElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const nodeElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const transform = canvasState.viewport;
+  const selectedNodeIds = canvasState.selectedNodeIds;
+  const isAddModalOpen = canvasState.mode.kind === 'adding-node';
+  const addModalPosition = canvasState.mode.kind === 'adding-node'
+    ? { x: canvasState.mode.canvasX, y: canvasState.mode.canvasY }
+    : null;
+  const isEditModalOpen = canvasState.mode.kind === 'editing-node';
+  const editingNodeId = canvasState.mode.kind === 'editing-node' ? canvasState.mode.nodeId : null;
+  const draftConnection = useMemo<DraftConnection | null>(() => {
+    if (canvasState.mode.kind !== 'connecting-edge') {
+      return null;
+    }
+
+    return {
+      sourceNodeId: canvasState.mode.draft.sourceNodeId,
+      sourcePortId: canvasState.mode.draft.sourcePortKey,
+      sourcePortType: getPortTypeForConnectionChannel(canvasState.mode.draft.sourceChannel),
+      sourceConnectionChannel: canvasState.mode.draft.sourceChannel,
+      sourceHandleType: 'source',
+      targetPos: {
+        x: canvasState.mode.draft.targetX,
+        y: canvasState.mode.draft.targetY,
+      },
+      hoveredTargetNodeId: canvasState.mode.draft.hoveredTargetNodeId,
+      hoveredTargetPortId: canvasState.mode.draft.hoveredTargetPortKey,
+      hoveredTargetCompatible: canvasState.mode.draft.hoveredTargetCompatible,
+    };
+  }, [canvasState.mode]);
 
   useEffect(() => {
     const nodeIds = new Set(nodes.map((node) => node.id));
-    setSelectedNodeIdsState((previous) => previous.filter((nodeId) => nodeIds.has(nodeId)));
-  }, [nodes]);
+    const filteredNodeIds = canvasState.selectedNodeIds.filter((nodeId) => nodeIds.has(nodeId));
+    if (filteredNodeIds.length !== canvasState.selectedNodeIds.length) {
+      dispatchCanvas({ type: 'select-nodes', nodeIds: filteredNodeIds });
+    }
+  }, [canvasState.selectedNodeIds, nodes]);
+
+  const setTransform: React.Dispatch<React.SetStateAction<{ x: number; y: number; scale: number }>> = useCallback((nextValue) => {
+    const nextTransform = typeof nextValue === 'function'
+      ? nextValue(canvasState.viewport)
+      : nextValue;
+    dispatchCanvas({ type: 'set-viewport', viewport: nextTransform });
+  }, [canvasState.viewport]);
 
   const startConnection = useCallback((sourceNodeId: string, sourcePortId: string, sourcePortType: PortType, sourceHandleType: PortHandleType, startPos: { x: number; y: number }) => {
     if (sourceHandleType !== 'source') {
       return;
     }
 
-    setDraftConnection({
-      sourceNodeId,
-      sourcePortId,
-      sourcePortType,
-      sourceConnectionChannel: getConnectionChannelForPortType(sourcePortType),
-      sourceHandleType,
-      targetPos: startPos,
+    dispatchCanvas({
+      type: 'begin-connecting-edge',
+      draft: {
+        sourceNodeId,
+        sourcePortKey: sourcePortId,
+        sourceChannel: getConnectionChannelForPortType(sourcePortType),
+        targetX: startPos.x,
+        targetY: startPos.y,
+      },
     });
   }, []);
 
   const updateConnectionTarget = useCallback((targetPos: { x: number; y: number }, hoveredTargetNodeId?: string, hoveredTargetPortId?: string, hoveredTargetCompatible?: boolean) => {
-    setDraftConnection((previous) => previous
-      ? { ...previous, targetPos, hoveredTargetNodeId, hoveredTargetPortId, hoveredTargetCompatible }
-      : null);
+    dispatchCanvas({
+      type: 'update-draft-edge-target',
+      targetX: targetPos.x,
+      targetY: targetPos.y,
+      hoveredTargetNodeId,
+      hoveredTargetPortKey: hoveredTargetPortId,
+      hoveredTargetCompatible,
+    });
   }, []);
 
   const finishConnection = useCallback((targetNodeId: string, targetPortId: string, targetPortType: PortType, targetHandleType: PortHandleType) => {
-    setDraftConnection((previous) => {
-      if (!previous) {
-        return null;
-      }
+    if (!draftConnection) {
+      return;
+    }
 
-      const validation = validateConnection({
-        nodeId: previous.sourceNodeId,
-        portId: previous.sourcePortId,
-        portType: previous.sourcePortType,
-        handleType: previous.sourceHandleType,
-      }, {
-        nodeId: targetNodeId,
-        portId: targetPortId,
-        portType: targetPortType,
-        handleType: targetHandleType,
-      }, nodes, edges);
+    const validation = validateConnection({
+      nodeId: draftConnection.sourceNodeId,
+      portId: draftConnection.sourcePortId,
+      portType: draftConnection.sourcePortType,
+      handleType: draftConnection.sourceHandleType,
+    }, {
+      nodeId: targetNodeId,
+      portId: targetPortId,
+      portType: targetPortType,
+      handleType: targetHandleType,
+    }, nodes, edges);
 
-      if (validation.valid) {
-        connectPorts(previous.sourceNodeId, previous.sourcePortId, targetNodeId, targetPortId, {
-          replaceEdgeIds: validation.replaceEdgeIds,
-        });
-      }
+    if (validation.valid) {
+      connectPorts(draftConnection.sourceNodeId, draftConnection.sourcePortId, targetNodeId, targetPortId, {
+        replaceEdgeIds: validation.replaceEdgeIds,
+      });
+    }
 
-      return null;
-    });
-  }, [connectPorts, edges, nodes]);
+    dispatchCanvas({ type: 'return-to-idle' });
+  }, [connectPorts, draftConnection, edges, nodes]);
 
   const cancelConnection = useCallback(() => {
-    setDraftConnection(null);
+    dispatchCanvas({ type: 'return-to-idle' });
   }, []);
 
   const registerCanvasElement = useCallback((element: HTMLDivElement | null) => {
@@ -114,22 +153,25 @@ export function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStat
 
   const setSelectedNodeIds = useCallback((nodeIds: string[]) => {
     const uniqueNodeIds = [...new Set(nodeIds)];
-    setSelectedNodeIdsState(uniqueNodeIds);
+    dispatchCanvas({ type: 'select-nodes', nodeIds: uniqueNodeIds });
   }, []);
 
   const clearSelectedNodes = useCallback(() => {
-    setSelectedNodeIdsState([]);
+    dispatchCanvas({ type: 'select-nodes', nodeIds: [] });
   }, []);
 
   const selectSingleNode = useCallback((nodeId: string) => {
-    setSelectedNodeIdsState([nodeId]);
+    dispatchCanvas({ type: 'select-nodes', nodeIds: [nodeId] });
   }, []);
 
   const toggleSelectedNode = useCallback((nodeId: string) => {
-    setSelectedNodeIdsState((previous) => previous.includes(nodeId)
-      ? previous.filter((entry) => entry !== nodeId)
-      : [...previous, nodeId]);
-  }, []);
+    dispatchCanvas({
+      type: 'select-nodes',
+      nodeIds: selectedNodeIds.includes(nodeId)
+        ? selectedNodeIds.filter((entry) => entry !== nodeId)
+        : [...selectedNodeIds, nodeId],
+    });
+  }, [selectedNodeIds]);
 
   const registerNodeElement = useCallback((nodeId: string, element: HTMLDivElement | null) => {
     if (!element) {
@@ -159,21 +201,19 @@ export function useStudioUiState({ nodes, edges, connectPorts }: UseStudioUiStat
   }, []);
 
   const openAddModal = useCallback((x: number, y: number) => {
-    setAddModalPosition({ x, y });
-    setIsAddModalOpen(true);
+    dispatchCanvas({ type: 'begin-adding-node', canvasX: x, canvasY: y });
   }, []);
 
   const closeAddModal = useCallback(() => {
-    setIsAddModalOpen(false);
+    dispatchCanvas({ type: 'return-to-idle' });
   }, []);
 
   const openEditModal = useCallback((nodeId: string) => {
-    setEditingNodeId(nodeId);
-    setIsEditModalOpen(true);
+    dispatchCanvas({ type: 'open-node-editor', nodeId });
   }, []);
 
   const closeEditModal = useCallback(() => {
-    setIsEditModalOpen(false);
+    dispatchCanvas({ type: 'return-to-idle' });
   }, []);
 
   return useMemo(() => ({

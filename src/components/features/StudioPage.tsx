@@ -1,5 +1,6 @@
 import React from 'react';
-import { StudioProvider, useStudioGraph, useStudioUi } from '../../core/studio/StudioContext';
+import { StudioProviders } from '../../application/studio/StudioProviders';
+import { useStudioPageState } from '../../application/studio/useStudioPageState';
 import { useStudioWorkspace } from '../../domain/analysis/AnalysisWorkspaceContext';
 import type { PendingClassNodeRequest } from '../../domain/studio/editor';
 import { CanvasCore } from '../studio/canvas/CanvasCore';
@@ -11,12 +12,12 @@ export function StudioPage() {
   const { studioRuntimeData, pendingClassNode, clearPendingClassNode, workspaceLifecycle } = useStudioWorkspace();
 
   return (
-    <StudioProvider runtimeData={studioRuntimeData} workspaceLifecycle={workspaceLifecycle}>
+    <StudioProviders runtimeData={studioRuntimeData} workspaceLifecycle={workspaceLifecycle}>
       <StudioPageContent
         pendingClassNode={pendingClassNode}
         onPendingClassNodeHandled={clearPendingClassNode}
       />
-    </StudioProvider>
+    </StudioProviders>
   );
 }
 
@@ -27,8 +28,7 @@ function StudioPageContent({
   pendingClassNode: PendingClassNodeRequest | null;
   onPendingClassNodeHandled?: () => void;
 }) {
-  const { addNode, undo, redo, saveWorkflow, deleteNodes, duplicateNodes } = useStudioGraph();
-  const { canvasElement, transform, selectedNodeIds, clearSelectedNodes, setSelectedNodeIds } = useStudioUi();
+  const { addNode, undo, redo, saveWorkflow, deleteNodes, duplicateNodes, canvasElement, transform, selectedNodeIds, clearSelectedNodes, setSelectedNodeIds } = useStudioPageState();
   useStudioPageController({
     pendingClassNode,
     onPendingClassNodeHandled,

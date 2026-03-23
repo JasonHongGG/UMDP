@@ -6,7 +6,7 @@ import {
   getExpressionSourceDisplayValue,
   readExpressionDragData,
 } from '../../../core/studio/expression';
-import { useExpressionDrag } from '../../../core/studio/drag/ExpressionDragContext';
+import { useStudioExpressionDragState } from '../../../application/studio/useStudioExpressionDragState';
 import type { ExpressionSource, ParameterDefinition } from '../../../domain/studio/contracts';
 import type { BaseNodeData, INodeEditProps, StudioNodeDefinition } from '../../../core/studio/types';
 
@@ -118,7 +118,7 @@ const ExpressionFieldInput: React.FC<ExpressionFieldProps> = ({ definition, valu
   const [isDragOver, setIsDragOver] = useState(false);
   const [isCustomDragOver, setIsCustomDragOver] = useState(false);
   const expressionValue = (value ?? null) as ExpressionSource | null;
-  const { activeExpressionDrag, endExpressionDrag } = useExpressionDrag();
+  const { activeExpressionDrag, endExpressionDrag } = useStudioExpressionDragState();
   const presentation = getExpressionPresentation(expressionValue);
 
   return (
