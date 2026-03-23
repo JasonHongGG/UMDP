@@ -3,7 +3,7 @@ import { ActivitySquare, AlertTriangle, Eye, PlayCircle } from 'lucide-react';
 import { Port } from '../../components/studio/canvas/Port';
 import { useStudioQuery, useStudioRuntime } from '../../core/studio/StudioContext';
 import type { INodeComponentProps } from '../../core/studio/types';
-import type { DisplayNodeQueryState, DisplayNodeResolvedField, NodeExecutionSnapshot, WorkflowJsonEnvelope } from '../../domain/studio/contracts';
+import type { DisplayNodeQueryState, DisplayNodeResolvedField, NodeExecutionSnapshot, WorkflowJsonEnvelope, WorkflowJsonValue } from '../../domain/studio/contracts';
 import {
   resolveDisplaySelectedFields,
   type DisplayNodeData,
@@ -13,6 +13,7 @@ interface ResolvedDisplayState {
   sourceKind: 'runtime' | 'preview' | 'empty';
   status: 'idle' | 'running' | 'success' | 'error' | 'aborted';
   envelope: WorkflowJsonEnvelope | null;
+  observedPayload: WorkflowJsonValue | null;
   selectedFields: DisplayNodeResolvedField[];
   issueText: string | null;
 }
@@ -21,18 +22,29 @@ function getRuntimeEnvelope(snapshot: NodeExecutionSnapshot | undefined) {
   return snapshot?.inputs['payload-in']?.[0] ?? null;
 }
 
+function getObservedRuntimePayload(snapshot: NodeExecutionSnapshot | undefined): WorkflowJsonValue | null {
+  const observedPayload = snapshot?.nextRuntimeState?.observedPayload;
+  if (observedPayload !== undefined) {
+    return observedPayload as WorkflowJsonValue | null;
+  }
+
+  return getRuntimeEnvelope(snapshot)?.payload ?? null;
+}
+
 function buildResolvedState(
   data: DisplayNodeData,
   snapshot: NodeExecutionSnapshot | undefined,
   previewState: DisplayNodeQueryState | null,
 ): ResolvedDisplayState {
   const runtimeEnvelope = getRuntimeEnvelope(snapshot);
-  if (snapshot && runtimeEnvelope) {
+  const runtimePayload = getObservedRuntimePayload(snapshot);
+  if (snapshot && runtimePayload !== null) {
     return {
       sourceKind: 'runtime',
       status: snapshot.status,
       envelope: runtimeEnvelope,
-      selectedFields: resolveDisplaySelectedFields(data.selectedFields ?? [], runtimeEnvelope.payload),
+      observedPayload: runtimePayload,
+      selectedFields: resolveDisplaySelectedFields(data.selectedFields ?? [], runtimePayload),
       issueText: snapshot.errorMessage ?? snapshot.issues?.[0]?.message ?? null,
     };
   }
@@ -42,6 +54,7 @@ function buildResolvedState(
       sourceKind: 'runtime',
       status: 'running',
       envelope: null,
+      observedPayload: null,
       selectedFields: [],
       issueText: null,
     };
@@ -52,6 +65,7 @@ function buildResolvedState(
       sourceKind: 'preview',
       status: 'success',
       envelope: previewState.envelope,
+      observedPayload: previewState.envelope.payload,
       selectedFields: previewState.selectedFields,
       issueText: null,
     };
@@ -61,6 +75,7 @@ function buildResolvedState(
     sourceKind: 'empty',
     status: snapshot?.status ?? 'idle',
     envelope: null,
+    observedPayload: null,
     selectedFields: [],
     issueText: previewState?.issues[0]?.message ?? null,
   };
@@ -138,7 +153,7 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
             </div>
           ) : null}
 
-          {resolvedState.envelope && hasSelectedFields ? (
+          {resolvedState.observedPayload !== null && hasSelectedFields ? (
             <div className="space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-slate-500">Selected Fields</div>
               {resolvedState.selectedFields.map((field) => (
@@ -163,7 +178,7 @@ export const DisplayNodeCanvas: React.FC<INodeComponentProps<DisplayNodeData>> =
             </div>
           ) : null}
 
-          {resolvedState.envelope && !hasSelectedFields ? (
+          {resolvedState.observedPayload !== null && !hasSelectedFields ? (
             <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/30 p-3 text-[11px] text-slate-400">
               Select payload fields in the Display node editor to pin the values you care about here.
             </div>

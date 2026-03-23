@@ -5,7 +5,14 @@ import type {
   RuntimeInstanceFieldSnapshot,
   RuntimeMethodInvokeRequest,
   RuntimeMethodInvokeResult,
+  RuntimeOverlaySnapshot,
 } from '../../domain/analysis/contracts';
+
+export async function getRuntimeStaticFields(classStableId: string) {
+  return invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', {
+    classStableId,
+  });
+}
 
 export async function getRuntimeInstanceFields(classStableId: string, instanceAddress: string) {
   return invoke<RuntimeInstanceFieldSnapshot>('get_runtime_instance_fields', {

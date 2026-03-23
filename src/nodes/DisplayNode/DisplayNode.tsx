@@ -1,11 +1,21 @@
 import React from 'react';
+import { formatHexAddress } from '../../core/addressFormat';
 import { Eye } from 'lucide-react';
-import { createFlowPort, createJsonPort, GENERIC_JSON_SCHEMA } from '../../core/studio/contracts';
+import {
+  createClassInfoEnvelope,
+  createFlowPort,
+  createJsonPort,
+  GENERIC_JSON_SCHEMA,
+  type ResolvedMemberRuntimeValue,
+} from '../../core/studio/contracts';
 import { defineStudioNode } from '../../core/studio/NodeRegistry';
 import type { INodeDefinition, IPort, StudioNodeRuntimeState, NodeExecutionOutputMap } from '../../core/studio/types';
-import type { DisplayNodeQueryState, NodeQueryIssue } from '../../domain/studio/contracts';
+import type { DisplayNodeQueryState, ExpressionSource, NodeQueryIssue, ClassInfoPayload } from '../../domain/studio/contracts';
 import type { StudioNodeQueryContext } from '../../core/studio/queryTypes';
 import { materializeNodeQuerySnapshot } from '../../core/studio/graphInterpreter';
+import type { RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot } from '../../domain/analysis/contracts';
+import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '../../domain/studio/editor';
+import type { StableId } from '../../domain/contracts/shared-identity';
 import DisplayNodeCanvas from './DisplayNodeCanvas';
 import DisplayNodeEditor from './DisplayNodeEditor';
 import {
@@ -16,6 +26,118 @@ import {
   toDisplayNodeDocumentState,
   type DisplayNodeData,
 } from './displayNodeModel';
+import { getClassInfoPayloadFromValue } from '../CallFunctionNode/callFunctionNodeModel';
+import { getRuntimeInstanceFields, getRuntimeStaticFields } from '../../infrastructure/tauri/TauriRuntimeGateway';
+
+function createResolvedMemberValueMap(snapshot: RuntimeInstanceFieldSnapshot): Record<string, ResolvedMemberRuntimeValue> {
+  return Object.fromEntries(
+    snapshot.fields.map((field) => [field.stableId, {
+      address: formatHexAddress(field.address),
+      value: field.value,
+    }]),
+  );
+}
+
+function deriveClassBindingFromPayload(payload: ClassInfoPayload): ClassBinding | null {
+  const runtimeRef = payload.members[0]?.runtimeRef ?? payload.statics[0]?.runtimeRef ?? payload.functions[0]?.runtimeRef;
+  if (!runtimeRef) {
+    return null;
+  }
+
+  return {
+    imageStableId: runtimeRef.imageStableId as StableId,
+    classStableId: runtimeRef.classStableId as StableId,
+    fullName: payload.basic.fullName,
+    name: payload.basic.className,
+    namespace: payload.basic.namespace,
+    imageName: payload.basic.imageName,
+  };
+}
+
+function createSelectionFromPayload(payload: ClassInfoPayload): ClassInfoSelection {
+  return {
+    members: payload.members.map((field) => field.runtimeRef.memberStableId as StableId),
+    statics: payload.statics.map((field) => field.runtimeRef.memberStableId as StableId),
+    functions: payload.functions.map((method) => method.runtimeRef.methodStableId as StableId),
+  };
+}
+
+function mergeCatalogWithStaticOverlay(
+  catalog: ClassInfoCatalog,
+  overlaySnapshot: RuntimeOverlaySnapshot | null,
+  classStableId: string,
+): ClassInfoCatalog {
+  const overlay = overlaySnapshot?.classes[classStableId as StableId];
+  if (!overlay) {
+    return catalog;
+  }
+
+  const staticFieldById = new Map(overlay.staticFields.map((field) => [field.stableId, field]));
+  return {
+    ...catalog,
+    statics: catalog.statics.map((field) => {
+      const refreshed = staticFieldById.get(field.id);
+      if (!refreshed) {
+        return field;
+      }
+
+      return {
+        ...field,
+        address: refreshed.address,
+        value: refreshed.value,
+      };
+    }),
+  };
+}
+
+async function refreshObservedClassInfoPayload(
+  payloadValue: unknown,
+  controlInputs: string[],
+  payloadBinding: ExpressionSource | undefined,
+  getClassInfoCatalogByBinding: (binding: ClassBinding | null | undefined) => ClassInfoCatalog | null,
+): Promise<ClassInfoPayload | null> {
+  const classInfo = getClassInfoPayloadFromValue(payloadValue);
+  if (!classInfo) {
+    return null;
+  }
+
+  if (payloadBinding?.kind !== 'input-expression' || controlInputs.includes(payloadBinding.sourceNodeId)) {
+    return null;
+  }
+
+  const binding = deriveClassBindingFromPayload(classInfo);
+  if (!binding) {
+    return null;
+  }
+
+  const catalog = getClassInfoCatalogByBinding(binding);
+  if (!catalog) {
+    return null;
+  }
+
+  const selection = createSelectionFromPayload(classInfo);
+  const overlaySnapshot = selection.statics.length > 0
+    ? await getRuntimeStaticFields(binding.classStableId)
+    : null;
+  const refreshedCatalog = mergeCatalogWithStaticOverlay(catalog, overlaySnapshot, binding.classStableId);
+
+  let resolvedMemberValues: Record<string, ResolvedMemberRuntimeValue> | undefined;
+  const normalizedInstanceAddress = typeof classInfo.instanceAddress === 'string'
+    ? formatHexAddress(classInfo.instanceAddress)
+    : null;
+  if (selection.members.length > 0 && normalizedInstanceAddress) {
+    const snapshot = await getRuntimeInstanceFields(binding.classStableId, normalizedInstanceAddress);
+    resolvedMemberValues = createResolvedMemberValueMap(snapshot);
+  }
+
+  return createClassInfoEnvelope(
+    binding,
+    refreshedCatalog,
+    selection,
+    normalizedInstanceAddress ?? classInfo.instanceAddress,
+    resolvedMemberValues,
+  ).payload;
+}
 
 const DISPLAY_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In', 'Control input for runtime execution.', { direction: 'input', required: false }),
@@ -164,7 +286,7 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
 
       return [];
     },
-    execute: ({ resolvedInputs }) => {
+    execute: async ({ resolvedInputs, inputBindings, controlInputs, getClassInfoCatalogByBinding }) => {
       const payloads = resolvedInputs['payload-in'] ?? [];
       if (payloads.length === 0) {
         return {
@@ -179,9 +301,17 @@ const DisplayNodeDefinition: INodeDefinition<DisplayNodeData> = {
         };
       }
 
+      const refreshedPayload = await refreshObservedClassInfoPayload(
+        payloads[0],
+        controlInputs,
+        inputBindings['payload-in']?.[0],
+        getClassInfoCatalogByBinding,
+      );
+
       return {
         state: 'success',
         outputs: {},
+        nextRuntimeState: refreshedPayload ? { observedPayload: refreshedPayload } : undefined,
       };
     },
   },

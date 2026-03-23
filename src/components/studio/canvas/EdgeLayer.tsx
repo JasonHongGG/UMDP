@@ -1,11 +1,47 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { getStudioNodePort, getStudioNodePorts } from '../../../core/studio/NodeRegistry';
 import { useStudioGraph, useStudioRuntime, useStudioUi } from '../../../core/studio/StudioContext';
-import { PORT_COLORS, PortType, StudioEdge } from '../../../core/studio/types';
+import { NodeExecutionSnapshot, NodeExecutionState, PORT_COLORS, PortType, StudioEdge } from '../../../core/studio/types';
+
+export function isEdgeExecutionActive(
+  edge: StudioEdge,
+  nodeStates: Record<string, NodeExecutionState>,
+  nodeSnapshots: Record<string, NodeExecutionSnapshot>,
+) {
+  const targetState = nodeStates[edge.targetNodeId] ?? 'idle';
+  if (targetState !== 'running') {
+    return false;
+  }
+
+  const targetSnapshot = nodeSnapshots[edge.targetNodeId];
+  if (!targetSnapshot) {
+    return false;
+  }
+
+  if (edge.channel === 'control') {
+    const sourceSnapshot = nodeSnapshots[edge.sourceNodeId];
+    if (!sourceSnapshot) {
+      return false;
+    }
+
+    if (sourceSnapshot.nextControlPorts === undefined) {
+      return true;
+    }
+
+    return sourceSnapshot.nextControlPorts.includes(edge.sourcePortId);
+  }
+
+  const sourceEnvelope = nodeSnapshots[edge.sourceNodeId]?.outputs[edge.sourcePortId];
+  if (!sourceEnvelope) {
+    return false;
+  }
+
+  return (targetSnapshot.inputs[edge.targetPortId] ?? []).some((envelope) => envelope === sourceEnvelope);
+}
 
 export function EdgeLayer() {
   const { edges, nodes, disconnectEdge } = useStudioGraph();
-  const { nodeStates, activeRun } = useStudioRuntime();
+  const { nodeStates, nodeSnapshots } = useStudioRuntime();
   const { transform, draftConnection, canvasElement, getPortElement } = useStudioUi();
   const [portPositions, setPortPositions] = useState<Record<string, { x: number, y: number }>>({});
 
@@ -90,19 +126,17 @@ export function EdgeLayer() {
     return `M ${startX} ${startY} C ${startX + controlPointX} ${startY}, ${endX - controlPointX} ${endY}, ${endX} ${endY}`;
   };
 
-  const getEdgeColor = (edge: StudioEdge) => {
-    const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
-    if (sourceState === 'running') {
+  const getEdgeColor = (edge: StudioEdge, isActive: boolean) => {
+    if (isActive) {
       return '#34d399';
     }
+
+    const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
     if (sourceState === 'aborted') {
       return '#fbbf24';
     }
     if (sourceState === 'error') {
       return '#fb7185';
-    }
-    if (sourceState === 'success' && activeRun?.status === 'running') {
-      return '#22d3ee';
     }
 
     const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
@@ -162,8 +196,8 @@ export function EdgeLayer() {
 
         const pathId = `edge-path-${edge.id}`;
         const pathString = createBezierPath(start.x, start.y, end.x, end.y);
-        const color = getEdgeColor(edge);
-        const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
+        const isActive = isEdgeExecutionActive(edge, nodeStates, nodeSnapshots);
+        const color = getEdgeColor(edge, isActive);
 
         return (
           <g key={edge.id}>
@@ -179,8 +213,8 @@ export function EdgeLayer() {
               d={pathString}
               fill="none"
               stroke={color}
-              strokeOpacity={sourceState === 'running' ? 0.55 : 0.3}
-              strokeWidth={sourceState === 'running' ? 8 : 6}
+              strokeOpacity={isActive ? 0.55 : 0.3}
+              strokeWidth={isActive ? 8 : 6}
               className="blur-sm pointer-events-none"
             />
             <path
@@ -188,10 +222,10 @@ export function EdgeLayer() {
               d={pathString}
               fill="none"
               stroke={color}
-              strokeWidth={sourceState === 'running' ? 3 : 2}
+              strokeWidth={isActive ? 3 : 2}
               className="pointer-events-none"
-              strokeDasharray={sourceState === 'running' ? '7 6' : undefined}
-              style={sourceState === 'running' ? { animation: 'studio-edge-dash 0.55s linear infinite' } : undefined}
+              strokeDasharray={isActive ? '7 6' : undefined}
+              style={isActive ? { animation: 'studio-edge-dash 0.55s linear infinite' } : undefined}
             />
           </g>
         );
