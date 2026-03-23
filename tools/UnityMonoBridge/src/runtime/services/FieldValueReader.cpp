@@ -9,23 +9,6 @@ FieldValueReader::FieldValueReader(const RuntimeApi& api)
 {
 }
 
-bool FieldValueReader::SupportsDirectRead(const std::string& type_name) const
-{
-    return type_name == "System.Boolean"
-        || type_name == "System.Byte"
-        || type_name == "System.SByte"
-        || type_name == "System.Int16"
-        || type_name == "System.UInt16"
-        || type_name == "System.Int32"
-        || type_name == "System.UInt32"
-        || type_name == "System.Int64"
-        || type_name == "System.UInt64"
-        || type_name == "System.Single"
-        || type_name == "System.Double"
-        || type_name == "System.IntPtr"
-        || type_name == "System.UIntPtr";
-}
-
 std::optional<std::string> FieldValueReader::ReadFieldValue(const FieldRecord& field, std::optional<Address> instance_address) const
 {
     const auto try_read = [&](void* buffer, std::size_t size) {
@@ -85,12 +68,12 @@ std::optional<std::string> FieldValueReader::ReadFieldValue(const FieldRecord& f
         return try_read(&value, sizeof(value)) ? std::optional<std::string>(std::to_string(value)) : std::nullopt;
     }
 
-    if (!SupportsDirectRead(field.type_name)) {
+    Address pointer_value = 0;
+    if (!try_read(&pointer_value, sizeof(pointer_value))) {
         return std::nullopt;
     }
 
-    Address pointer_value = 0;
-    if (!try_read(&pointer_value, sizeof(pointer_value)) || pointer_value == 0) {
+    if (pointer_value == 0) {
         return std::string("null");
     }
 

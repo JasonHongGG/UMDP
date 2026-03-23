@@ -14,8 +14,6 @@ public:
     std::optional<std::string> ReadFieldValue(const FieldRecord& field, std::optional<Address> instance_address = std::nullopt) const;
 
 private:
-    bool SupportsDirectRead(const std::string& type_name) const;
-
     const RuntimeApi& api_;
 };
 
