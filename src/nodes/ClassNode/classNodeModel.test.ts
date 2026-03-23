@@ -221,4 +221,85 @@ describe('classNodeModel', () => {
 
     expect(issues).toEqual([]);
   });
+
+  it('accepts projected instance references from a class info payload on the instance input port', () => {
+    const unitPropertyMember = createFieldStableId({
+      classStableId: CLASS_PLAYER,
+      fieldKind: 'instance',
+      fieldName: 'unitProperty',
+      fieldType: 'Gameplay.UnitProperty',
+    });
+
+    const issues = ClassNodeDef.executionContract?.validate({
+      documentId: 'doc-1',
+      nodeId: 'class-1',
+      nodeType: 'class-ref',
+      parameters: {},
+      bindings: {},
+      documentState: {
+        classBinding: {
+          imageStableId: IMAGE_A,
+          classStableId: CLASS_PLAYER,
+          fullName: 'Gameplay.PlayerController',
+          name: 'PlayerController',
+          namespace: 'Gameplay',
+          imageName: 'Assembly-CSharp.dll',
+        },
+        exportSelection: {
+          memberStableIds: [MEMBER_HEALTH],
+          staticStableIds: [],
+          methodStableIds: [],
+        },
+      },
+      inputBindings: {
+        'instance-in': [createInputExpressionSource('class-upstream', 'info-out', [], 'class-upstream.info-out')],
+      },
+      resolvedBindings: {},
+      resolvedInputs: {
+        'instance-in': [{
+          basic: {
+            imageName: 'Assembly-CSharp.dll',
+            className: 'PlayerController',
+            namespace: 'Gameplay',
+            fullName: 'Gameplay.PlayerController',
+          },
+          instanceAddress: '0x1234',
+          statics: [],
+          members: [{
+            runtimeRef: {
+              imageStableId: IMAGE_A,
+              classStableId: CLASS_PLAYER,
+              memberStableId: unitPropertyMember,
+            },
+            name: 'unitProperty',
+            typeName: 'Gameplay.UnitProperty',
+            offset: '0x20',
+            address: '0x1254',
+            value: '0x244190AB960',
+            isStatic: false,
+          }],
+          functions: [],
+        }],
+      },
+      controlInputs: [],
+      getClassInfoCatalogByBinding: () => ({
+        members: [{
+          id: MEMBER_HEALTH,
+          label: 'health',
+          name: 'health',
+          typeName: 'System.Int32',
+          offset: '0x10',
+          address: null,
+          value: null,
+          isStatic: false,
+          tags: [],
+        }],
+        statics: [],
+        functions: [],
+      }),
+      ...EXECUTION_RUNTIME_EXTRAS,
+    });
+
+    expect(issues).toEqual([]);
+  });
 });

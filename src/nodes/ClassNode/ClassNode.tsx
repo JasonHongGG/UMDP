@@ -2,7 +2,7 @@ import { Box } from 'lucide-react';
 import { formatHexAddress } from '../../core/addressFormat';
 import {
   CLASS_INFO_SCHEMA,
-  getInstanceReferencePayloadFromValue,
+  getProjectedInstanceReferencePayloadFromValue,
   INSTANCE_REFERENCE_SCHEMA,
   createClassInfoEnvelope,
   createFlowPort,
@@ -90,7 +90,9 @@ function buildClassNodeQuerySnapshot(
     (edge) => edge.targetNodeId === node.id && edge.targetPortId === 'instance-in' && edge.channel === 'data',
   );
   const connectedInstanceReference = instanceInputEdge
-    ? getInstanceReferencePayloadFromValue(dependencySnapshots[instanceInputEdge.sourceNodeId]?.outputs[instanceInputEdge.sourcePortId]?.payload)
+    ? getProjectedInstanceReferencePayloadFromValue(
+      dependencySnapshots[instanceInputEdge.sourceNodeId]?.outputs[instanceInputEdge.sourcePortId]?.payload,
+    )
     : null;
   const resolvedInstanceAddress = connectedInstanceReference?.address
     ?? (node.data.instanceSource
@@ -208,7 +210,7 @@ const ClassNodeExecution: StudioNodeExecutionDefinition = {
       const selection = availableInfo
         ? reconcileClassInfoSelection(fromClassExportSelection(classDocumentState.exportSelection), availableInfo)
         : fromClassExportSelection(classDocumentState.exportSelection);
-      const hasIncomingInstance = typeof getInstanceReferencePayloadFromValue(context.resolvedInputs['instance-in']?.[0])?.address === 'string';
+      const hasIncomingInstance = typeof getProjectedInstanceReferencePayloadFromValue(context.resolvedInputs['instance-in']?.[0])?.address === 'string';
       const hasOwnInstanceBinding = hasResolvedExecutionValue(context.resolvedBindings.instanceSource);
       const requiresInstance = selection.members.length > 0;
 
@@ -251,7 +253,7 @@ const ClassNodeExecution: StudioNodeExecutionDefinition = {
         fromClassExportSelection(classDocumentState.exportSelection),
         availableInfo,
       );
-      const inputInstanceReference = getInstanceReferencePayloadFromValue(resolvedInputs['instance-in']?.[0]);
+      const inputInstanceReference = getProjectedInstanceReferencePayloadFromValue(resolvedInputs['instance-in']?.[0]);
       const resolvedInstanceAddress = inputInstanceReference?.address
         ?? (resolvedBindings.instanceSource as WorkflowJsonValue | undefined)
         ?? null;

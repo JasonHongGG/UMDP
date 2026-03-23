@@ -16,6 +16,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 const IMAGE_ID = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
 const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController' });
 const METHOD_ID = createMethodStableId({ classStableId: CLASS_ID, methodName: 'Move', signature: 'System.Void (System.Single x)' });
+const UNIT_PROPERTY_MEMBER_ID = createStableId('field', [CLASS_ID, 'instance', 'unitProperty', 'Gameplay.UnitProperty']);
 const WORLD_DATA_CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'WorldData' });
 const WORLD_DATA_METHOD_ID = createMethodStableId({ classStableId: WORLD_DATA_CLASS_ID, methodName: 'Describe', signature: 'System.String ()' });
 const ARGUMENT_ID = createStableId('binding', ['call-1', 'x']);
@@ -261,6 +262,109 @@ describe('studio full flow integration', () => {
           },
         },
       },
+    });
+    expect(snapshots['class-2']).toMatchObject({
+      status: 'success',
+      outputs: {
+        'info-out': {
+          payload: {
+            instanceAddress: '0x244190AB960',
+            basic: {
+              className: 'WorldData',
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('projects a selected member reference into a downstream class node instance input', async () => {
+    vi.useFakeTimers();
+    invokeMock.mockResolvedValueOnce({
+      classStableId: CLASS_ID,
+      instanceAddress: '0x1234',
+      fields: [{
+        stableId: UNIT_PROPERTY_MEMBER_ID,
+        name: 'unitProperty',
+        fieldType: 'Gameplay.WorldData',
+        offset: '0x20',
+        address: '0x1254',
+        value: '244190ab960',
+      }],
+    });
+
+    const playerCatalog: ClassInfoCatalog = {
+      members: [{
+        id: UNIT_PROPERTY_MEMBER_ID,
+        label: 'unitProperty',
+        name: 'unitProperty',
+        typeName: 'Gameplay.WorldData',
+        offset: '0x20',
+        address: null,
+        value: null,
+        isStatic: false,
+        tags: [],
+      }],
+      statics: [],
+      functions: [],
+    };
+
+    const nodes: StudioNode[] = [
+      { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
+      {
+        id: 'class-1',
+        type: 'class-ref',
+        position: { x: 180, y: 0 },
+        data: {
+          binding: BINDING,
+          instanceSource: createLiteralExpressionSource('0x1234', 'string'),
+          infoSelection: { members: [UNIT_PROPERTY_MEMBER_ID], statics: [], functions: [] },
+        },
+      },
+      {
+        id: 'class-2',
+        type: 'class-ref',
+        position: { x: 360, y: 0 },
+        data: {
+          binding: WORLD_DATA_BINDING,
+          instanceSource: null,
+          infoSelection: { members: [], statics: [], functions: [WORLD_DATA_METHOD_ID] },
+        },
+      },
+    ];
+
+    const snapshots: Record<string, NodeExecutionSnapshot> = {};
+
+    executeStudioFlow({
+      documentId: 'doc-1',
+      startNodeId: 'trigger-1',
+      nodes,
+      edges: [
+        { id: 'edge-trigger-class', channel: 'control', sourceNodeId: 'trigger-1', sourcePortId: 'flow-out', targetNodeId: 'class-1', targetPortId: 'flow-in' },
+        { id: 'edge-class-class-flow', channel: 'control', sourceNodeId: 'class-1', sourcePortId: 'flow-out', targetNodeId: 'class-2', targetPortId: 'flow-in' },
+        { id: 'edge-class-class-instance', channel: 'data', sourceNodeId: 'class-1', sourcePortId: 'info-out', targetNodeId: 'class-2', targetPortId: 'instance-in' },
+      ],
+      resolveStaticFieldAddress: () => null,
+      getClassInfoCatalogByBinding: (binding) => {
+        if (binding?.classStableId === CLASS_ID) {
+          return playerCatalog;
+        }
+
+        return binding?.classStableId === WORLD_DATA_CLASS_ID ? WORLD_DATA_CATALOG : null;
+      },
+      onReset: vi.fn(),
+      onNodeStateChange: vi.fn(),
+      onNodeSnapshot: (snapshot) => {
+        snapshots[snapshot.nodeId] = snapshot;
+      },
+      stepDelayMs: 25,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(invokeMock).toHaveBeenCalledWith('get_runtime_instance_fields', {
+      classStableId: CLASS_ID,
+      instanceAddress: '0x1234',
     });
     expect(snapshots['class-2']).toMatchObject({
       status: 'success',

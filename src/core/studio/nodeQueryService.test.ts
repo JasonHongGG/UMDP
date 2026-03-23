@@ -220,6 +220,72 @@ describe('nodeQueryService', () => {
     });
   });
 
+  it('projects a single upstream class info member value into a downstream class node preview instance', () => {
+    const context = createContext();
+    context.nodes.push({
+      id: 'class-2',
+      type: 'class-ref',
+      position: { x: 480, y: 0 },
+      data: {
+        binding: BINDING,
+        instanceSource: null,
+        infoSelection: { members: [], statics: [], functions: [METHOD_MOVE] },
+      },
+    });
+    context.edges.push({
+      id: 'edge-class-class-instance',
+      channel: 'data',
+      sourceNodeId: 'class-1',
+      sourcePortId: 'info-out',
+      targetNodeId: 'class-2',
+      targetPortId: 'instance-in',
+    });
+    context.nodeSnapshots['class-1'] = {
+      nodeId: 'class-1',
+      status: 'success',
+      originKind: 'runtime',
+      phase: 'execute',
+      inputs: {},
+      outputs: {
+        'info-out': {
+          kind: 'json',
+          schema: { id: 'studio.class.info', version: 1 },
+          payload: {
+            basic: {
+              imageName: 'Assembly-CSharp.dll',
+              className: 'PlayerController',
+              namespace: 'Gameplay',
+              fullName: 'Gameplay.PlayerController',
+            },
+            instanceAddress: '0x1234',
+            statics: [],
+            members: [{
+              runtimeRef: {
+                imageStableId: IMAGE_ID,
+                classStableId: CLASS_ID,
+                memberStableId: 'field-unit-property',
+              },
+              name: 'unitProperty',
+              typeName: 'Gameplay.WorldData',
+              offset: '0x20',
+              address: '0x1254',
+              value: '244190ab960',
+              isStatic: false,
+            }],
+            functions: [],
+          },
+        },
+      },
+      timing: {},
+    };
+
+    const outputs = getNodeOutputPreview('class-2', context);
+
+    expect(outputs?.['info-out']?.payload).toMatchObject({
+      instanceAddress: '0x244190AB960',
+    });
+  });
+
   it('reports explicit preview capability from node manifests', () => {
     expect(getNodePreviewCapability('class-1', createContext())).toBe('supported');
     expect(getNodePreviewCapability('call-1', createContext())).toBe('degraded');

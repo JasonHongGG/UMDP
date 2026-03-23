@@ -49,6 +49,13 @@ export function arePortDataTypesCompatible(source: IPort, target: IPort) {
     return true;
   }
 
+  if (
+    sourceDataType === WORKFLOW_SCHEMA_IDS.classInfo
+    && targetDataType === WORKFLOW_SCHEMA_IDS.instanceReference
+  ) {
+    return true;
+  }
+
   return sourceDataType === targetDataType;
 }
 

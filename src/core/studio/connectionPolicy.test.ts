@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { validateConnection } from './connectionPolicy';
-import { CALL_FUNCTION_RESULT_SCHEMA, GENERIC_JSON_SCHEMA, INSTANCE_REFERENCE_SCHEMA } from './contracts';
+import { CALL_FUNCTION_RESULT_SCHEMA, CLASS_INFO_SCHEMA, GENERIC_JSON_SCHEMA, INSTANCE_REFERENCE_SCHEMA } from './contracts';
 import ForLoopNodeDef from '../../nodes/ForLoopNode/ForLoopNode';
 
 function registerConnectionTestNodes() {
@@ -154,6 +154,61 @@ describe('connectionPolicy', () => {
 
     expect(wrongSchema.valid).toBe(false);
     expect(wrongSchema.reason).toBe('Port schemas or connection semantics are incompatible.');
+  });
+
+  it('allows class info outputs to connect into class instance inputs for member reference projection', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'class-source',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Class Source',
+          description: 'Produces a class info envelope',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'info-out', displayName: 'Info', direction: 'output', channel: 'data', cardinality: 'single', dataType: CLASS_INFO_SCHEMA.id }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+      {
+        manifest: {
+          type: 'class-ref',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Class Ref',
+          description: 'Expects an instance reference',
+          category: 'Test',
+          inputs: [{ key: 'instance-in', displayName: 'Instance In', direction: 'input', channel: 'data', cardinality: 'single', dataType: INSTANCE_REFERENCE_SCHEMA.id }],
+          outputs: [],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
+
+    const result = validateConnection({
+      nodeId: 'class-source-1',
+      portId: 'info-out',
+      portType: 'json',
+      handleType: 'source',
+    }, {
+      nodeId: 'class-1',
+      portId: 'instance-in',
+      portType: 'json',
+      handleType: 'target',
+    }, [
+      { id: 'class-source-1', type: 'class-source', position: { x: 0, y: 0 }, data: {} },
+      { id: 'class-1', type: 'class-ref', position: { x: 120, y: 0 }, data: {} },
+    ], []);
+
+    expect(result).toEqual({
+      valid: true,
+      replaceEdgeIds: [],
+    });
   });
 
   it('marks the previous inbound edge for replacement when reconnecting the same target port', () => {

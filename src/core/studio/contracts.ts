@@ -14,8 +14,9 @@ import {
 import type { ConnectionChannel } from '../../domain/studio/contracts';
 import { ConnectionDirection, IPort } from './types';
 import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '../../domain/studio/editor';
-import { addHexOffset, formatHexAddress } from '../addressFormat';
+import { addHexOffset, formatHexAddress, isExplicitHexAddress } from '../addressFormat';
 import { coerceRuntimeFieldValue } from '../runtimeValue';
+import { classifySchemaTypeSemantic } from './expression/semantic';
 export { arePortDataTypesCompatible, arePortTypesCompatible, arePortsCompatible } from './connectionPolicy';
 
 export const WORKFLOW_DOCUMENT_VERSION = 1;
@@ -226,6 +227,60 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
 }
 
+function isClassInfoPayload(value: unknown): value is ClassInfoPayload {
+  return isRecord(value)
+    && Array.isArray(value.functions)
+    && Array.isArray(value.statics)
+    && Array.isArray(value.members)
+    && isRecord(value.basic);
+}
+
+function isLikelyReferenceTypeName(typeName: string): boolean {
+  const normalized = typeName.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  const lower = normalized.toLowerCase();
+  if (
+    lower === 'system.object'
+    || lower.endsWith('[]')
+    || lower.includes('<')
+    || lower.includes('>')
+    || lower.includes('.')
+  ) {
+    return true;
+  }
+
+  if (lower.startsWith('system.nullable<')) {
+    return false;
+  }
+
+  return /^[a-z_][\w`]*$/i.test(normalized);
+}
+
+function getProjectedFieldReferenceAddress(field: ClassInfoFieldPayload): string | null {
+  if (typeof field.value !== 'string') {
+    return null;
+  }
+
+  const normalized = formatHexAddress(field.value);
+  return normalized && isExplicitHexAddress(normalized) ? normalized : null;
+}
+
+function canProjectFieldAsInstanceReference(field: ClassInfoFieldPayload): boolean {
+  if (!getProjectedFieldReferenceAddress(field)) {
+    return false;
+  }
+
+  const semantic = classifySchemaTypeSemantic(field.typeName);
+  if (semantic.kind === 'address') {
+    return true;
+  }
+
+  return isLikelyReferenceTypeName(field.typeName);
+}
+
 export function getInstanceReferencePayloadFromValue(value: unknown): InstanceReferencePayload | null {
   if (!isRecord(value) || !('address' in value) || !('sourceKind' in value)) {
     return null;
@@ -236,6 +291,35 @@ export function getInstanceReferencePayloadFromValue(value: unknown): InstanceRe
     sourceKind: value.sourceKind as InstanceReferencePayload['sourceKind'],
     runtimeTypeHint: typeof value.runtimeTypeHint === 'string' ? value.runtimeTypeHint : null,
     displayName: typeof value.displayName === 'string' ? value.displayName : null,
+  };
+}
+
+export function getProjectedInstanceReferencePayloadFromValue(value: unknown): InstanceReferencePayload | null {
+  const directReference = getInstanceReferencePayloadFromValue(value);
+  if (directReference) {
+    return directReference;
+  }
+
+  if (!isClassInfoPayload(value)) {
+    return null;
+  }
+
+  const projectedFields = [...value.members, ...value.statics].filter(canProjectFieldAsInstanceReference);
+  if (projectedFields.length !== 1) {
+    return null;
+  }
+
+  const field = projectedFields[0]!;
+  const projectedAddress = getProjectedFieldReferenceAddress(field);
+  if (!projectedAddress) {
+    return null;
+  }
+
+  return {
+    address: projectedAddress,
+    sourceKind: 'runtime-object',
+    runtimeTypeHint: field.typeName,
+    displayName: `${value.basic.className}.${field.name}`,
   };
 }
 

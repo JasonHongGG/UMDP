@@ -17,6 +17,7 @@ import {
   createJsonPort,
   GENERIC_JSON_SCHEMA,
   getInstanceReferencePayloadFromValue,
+  getProjectedInstanceReferencePayloadFromValue,
   INSTANCE_REFERENCE_SCHEMA,
   PARAMETER_DEFINITIONS_SCHEMA,
 } from './contracts';
@@ -77,6 +78,65 @@ describe('studio contracts', () => {
       runtimeTypeHint: 'WorldData',
       displayName: 'getWorldData result',
     });
+  });
+
+  it('projects a single reference-like class info field into an instance reference payload', () => {
+    const envelope = createClassInfoEnvelope(
+      {
+        imageStableId: IMAGE_A,
+        classStableId: CLASS_PLAYER,
+        fullName: 'Gameplay.PlayerController',
+        name: 'PlayerController',
+        namespace: 'Gameplay',
+        imageName: 'Assembly-CSharp.dll',
+      },
+      {
+        members: [],
+        statics: [{ id: STATIC_INSTANCE, label: 'Instance', name: 'Instance', typeName: 'Gameplay.PlayerController', offset: null, address: '0x2000', value: '244190ab960', isStatic: true }],
+        functions: [],
+      },
+      {
+        members: [],
+        statics: [STATIC_INSTANCE],
+        functions: [],
+      },
+    );
+
+    expect(getProjectedInstanceReferencePayloadFromValue(envelope.payload)).toEqual({
+      address: '0x244190AB960',
+      sourceKind: 'runtime-object',
+      runtimeTypeHint: 'Gameplay.PlayerController',
+      displayName: 'PlayerController.Instance',
+    });
+  });
+
+  it('does not project ambiguous class info fields into an instance reference payload', () => {
+    const envelope = createClassInfoEnvelope(
+      {
+        imageStableId: IMAGE_A,
+        classStableId: CLASS_PLAYER,
+        fullName: 'Gameplay.PlayerController',
+        name: 'PlayerController',
+        namespace: 'Gameplay',
+        imageName: 'Assembly-CSharp.dll',
+      },
+      {
+        members: [
+          { id: MEMBER_HEALTH, label: 'health', name: 'health', typeName: 'Gameplay.HealthData', offset: '0x10', address: '0x1010', value: '0x2000', isStatic: false },
+          { id: MEMBER_SPEED, label: 'speed', name: 'speed', typeName: 'Gameplay.SpeedData', offset: '0x14', address: '0x1014', value: '0x3000', isStatic: false },
+        ],
+        statics: [],
+        functions: [],
+      },
+      {
+        members: [MEMBER_HEALTH, MEMBER_SPEED],
+        statics: [],
+        functions: [],
+      },
+      '0x1234',
+    );
+
+    expect(getProjectedInstanceReferencePayloadFromValue(envelope.payload)).toBeNull();
   });
 
   it('returns an unbound class info envelope when no binding exists', () => {
