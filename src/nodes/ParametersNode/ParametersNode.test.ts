@@ -110,4 +110,73 @@ describe('ParametersNode', () => {
       }),
     ]);
   });
+
+  it('preserves unique symbol ids when dehydrating duplicate names', () => {
+    const dehydrated = ParametersNodeDef.dehydrateData?.({
+      nodeName: 'Params',
+      parameters: [{
+        id: 'symbol-a',
+        name: 'para1',
+        type: 'string',
+        source: createLiteralExpressionSource('a'),
+      }, {
+        id: 'symbol-b',
+        name: 'para1',
+        type: 'string',
+        source: createLiteralExpressionSource('b'),
+      }],
+    }, {
+      id: 'string-params-12',
+      nodeType: 'string-params',
+      typeVersion: 1,
+      position: { x: 0, y: 0 },
+      displayName: 'Params',
+      parameters: {},
+      bindings: {},
+      documentState: {},
+    });
+
+    expect(dehydrated?.documentState).toMatchObject({
+      symbols: [
+        expect.objectContaining({ stableId: 'symbol-a', name: 'para1' }),
+        expect.objectContaining({ stableId: 'symbol-b', name: 'para1' }),
+      ],
+    });
+  });
+
+  it('reports validation errors for duplicate parameter names', () => {
+    const issues = ParametersNodeDef.executionContract?.validate({
+      documentId: 'doc-1',
+      nodeId: 'params-1',
+      nodeType: 'string-params',
+      parameters: {},
+      bindings: {},
+      resolvedBindings: {},
+      documentState: {
+        symbols: [{
+          stableId: 'symbol-1',
+          name: 'para1',
+          valueType: 'string',
+          valueSource: createLiteralExpressionSource('a'),
+        }, {
+          stableId: 'symbol-2',
+          name: 'para1',
+          valueType: 'string',
+          valueSource: createLiteralExpressionSource('b'),
+        }],
+      },
+      runtimeState: {},
+      inputBindings: {},
+      resolvedInputs: {},
+      controlInputs: [],
+      getClassInfoCatalogByBinding: () => null,
+      abortSignal: null,
+      reportProgress: () => undefined,
+    });
+
+    expect(issues).toContainEqual(expect.objectContaining({
+      code: 'parameters.name.invalid',
+      message: 'para1: Parameter names must be unique within the node.',
+    }));
+  });
 });

@@ -46,13 +46,24 @@ function createParameterId() {
   return `param-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function createDefaultParameter(): ParameterDefinitionEntry {
+function createDefaultParameter(name = 'para1'): ParameterDefinitionEntry {
   return {
     id: createParameterId(),
-    name: 'para1',
+    name,
     type: 'string',
     source: createParameterLiteralSource('string', 'value'),
   };
+}
+
+function createNextDefaultParameter(parameters: ParameterDefinitionEntry[]): ParameterDefinitionEntry {
+  const usedNames = new Set(parameters.map((entry) => entry.name.trim()).filter((name) => name.length > 0));
+  let nextIndex = 1;
+
+  while (usedNames.has(`para${nextIndex}`)) {
+    nextIndex += 1;
+  }
+
+  return createDefaultParameter(`para${nextIndex}`);
 }
 
 function createParametersNodeData(): ParametersNodeData {
@@ -70,18 +81,45 @@ function createParameterValidationIssue(entry: ParameterDefinitionEntry, index: 
   };
 }
 
+function createParameterNameValidationIssue(entry: ParameterDefinitionEntry, index: number, message: string): ValidationIssue {
+  return {
+    severity: 'error',
+    code: 'parameters.name.invalid',
+    message: `${entry.name.trim() || `para${index + 1}`}: ${message}`,
+    target: `parameters.${entry.id}`,
+  };
+}
+
+function getParameterResolvedName(entry: ParameterDefinitionEntry, index: number) {
+  return entry.name.trim() || `para${index + 1}`;
+}
+
+function getParameterBindingKey(entry: ParameterDefinitionEntry) {
+  return entry.id;
+}
+
 function buildParameterPayload(
   parameters: ParameterDefinitionEntry[],
   resolveValue: (entry: ParameterDefinitionEntry) => unknown,
 ): { payload: ParameterDefinitionPayload; issues: ValidationIssue[] } {
+  const seenNames = new Set<string>();
+
   return parameters.reduce<{ payload: ParameterDefinitionPayload; issues: ValidationIssue[] }>((acc, entry, index) => {
+    const resolvedName = getParameterResolvedName(entry, index);
+    if (seenNames.has(resolvedName)) {
+      acc.issues.push(createParameterNameValidationIssue(entry, index, 'Parameter names must be unique within the node.'));
+      return acc;
+    }
+
+    seenNames.add(resolvedName);
+
     const parseResult = coerceParameterValue(entry.type, resolveValue(entry));
     if (!parseResult.ok) {
       acc.issues.push(createParameterValidationIssue(entry, index, parseResult.message));
       return acc;
     }
 
-    acc.payload[entry.name.trim() || `para${index + 1}`] = {
+    acc.payload[resolvedName] = {
       type: entry.type,
       value: parseResult.value,
       source: normalizeParameterValueSource(entry.source, entry.type),
@@ -93,7 +131,7 @@ function buildParameterPayload(
 function createRuntimeSymbols(parameters: ParameterDefinitionEntry[]) {
   return parameters.map((entry, index) => ({
     id: entry.id,
-    name: entry.name.trim() || `para${index + 1}`,
+    name: getParameterResolvedName(entry, index),
     type: entry.type,
     source: normalizeParameterValueSource(entry.source, entry.type),
   }));
@@ -103,6 +141,8 @@ function hydrateParameterEntries(symbols: unknown): ParameterDefinitionEntry[] {
   if (!Array.isArray(symbols)) {
     return [createDefaultParameter()];
   }
+
+  const seenIds = new Set<string>();
 
   const entries = symbols.flatMap((entry) => {
     if (!entry || typeof entry !== 'object') {
@@ -119,8 +159,13 @@ function hydrateParameterEntries(symbols: unknown): ParameterDefinitionEntry[] {
       return [];
     }
 
+    const nextId = typeof candidate.stableId === 'string' && !seenIds.has(candidate.stableId)
+      ? candidate.stableId
+      : createParameterId();
+    seenIds.add(nextId);
+
     return [{
-      id: typeof candidate.stableId === 'string' ? candidate.stableId : createParameterId(),
+      id: nextId,
       name: candidate.name,
       type: candidate.valueType,
       source: normalizeParameterValueSource(candidate.valueSource as ExpressionSource, candidate.valueType),
@@ -301,7 +346,7 @@ const ParametersNodeEditor: React.FC<INodeEditProps<ParametersNodeData>> = ({ da
           </div>
           <button
             type="button"
-            onClick={() => updateParameters([...data.parameters, createDefaultParameter()])}
+            onClick={() => updateParameters([...data.parameters, createNextDefaultParameter(data.parameters)])}
             className="group relative flex items-center gap-1.5 rounded-lg bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-400 transition-all hover:bg-cyan-500/20 hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(6,182,212,0.25)] ring-1 ring-cyan-500/30 overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-full group-hover:translate-x-full duration-1000 transition-transform ease-out pointer-events-none" />
@@ -406,7 +451,7 @@ const ParametersNodeEditor: React.FC<INodeEditProps<ParametersNodeData>> = ({ da
             <motion.div layout>
               <button
                 type="button"
-                onClick={() => updateParameters([...data.parameters, createDefaultParameter()])}
+                onClick={() => updateParameters([...data.parameters, createNextDefaultParameter(data.parameters)])}
                 className="w-full py-3.5 mt-2 rounded-xl border border-dashed border-slate-700/60 hover:border-cyan-500/40 text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all duration-300 flex items-center justify-center gap-2 group text-sm font-medium"
               >
                 <Plus size={16} className="group-hover:scale-110 transition-transform" /> Add Another Parameter
@@ -515,11 +560,11 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
     displayName: data.nodeName?.trim() || undefined,
     parameters: {},
     bindings: Object.fromEntries(
-      createRuntimeSymbols(data.parameters).map((entry) => [entry.name, entry.source]),
+      createRuntimeSymbols(data.parameters).map((entry) => [entry.id, entry.source]),
     ),
     documentState: {
       symbols: createRuntimeSymbols(data.parameters).map((entry, index) => ({
-        stableId: createStableId('symbol', [instance.id, entry.name || `para${index + 1}`]),
+        stableId: entry.id as ReturnType<typeof createStableId>,
         name: entry.name,
         valueType: entry.type,
         valueSource: entry.source,
@@ -530,7 +575,7 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
     displayName: node.data.nodeName?.trim() || undefined,
     parameters: {},
     bindings: Object.fromEntries(
-      createRuntimeSymbols(node.data.parameters).map((entry) => [entry.name, entry.source]),
+      createRuntimeSymbols(node.data.parameters).map((entry) => [entry.id, entry.source]),
     ),
     documentState: {
       symbols: createRuntimeSymbols(node.data.parameters).map((entry) => ({
@@ -545,11 +590,11 @@ const ParametersNodeDefinition: INodeDefinition<ParametersNodeData> = {
   executionContract: {
     validate: ({ documentState, resolvedBindings }) => {
       const symbols = hydrateParameterEntries(parseParameterNodeDocumentState(documentState).symbols);
-      return buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[entry.name]).issues;
+      return buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[getParameterBindingKey(entry)]).issues;
     },
     execute: ({ documentState, resolvedBindings }) => {
       const symbols = hydrateParameterEntries(parseParameterNodeDocumentState(documentState).symbols);
-      const { payload } = buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[entry.name]);
+      const { payload } = buildParameterPayload(symbols, (entry) => entry.source.kind === 'literal' ? entry.source.raw : resolvedBindings[getParameterBindingKey(entry)]);
       return {
         state: 'success',
         outputs: {

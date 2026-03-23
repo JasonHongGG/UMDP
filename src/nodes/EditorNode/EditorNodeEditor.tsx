@@ -44,15 +44,28 @@ function statusTone(status: EditorNodeTargetPreview['status']) {
   }
 }
 
-function SourceItem({ candidate, onAdd }: { candidate: EditorNodeAvailableTarget; onAdd: () => void }) {
+function SourceItem({
+  candidate,
+  onAdd,
+  disabled,
+}: {
+  candidate: EditorNodeAvailableTarget;
+  onAdd: () => void;
+  disabled: boolean;
+}) {
   return (
     <div
-      draggable={candidate.supported}
+      draggable={!disabled}
       onDragStart={(event) => {
+        if (disabled) {
+          event.preventDefault();
+          return;
+        }
+
         event.dataTransfer.setData(EDITOR_TARGET_MIME, serializeTargetCandidate(candidate));
         event.dataTransfer.effectAllowed = 'copy';
       }}
-      className={`rounded-xl border p-3 transition-colors ${candidate.supported ? 'cursor-grab border-slate-700 bg-slate-950/70 hover:border-cyan-500/50' : 'cursor-not-allowed border-slate-800 bg-slate-950/30 opacity-70'}`}
+      className={`rounded-xl border p-3 transition-colors ${disabled ? 'cursor-not-allowed border-slate-800 bg-slate-950/30 opacity-70' : 'cursor-grab border-slate-700 bg-slate-950/70 hover:border-cyan-500/50'}`}
     >
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -62,10 +75,10 @@ function SourceItem({ candidate, onAdd }: { candidate: EditorNodeAvailableTarget
         <button
           type="button"
           onClick={onAdd}
-          disabled={!candidate.supported}
+          disabled={disabled}
           className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] uppercase tracking-wider text-cyan-200 transition-colors hover:border-cyan-400/60 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
         >
-          Add
+          {candidate.supported ? 'Added' : 'Unsupported'}
         </button>
       </div>
       <div className="mt-2 text-[11px] text-slate-400">Address: {candidate.address ?? 'waiting for instance'}</div>
@@ -264,14 +277,24 @@ export const EditorNodeEditor: React.FC<INodeEditProps<EditorNodeData>> = ({ nod
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Members</div>
               {queryState.availableTargets.filter((candidate) => !candidate.isStatic).map((candidate) => (
-                <SourceItem key={`${candidate.memberStableId}:member`} candidate={candidate} onAdd={() => addTarget(candidate)} />
+                <SourceItem
+                  key={`${candidate.memberStableId}:member`}
+                  candidate={candidate}
+                  disabled={!candidate.supported || Boolean(findEditorTarget(data.targets, candidate.memberStableId, candidate.isStatic))}
+                  onAdd={() => addTarget(candidate)}
+                />
               ))}
             </div>
 
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Statics</div>
               {queryState.availableTargets.filter((candidate) => candidate.isStatic).map((candidate) => (
-                <SourceItem key={`${candidate.memberStableId}:static`} candidate={candidate} onAdd={() => addTarget(candidate)} />
+                <SourceItem
+                  key={`${candidate.memberStableId}:static`}
+                  candidate={candidate}
+                  disabled={!candidate.supported || Boolean(findEditorTarget(data.targets, candidate.memberStableId, candidate.isStatic))}
+                  onAdd={() => addTarget(candidate)}
+                />
               ))}
             </div>
           </div>

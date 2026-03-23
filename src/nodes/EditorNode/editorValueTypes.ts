@@ -2,10 +2,39 @@ import { normalizeExplicitAddressValue, classifySchemaTypeSemantic } from '../..
 import { createLiteralExpressionSource } from '../../core/studio/expression';
 import type { ExpressionSource, WorkflowJsonValue } from '../../domain/studio/contracts';
 import type { RuntimeFieldValueKind } from '../../domain/analysis/contracts';
+import { isExplicitHexAddress } from '../../core/addressFormat';
 
 export type EditorScalarKind = 'boolean' | 'integer' | 'float' | 'string' | 'address' | 'unsupported';
 
-export function classifyEditorScalarKind(typeName: string): EditorScalarKind {
+function isLikelyReferenceTypeName(typeName: string): boolean {
+  const normalized = typeName.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  const lower = normalized.toLowerCase();
+  if (
+    lower === 'system.object'
+    || lower.endsWith('[]')
+    || lower.includes('<')
+    || lower.includes('>')
+    || lower.includes('.')
+  ) {
+    return true;
+  }
+
+  if (lower.startsWith('system.nullable<')) {
+    return false;
+  }
+
+  return /^[a-z_][\w`]*$/i.test(normalized);
+}
+
+function looksLikeReferenceValue(value: WorkflowJsonValue | null | undefined): boolean {
+  return value === null || (typeof value === 'string' && isExplicitHexAddress(value));
+}
+
+export function classifyEditorScalarKind(typeName: string, runtimeValue?: WorkflowJsonValue | null): EditorScalarKind {
   const semantic = classifySchemaTypeSemantic(typeName);
 
   if (semantic.kind === 'boolean') {
@@ -21,6 +50,10 @@ export function classifyEditorScalarKind(typeName: string): EditorScalarKind {
   }
 
   if (semantic.kind === 'address') {
+    return 'address';
+  }
+
+  if (looksLikeReferenceValue(runtimeValue) && isLikelyReferenceTypeName(typeName)) {
     return 'address';
   }
 
