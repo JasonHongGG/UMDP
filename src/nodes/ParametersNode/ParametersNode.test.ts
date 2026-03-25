@@ -54,6 +54,11 @@ describe('ParametersNode', () => {
           name: 'enabled',
           valueType: 'boolean',
           valueSource: createLiteralExpressionSource('true', 'boolean'),
+        }, {
+          stableId: 'symbol-4',
+          name: 'playerAddress',
+          valueType: 'address',
+          valueSource: createLiteralExpressionSource('244190ab960', 'address'),
         }],
       },
       runtimeState: {},
@@ -74,8 +79,42 @@ describe('ParametersNode', () => {
         lives: { type: 'integer', value: 3 },
         speed: { type: 'float', value: 2.5 },
         enabled: { type: 'boolean', value: true },
+        playerAddress: { type: 'address', value: '0x244190AB960' },
       },
     });
+  });
+
+  it('reports validation errors for invalid address literals', () => {
+    const issues = ParametersNodeDef.executionContract?.validate({
+      documentId: 'doc-1',
+      nodeId: 'params-1',
+      nodeType: 'string-params',
+      parameters: {},
+      bindings: {},
+      resolvedBindings: {},
+      documentState: {
+        symbols: [{
+          stableId: 'symbol-1',
+          name: 'playerAddress',
+          valueType: 'address',
+          valueSource: createLiteralExpressionSource('not-an-address', 'address'),
+        }],
+      },
+      runtimeState: {},
+      inputBindings: {},
+      resolvedInputs: {},
+      controlInputs: [],
+      getClassInfoCatalogByBinding: () => null,
+      abortSignal: null,
+      reportProgress: () => undefined,
+    });
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        code: 'parameters.value.invalid',
+        message: 'playerAddress: Address parameter must be an explicit hex address.',
+      }),
+    ]);
   });
 
   it('reports validation errors for invalid typed literals', () => {

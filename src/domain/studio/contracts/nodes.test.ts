@@ -11,6 +11,11 @@ describe('parseParameterNodeDocumentState', () => {
         valueType: 'float',
         valueSource: createLiteralExpressionSource('2.5', 'number'),
       }, {
+        stableId: 'symbol-3',
+        name: 'playerAddress',
+        valueType: 'address',
+        valueSource: createLiteralExpressionSource('0x1234', 'address'),
+      }, {
         stableId: 'symbol-2',
         name: 'legacy',
         valueSource: createLiteralExpressionSource('old', 'string'),
@@ -21,6 +26,11 @@ describe('parseParameterNodeDocumentState', () => {
         name: 'speed',
         valueType: 'float',
         valueSource: createLiteralExpressionSource('2.5', 'number'),
+      }, {
+        stableId: 'symbol-3',
+        name: 'playerAddress',
+        valueType: 'address',
+        valueSource: createLiteralExpressionSource('0x1234', 'address'),
       }],
     });
   });

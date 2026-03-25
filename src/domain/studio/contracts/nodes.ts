@@ -5,7 +5,7 @@ import type { ClassBinding, ClassInfoCatalog } from '../editor';
 export type NodeFamily = 'control' | 'runtime' | 'data';
 export type ExpressionSupportMode = 'disabled' | 'optional' | 'required';
 export type ParameterValueType = 'string' | 'number' | 'integer' | 'float' | 'boolean' | 'json' | 'class-binding' | 'selection' | 'collection';
-export type ParameterScalarValueType = 'string' | 'integer' | 'float' | 'boolean';
+export type ParameterScalarValueType = 'string' | 'integer' | 'float' | 'boolean' | 'address';
 export type ConnectionChannel = 'control' | 'data';
 export type ConnectionDirection = 'input' | 'output';
 export type NodePreviewMode = 'supported' | 'degraded' | 'execute-only';
@@ -278,7 +278,8 @@ function isParameterScalarValueType(value: unknown): value is ParameterScalarVal
   return value === 'string'
     || value === 'integer'
     || value === 'float'
-    || value === 'boolean';
+    || value === 'boolean'
+    || value === 'address';
 }
 
 export function parseTriggerNodeDocumentState(value: unknown): TriggerNodeDocumentState {

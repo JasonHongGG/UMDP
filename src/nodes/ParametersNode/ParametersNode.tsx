@@ -336,6 +336,7 @@ const ParametersNodeEditor: React.FC<INodeEditProps<ParametersNodeData>> = ({ da
       case 'integer':
       case 'float': return <Hash size={14} className="text-amber-400" />;
       case 'boolean': return <ToggleLeft size={14} className="text-emerald-400" />;
+      case 'address': return <Box size={14} className="text-fuchsia-400" />;
       default: return <Box size={14} className="text-slate-400" />;
     }
   };

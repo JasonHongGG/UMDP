@@ -302,4 +302,60 @@ describe('classNodeModel', () => {
 
     expect(issues).toEqual([]);
   });
+
+  it('accepts projected instance references from a parameter definition payload on the instance input port', () => {
+    const issues = ClassNodeDef.executionContract?.validate({
+      documentId: 'doc-1',
+      nodeId: 'class-1',
+      nodeType: 'class-ref',
+      parameters: {},
+      bindings: {},
+      documentState: {
+        classBinding: {
+          imageStableId: IMAGE_A,
+          classStableId: CLASS_PLAYER,
+          fullName: 'Gameplay.PlayerController',
+          name: 'PlayerController',
+          namespace: 'Gameplay',
+          imageName: 'Assembly-CSharp.dll',
+        },
+        exportSelection: {
+          memberStableIds: [MEMBER_HEALTH],
+          staticStableIds: [],
+          methodStableIds: [],
+        },
+      },
+      inputBindings: {
+        'instance-in': [createInputExpressionSource('params-1', 'params-out', [], 'params-1.params-out')],
+      },
+      resolvedBindings: {},
+      resolvedInputs: {
+        'instance-in': [{
+          playerAddress: {
+            type: 'address',
+            value: '0x1234',
+          },
+        }],
+      },
+      controlInputs: [],
+      getClassInfoCatalogByBinding: () => ({
+        members: [{
+          id: MEMBER_HEALTH,
+          label: 'health',
+          name: 'health',
+          typeName: 'System.Int32',
+          offset: '0x10',
+          address: null,
+          value: null,
+          isStatic: false,
+          tags: [],
+        }],
+        statics: [],
+        functions: [],
+      }),
+      ...EXECUTION_RUNTIME_EXTRAS,
+    });
+
+    expect(issues).toEqual([]);
+  });
 });

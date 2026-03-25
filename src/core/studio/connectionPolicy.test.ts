@@ -211,6 +211,61 @@ describe('connectionPolicy', () => {
     });
   });
 
+  it('allows parameter definition outputs to connect into class instance inputs for manual address projection', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'params-source',
+          typeVersion: 1,
+          family: 'data',
+          displayName: 'Params Source',
+          description: 'Produces parameter definitions',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'params-out', displayName: 'Params', direction: 'output', channel: 'data', cardinality: 'single', dataType: 'studio.params.definition' }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+      {
+        manifest: {
+          type: 'class-ref',
+          typeVersion: 1,
+          family: 'runtime',
+          displayName: 'Class Ref',
+          description: 'Expects an instance reference',
+          category: 'Test',
+          inputs: [{ key: 'instance-in', displayName: 'Instance In', direction: 'input', channel: 'data', cardinality: 'single', dataType: INSTANCE_REFERENCE_SCHEMA.id }],
+          outputs: [],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
+
+    const result = validateConnection({
+      nodeId: 'params-source-1',
+      portId: 'params-out',
+      portType: 'json',
+      handleType: 'source',
+    }, {
+      nodeId: 'class-1',
+      portId: 'instance-in',
+      portType: 'json',
+      handleType: 'target',
+    }, [
+      { id: 'params-source-1', type: 'params-source', position: { x: 0, y: 0 }, data: {} },
+      { id: 'class-1', type: 'class-ref', position: { x: 120, y: 0 }, data: {} },
+    ], []);
+
+    expect(result).toEqual({
+      valid: true,
+      replaceEdgeIds: [],
+    });
+  });
+
   it('marks the previous inbound edge for replacement when reconnecting the same target port', () => {
     registerConnectionTestNodes();
 

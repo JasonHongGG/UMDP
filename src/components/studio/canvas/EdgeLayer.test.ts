@@ -1,6 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, WorkflowJsonEnvelope } from '../../../core/studio/types';
-import { isEdgeExecutionActive } from './EdgeLayer';
+import { getEdgeColor, isEdgeExecutionActive } from './EdgeLayer';
+import { initializeStudioNodeRegistry } from '../../../core/studio/NodeRegistry';
+
+describe('getEdgeColor', () => {
+  it('keeps the source port color while the edge is active', () => {
+    initializeStudioNodeRegistry([
+      {
+        manifest: {
+          type: 'json-source',
+          typeVersion: 1,
+          family: 'data',
+          displayName: 'Json Source',
+          description: 'Produces json output',
+          category: 'Test',
+          inputs: [],
+          outputs: [{ key: 'json-out', displayName: 'Json Out', direction: 'output', channel: 'data', cardinality: 'single', dataType: 'studio.json.generic' }],
+          parameters: [],
+        },
+        icon: () => null,
+        CanvasComponent: () => null,
+      },
+    ]);
+
+    expect(getEdgeColor({
+      id: 'edge-data',
+      channel: 'data',
+      sourceNodeId: 'json-source-1',
+      sourcePortId: 'json-out',
+      targetNodeId: 'target-1',
+      targetPortId: 'payload-in',
+    }, [{ id: 'json-source-1', type: 'json-source', position: { x: 0, y: 0 }, data: {} }], {})).toBe('#06b6d4');
+  });
+});
 
 function createSnapshot(overrides: Partial<NodeExecutionSnapshot>): NodeExecutionSnapshot {
   return {

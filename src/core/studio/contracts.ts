@@ -235,6 +235,20 @@ function isClassInfoPayload(value: unknown): value is ClassInfoPayload {
     && isRecord(value.basic);
 }
 
+function isParameterDefinitionPayload(value: unknown): value is ParameterDefinitionPayload {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => {
+    if (!isRecord(entry)) {
+      return false;
+    }
+
+    return typeof entry.type === 'string' && 'value' in entry;
+  });
+}
+
 function isLikelyReferenceTypeName(typeName: string): boolean {
   const normalized = typeName.trim();
   if (!normalized) {
@@ -298,6 +312,26 @@ export function getProjectedInstanceReferencePayloadFromValue(value: unknown): I
   const directReference = getInstanceReferencePayloadFromValue(value);
   if (directReference) {
     return directReference;
+  }
+
+  if (isParameterDefinitionPayload(value)) {
+    const addressParameters = Object.entries(value).filter(([, entry]) => entry.type === 'address');
+    if (addressParameters.length !== 1) {
+      return null;
+    }
+
+    const [parameterName, parameter] = addressParameters[0]!;
+    const normalizedAddress = typeof parameter.value === 'string' ? formatHexAddress(parameter.value) : null;
+    if (!normalizedAddress || !isExplicitHexAddress(normalizedAddress)) {
+      return null;
+    }
+
+    return {
+      address: normalizedAddress,
+      sourceKind: 'manual',
+      runtimeTypeHint: null,
+      displayName: parameterName,
+    };
   }
 
   if (!isClassInfoPayload(value)) {

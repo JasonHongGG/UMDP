@@ -1,4 +1,6 @@
+import { getProjectedInstanceReferencePayloadFromValue } from '../../core/studio/contracts';
 import { createLiteralExpressionSource, resolveExpressionSource } from '../../core/studio/expression';
+import { formatHexAddress, isExplicitHexAddress } from '../../core/addressFormat';
 import type { ExpressionResolutionContext } from '../../core/studio/expression';
 import type {
   ExpressionSource,
@@ -7,7 +9,7 @@ import type {
   WorkflowJsonValue,
 } from '../../domain/studio/contracts';
 
-export const PARAMETER_SCALAR_VALUE_TYPES = ['string', 'integer', 'float', 'boolean'] as const satisfies readonly ParameterScalarValueType[];
+export const PARAMETER_SCALAR_VALUE_TYPES = ['string', 'integer', 'float', 'boolean', 'address'] as const satisfies readonly ParameterScalarValueType[];
 
 export function isParameterScalarValueType(value: unknown): value is ParameterScalarValueType {
   return PARAMETER_SCALAR_VALUE_TYPES.includes(value as ParameterScalarValueType);
@@ -15,6 +17,8 @@ export function isParameterScalarValueType(value: unknown): value is ParameterSc
 
 export function getParameterExpressionValueType(valueType: ParameterScalarValueType): ExpressionValueType {
   switch (valueType) {
+    case 'address':
+      return 'address';
     case 'boolean':
       return 'boolean';
     case 'integer':
@@ -28,6 +32,8 @@ export function getParameterExpressionValueType(valueType: ParameterScalarValueT
 
 export function getDefaultParameterLiteralRaw(valueType: ParameterScalarValueType): string {
   switch (valueType) {
+    case 'address':
+      return '0x0';
     case 'integer':
     case 'float':
       return '0';
@@ -41,6 +47,8 @@ export function getDefaultParameterLiteralRaw(valueType: ParameterScalarValueTyp
 
 export function getParameterValuePlaceholder(valueType: ParameterScalarValueType): string {
   switch (valueType) {
+    case 'address':
+      return '例如 0x1234ABCD';
     case 'integer':
       return '例如 42';
     case 'float':
@@ -97,6 +105,23 @@ export function coerceParameterValue(valueType: ParameterScalarValueType, candid
   }
 
   switch (valueType) {
+    case 'address': {
+      const projectedReference = getProjectedInstanceReferencePayloadFromValue(candidate);
+      if (projectedReference?.address) {
+        return { ok: true, value: projectedReference.address };
+      }
+
+      if (typeof candidate !== 'string') {
+        return { ok: false, message: 'Address parameter must be a hex address or instance reference.' };
+      }
+
+      const normalized = formatHexAddress(candidate);
+      if (!normalized || !isExplicitHexAddress(normalized)) {
+        return { ok: false, message: 'Address parameter must be an explicit hex address.' };
+      }
+
+      return { ok: true, value: normalized };
+    }
     case 'string':
       if (candidate === null) {
         return { ok: false, message: 'String parameter cannot be null.' };

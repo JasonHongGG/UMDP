@@ -1,7 +1,7 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { getStudioNodePort, getStudioNodePorts } from '../../../core/studio/NodeRegistry';
 import { useStudioEdgeLayerState } from '../../../application/studio/useStudioEdgeLayerState';
-import { NodeExecutionSnapshot, NodeExecutionState, PORT_COLORS, PortType, StudioEdge } from '../../../core/studio/types';
+import { NodeExecutionSnapshot, NodeExecutionState, PORT_COLORS, PortType, StudioEdge, StudioNode } from '../../../core/studio/types';
 
 export function isEdgeExecutionActive(
   edge: StudioEdge,
@@ -37,6 +37,25 @@ export function isEdgeExecutionActive(
   }
 
   return (targetSnapshot.inputs[edge.targetPortId] ?? []).some((envelope) => envelope === sourceEnvelope);
+}
+
+export function getEdgeColor(
+  edge: StudioEdge,
+  nodes: StudioNode[],
+  nodeStates: Record<string, NodeExecutionState>,
+) {
+  const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
+  if (sourceState === 'aborted') {
+    return '#fbbf24';
+  }
+  if (sourceState === 'error') {
+    return '#fb7185';
+  }
+
+  const sourceNode = nodes.find((node) => node.id === edge.sourceNodeId);
+  const port = getStudioNodePort(sourceNode, 'output', edge.sourcePortId) || getStudioNodePort(sourceNode, 'input', edge.sourcePortId);
+  const type = port?.type || 'json';
+  return PORT_COLORS[type as PortType];
 }
 
 export function EdgeLayer() {
@@ -124,25 +143,6 @@ export function EdgeLayer() {
     return `M ${startX} ${startY} C ${startX + controlPointX} ${startY}, ${endX - controlPointX} ${endY}, ${endX} ${endY}`;
   };
 
-  const getEdgeColor = (edge: StudioEdge, isActive: boolean) => {
-    if (isActive) {
-      return '#34d399';
-    }
-
-    const sourceState = nodeStates[edge.sourceNodeId] ?? 'idle';
-    if (sourceState === 'aborted') {
-      return '#fbbf24';
-    }
-    if (sourceState === 'error') {
-      return '#fb7185';
-    }
-
-    const sourceNode = nodes.find(n => n.id === edge.sourceNodeId);
-    const port = getStudioNodePort(sourceNode, 'output', edge.sourcePortId) || getStudioNodePort(sourceNode, 'input', edge.sourcePortId);
-    const type = port?.type || 'json';
-    return PORT_COLORS[type as PortType];
-  };
-
   const renderDraftConnection = () => {
     if (!draftConnection) return null;
 
@@ -195,7 +195,7 @@ export function EdgeLayer() {
         const pathId = `edge-path-${edge.id}`;
         const pathString = createBezierPath(start.x, start.y, end.x, end.y);
         const isActive = isEdgeExecutionActive(edge, nodeStates, nodeSnapshots);
-        const color = getEdgeColor(edge, isActive);
+        const color = getEdgeColor(edge, nodes, nodeStates);
 
         return (
           <g key={edge.id}>

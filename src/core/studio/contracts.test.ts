@@ -110,6 +110,20 @@ describe('studio contracts', () => {
     });
   });
 
+  it('projects a single address parameter definition into an instance reference payload', () => {
+    expect(getProjectedInstanceReferencePayloadFromValue({
+      playerAddress: {
+        type: 'address',
+        value: '244190ab960',
+      },
+    })).toEqual({
+      address: '0x244190AB960',
+      sourceKind: 'manual',
+      runtimeTypeHint: null,
+      displayName: 'playerAddress',
+    });
+  });
+
   it('does not project ambiguous class info fields into an instance reference payload', () => {
     const envelope = createClassInfoEnvelope(
       {
