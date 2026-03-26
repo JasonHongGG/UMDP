@@ -21,6 +21,11 @@ std::string CurrentTimestamp()
     return std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now).count());
 }
 
+std::string JoinInvokeContext(const MethodRecord& method, const std::string& detail)
+{
+    return method.name + " [" + method.signature + "]: " + detail;
+}
+
 InvokeArgument NumberArgument(int value)
 {
     InvokeArgument argument;
@@ -81,6 +86,8 @@ SceneCatalogResponse SceneService::LoadSceneCatalog() const
     const MethodRecord get_scene_count = RequireMethod(scene_manager_class, "get_sceneCount", 0);
     const MethodRecord get_scene_at = RequireMethod(scene_manager_class, "GetSceneAt", 1);
     const MethodRecord get_root_game_objects = RequireMethod(scene_class, "GetRootGameObjects", 0);
+    const auto is_valid = TryFindMethod(scene_class, "IsValid", 0);
+    const auto get_is_loaded = TryFindMethod(scene_class, "get_isLoaded", 0);
 
     SceneCatalogResponse response;
     response.generated_at = CurrentTimestamp();
@@ -88,17 +95,42 @@ SceneCatalogResponse SceneService::LoadSceneCatalog() const
     const int scene_count = InvokeInt(scene_manager_class, get_scene_count, std::nullopt);
     response.scenes.reserve(static_cast<std::size_t>(scene_count));
     for (int index = 0; index < scene_count; ++index) {
-        const Address scene_object = InvokeObject(scene_manager_class, get_scene_at, std::nullopt, { NumberArgument(index) });
-        if (scene_object == 0) {
+        const Address scene_boxed = InvokeObject(scene_manager_class, get_scene_at, std::nullopt, { NumberArgument(index) });
+        if (scene_boxed == 0) {
             continue;
         }
 
-        const auto [scene_handle, scene_name] = ReadSceneIdentity(scene_object);
+        const Address raw_scene = RequireUnboxed(scene_boxed, "SceneManager.GetSceneAt result");
+        if (is_valid.has_value() && !InvokeBool(scene_class, *is_valid, raw_scene)) {
+            continue;
+        }
+        if (get_is_loaded.has_value() && !InvokeBool(scene_class, *get_is_loaded, raw_scene)) {
+            continue;
+        }
+
+        const auto [scene_handle, scene_name] = ReadSceneIdentity(scene_boxed);
         if (!scene_handle.has_value()) {
             continue;
         }
 
-        const Address root_array = InvokeObject(scene_class, get_root_game_objects, scene_object);
+        Address root_array = 0;
+        try {
+            root_array = InvokeObject(scene_class, get_root_game_objects, raw_scene);
+        }
+        catch (const std::exception& error) {
+            const std::string message = error.what();
+            if (message.find("scene is invalid") != std::string::npos) {
+                continue;
+            }
+
+            throw std::runtime_error(
+                "scene refresh failed at scene index "
+                + std::to_string(index)
+                + " handle "
+                + std::to_string(*scene_handle)
+                + ": "
+                + message);
+        }
 
         SceneDescriptorResponse scene;
         scene.scene_handle = *scene_handle;
@@ -174,22 +206,30 @@ Address SceneService::ResolveUnityClass(const std::string& class_namespace, cons
 
 std::optional<MethodRecord> SceneService::TryFindMethod(Address class_handle, const std::string& method_name, std::size_t parameter_count) const
 {
-    const auto methods = api_.EnumerateMethods(class_handle);
-    const auto found = std::find_if(methods.begin(), methods.end(), [&](const MethodRecord& method) {
-        return method.name == method_name && method.parameters.size() == parameter_count;
-    });
-    if (found == methods.end()) {
-        return std::nullopt;
+    for (Address current_class = class_handle; current_class != 0; current_class = api_.GetParentClass(current_class)) {
+        const auto methods = api_.EnumerateMethods(current_class);
+        const auto found = std::find_if(methods.begin(), methods.end(), [&](const MethodRecord& method) {
+            return method.name == method_name && method.parameters.size() == parameter_count;
+        });
+        if (found != methods.end()) {
+            return *found;
+        }
     }
 
-    return *found;
+    return std::nullopt;
 }
 
 MethodRecord SceneService::RequireMethod(Address class_handle, const std::string& method_name, std::size_t parameter_count) const
 {
     const auto method = TryFindMethod(class_handle, method_name, parameter_count);
     if (!method.has_value()) {
-        throw std::runtime_error("scene method not found: " + method_name);
+        throw std::runtime_error(
+            "scene method not found on "
+            + api_.GetClassTypeName(class_handle)
+            + " (searched parent hierarchy): "
+            + method_name
+            + "/"
+            + std::to_string(parameter_count));
     }
 
     return *method;
@@ -209,6 +249,17 @@ RuntimeMethodInvokeResponse SceneService::InvokeMethod(
     return method_invocation_service_.InvokeClassMethod(class_handle, request);
 }
 
+std::string SceneService::DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const
+{
+    if (response.exception.has_value() && !response.exception->empty()) {
+        return JoinInvokeContext(method, *response.exception);
+    }
+    if (response.error.has_value() && !response.error->empty()) {
+        return JoinInvokeContext(method, *response.error);
+    }
+    return JoinInvokeContext(method, fallback);
+}
+
 int SceneService::InvokeInt(
     Address class_handle,
     const MethodRecord& method,
@@ -217,7 +268,7 @@ int SceneService::InvokeInt(
 {
     const auto response = InvokeMethod(class_handle, method, instance_address, std::move(arguments));
     if (!response.success || !response.result.has_value() || !response.result->value.has_value()) {
-        throw std::runtime_error(response.error.value_or("scene integer invoke failed"));
+        throw std::runtime_error(DescribeInvokeFailure(response, method, "scene integer invoke failed"));
     }
 
     return std::stoi(*response.result->value, nullptr, 0);
@@ -231,7 +282,7 @@ bool SceneService::InvokeBool(
 {
     const auto response = InvokeMethod(class_handle, method, instance_address, std::move(arguments));
     if (!response.success || !response.result.has_value() || !response.result->value.has_value()) {
-        throw std::runtime_error(response.error.value_or("scene bool invoke failed"));
+        throw std::runtime_error(DescribeInvokeFailure(response, method, "scene bool invoke failed"));
     }
 
     return *response.result->value == "true";
@@ -245,7 +296,7 @@ std::optional<std::string> SceneService::TryInvokeString(
 {
     const auto response = InvokeMethod(class_handle, method, instance_address, std::move(arguments));
     if (!response.success || !response.result.has_value()) {
-        return std::nullopt;
+        throw std::runtime_error(DescribeInvokeFailure(response, method, "scene string invoke failed"));
     }
 
     return response.result->value;
@@ -259,7 +310,7 @@ Address SceneService::InvokeObject(
 {
     const auto response = InvokeMethod(class_handle, method, instance_address, std::move(arguments));
     if (!response.success || !response.result.has_value()) {
-        throw std::runtime_error(response.error.value_or("scene object invoke failed"));
+        throw std::runtime_error(DescribeInvokeFailure(response, method, "scene object invoke failed"));
     }
 
     if (response.result->object_address.has_value()) {
@@ -267,6 +318,16 @@ Address SceneService::InvokeObject(
     }
 
     return 0;
+}
+
+Address SceneService::RequireUnboxed(Address boxed_object_address, const std::string& context) const
+{
+    const Address raw_value = api_.UnboxObject(boxed_object_address);
+    if (raw_value == 0) {
+        throw std::runtime_error(context + ": failed to unbox value-type instance");
+    }
+
+    return raw_value;
 }
 
 std::optional<int> SceneService::ReadIntField(Address class_handle, Address instance_address, const std::string& field_name) const
@@ -306,9 +367,10 @@ std::optional<Vector3Snapshot> SceneService::ReadVector3(Address boxed_value_add
     }
 
     const Address vector3_class = ResolveUnityClass("UnityEngine", "Vector3");
-    const auto x = ReadFloatField(vector3_class, boxed_value_address, "x");
-    const auto y = ReadFloatField(vector3_class, boxed_value_address, "y");
-    const auto z = ReadFloatField(vector3_class, boxed_value_address, "z");
+    const Address raw_value = RequireUnboxed(boxed_value_address, "UnityEngine.Vector3");
+    const auto x = ReadFloatField(vector3_class, raw_value, "x");
+    const auto y = ReadFloatField(vector3_class, raw_value, "y");
+    const auto z = ReadFloatField(vector3_class, raw_value, "z");
     if (!x.has_value() || !y.has_value() || !z.has_value()) {
         return std::nullopt;
     }
@@ -323,10 +385,11 @@ std::optional<QuaternionSnapshot> SceneService::ReadQuaternion(Address boxed_val
     }
 
     const Address quaternion_class = ResolveUnityClass("UnityEngine", "Quaternion");
-    const auto x = ReadFloatField(quaternion_class, boxed_value_address, "x");
-    const auto y = ReadFloatField(quaternion_class, boxed_value_address, "y");
-    const auto z = ReadFloatField(quaternion_class, boxed_value_address, "z");
-    const auto w = ReadFloatField(quaternion_class, boxed_value_address, "w");
+    const Address raw_value = RequireUnboxed(boxed_value_address, "UnityEngine.Quaternion");
+    const auto x = ReadFloatField(quaternion_class, raw_value, "x");
+    const auto y = ReadFloatField(quaternion_class, raw_value, "y");
+    const auto z = ReadFloatField(quaternion_class, raw_value, "z");
+    const auto w = ReadFloatField(quaternion_class, raw_value, "w");
     if (!x.has_value() || !y.has_value() || !z.has_value() || !w.has_value()) {
         return std::nullopt;
     }
@@ -339,7 +402,6 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address) con
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
     const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
 
-    const MethodRecord get_name = RequireMethod(game_object_class, "get_name", 0);
     const MethodRecord get_active_self = RequireMethod(game_object_class, "get_activeSelf", 0);
     const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
     const MethodRecord get_layer = RequireMethod(game_object_class, "get_layer", 0);
@@ -350,7 +412,12 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address) con
     SceneNodeSummary node;
     node.object_address = FormatAddress(game_object_address);
     node.transform_address = transform_address == 0 ? std::nullopt : std::optional<std::string>(FormatAddress(transform_address));
-    node.name = TryInvokeString(game_object_class, get_name, game_object_address).value_or("<unnamed>");
+    if (const auto get_name = TryFindMethod(game_object_class, "get_name", 0); get_name.has_value()) {
+        node.name = TryInvokeString(game_object_class, *get_name, game_object_address).value_or("<unnamed>");
+    }
+    else {
+        node.name = "<unnamed>";
+    }
     node.active_self = InvokeBool(game_object_class, get_active_self, game_object_address);
     node.layer = InvokeInt(game_object_class, get_layer, game_object_address);
 
@@ -475,10 +542,16 @@ std::pair<std::optional<int>, std::optional<std::string>> SceneService::ReadScen
     }
 
     const Address scene_class = ResolveUnityClass("UnityEngine.SceneManagement", "Scene");
-    const MethodRecord get_name = RequireMethod(scene_class, "get_name", 0);
+    const Address raw_scene = RequireUnboxed(scene_boxed_address, "UnityEngine.SceneManagement.Scene");
+
+    std::optional<std::string> scene_name;
+    if (const auto get_name = TryFindMethod(scene_class, "get_name", 0); get_name.has_value()) {
+        scene_name = TryInvokeString(scene_class, *get_name, raw_scene);
+    }
+
     return {
-        ReadIntField(scene_class, scene_boxed_address, "m_Handle"),
-        TryInvokeString(scene_class, get_name, scene_boxed_address),
+        ReadIntField(scene_class, raw_scene, "m_Handle"),
+        scene_name,
     };
 }
 

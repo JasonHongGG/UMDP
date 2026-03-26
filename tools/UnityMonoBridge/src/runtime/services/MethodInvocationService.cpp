@@ -324,10 +324,12 @@ MethodInvocationService::MethodInvocationService(const RuntimeApi& api, const wi
 
 std::optional<MethodRecord> MethodInvocationService::ResolveMethod(Address class_handle, const BridgeRequest& request) const
 {
-    const auto methods = api_.EnumerateMethods(class_handle);
-    for (const auto& method : methods) {
-        if (method.name == request.method_name && method.signature == request.method_signature) {
-            return method;
+    for (Address current_class = class_handle; current_class != 0; current_class = api_.GetParentClass(current_class)) {
+        const auto methods = api_.EnumerateMethods(current_class);
+        for (const auto& method : methods) {
+            if (method.name == request.method_name && method.signature == request.method_signature) {
+                return method;
+            }
         }
     }
 
@@ -346,26 +348,29 @@ std::optional<MethodRecord> MethodInvocationService::ResolveMethod(Address class
         expected_parameter_types.push_back(NormalizeTypeName(p));
     }
 
-    for (const auto& method : methods) {
-        if (method.name != request.method_name) {
-            continue;
-        }
-        if (NormalizeTypeName(method.return_type) != expected_return_type) {
-            continue;
-        }
-        if (method.parameters.size() != expected_parameter_types.size()) {
-            continue;
-        }
-
-        bool match = true;
-        for (std::size_t i = 0; i < expected_parameter_types.size(); ++i) {
-            if (NormalizeTypeName(method.parameters[i].type_name) != expected_parameter_types[i]) {
-                match = false;
-                break;
+    for (Address current_class = class_handle; current_class != 0; current_class = api_.GetParentClass(current_class)) {
+        const auto methods = api_.EnumerateMethods(current_class);
+        for (const auto& method : methods) {
+            if (method.name != request.method_name) {
+                continue;
             }
-        }
-        if (match) {
-            return method;
+            if (NormalizeTypeName(method.return_type) != expected_return_type) {
+                continue;
+            }
+            if (method.parameters.size() != expected_parameter_types.size()) {
+                continue;
+            }
+
+            bool match = true;
+            for (std::size_t i = 0; i < expected_parameter_types.size(); ++i) {
+                if (NormalizeTypeName(method.parameters[i].type_name) != expected_parameter_types[i]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                return method;
+            }
         }
     }
 

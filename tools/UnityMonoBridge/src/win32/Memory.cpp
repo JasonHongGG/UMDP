@@ -87,20 +87,14 @@ std::string Memory::ReadUtf8(Address address, std::size_t max_length) const
     std::string result;
     result.reserve((std::min<std::size_t>)(max_length, 256));
 
-    constexpr std::size_t chunk_size = 128;
-    Address cursor = address;
-    while (result.size() < max_length) {
-        std::array<char, chunk_size> chunk{};
-        const auto remaining = (std::min)(chunk.size(), max_length - result.size());
-        Read(cursor, chunk.data(), remaining);
-
-        const auto terminator = std::find(chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(remaining), '\0');
-        result.append(chunk.begin(), terminator);
-        if (terminator != chunk.begin() + static_cast<std::ptrdiff_t>(remaining)) {
+    for (std::size_t index = 0; index < max_length; ++index) {
+        char value = '\0';
+        Read(address + index, &value, sizeof(value));
+        if (value == '\0') {
             break;
         }
 
-        cursor += remaining;
+        result.push_back(value);
     }
 
     return result;

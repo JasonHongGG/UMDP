@@ -250,6 +250,11 @@ Address Il2CppRuntimeApi::GetArrayElementAddress(Address array_object, std::size
     return memory().Read<Address>(array_object + kManagedArrayDataOffset + index * sizeof(Address));
 }
 
+Address Il2CppRuntimeApi::UnboxObject(Address object_address) const
+{
+    return object_address == 0 ? 0 : Invoke("il2cpp_object_unbox", { object_address });
+}
+
 bool Il2CppRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const
 {
     if (field.handle == 0) {
@@ -302,7 +307,7 @@ bool Il2CppRuntimeApi::TryReadUnboxedValue(Address object_address, void* buffer,
         return false;
     }
 
-    const Address raw_value = Invoke("il2cpp_object_unbox", { object_address });
+    const Address raw_value = UnboxObject(object_address);
     if (raw_value == 0) {
         return false;
     }

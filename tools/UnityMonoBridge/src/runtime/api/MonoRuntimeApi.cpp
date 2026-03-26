@@ -306,6 +306,11 @@ Address MonoRuntimeApi::GetArrayElementAddress(Address array_object, std::size_t
     return memory().Read<Address>(array_object + kManagedArrayDataOffset + index * sizeof(Address));
 }
 
+Address MonoRuntimeApi::UnboxObject(Address object_address) const
+{
+    return object_address == 0 ? 0 : Invoke("mono_object_unbox", { object_address });
+}
+
 bool MonoRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const
 {
     if (!field.static_address.has_value()) {
@@ -354,7 +359,7 @@ bool MonoRuntimeApi::TryReadUnboxedValue(Address object_address, void* buffer, s
         return false;
     }
 
-    const Address raw_value = Invoke("mono_object_unbox", { object_address });
+    const Address raw_value = UnboxObject(object_address);
     if (raw_value == 0) {
         return false;
     }

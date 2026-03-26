@@ -67,6 +67,8 @@ private:
     std::optional<float> ReadFloatField(Address class_handle, Address instance_address, const std::string& field_name) const;
     std::optional<Vector3Snapshot> ReadVector3(Address boxed_value_address) const;
     std::optional<QuaternionSnapshot> ReadQuaternion(Address boxed_value_address) const;
+    Address RequireUnboxed(Address boxed_object_address, const std::string& context) const;
+    std::string DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const;
 
     SceneNodeSummary BuildNodeSummary(Address game_object_address) const;
     std::vector<SceneNodeSummary> LoadChildrenForObject(Address game_object_address) const;

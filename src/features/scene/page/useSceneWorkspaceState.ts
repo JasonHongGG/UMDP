@@ -16,6 +16,15 @@ const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   lastUpdatedAt: null,
 };
 
+function toErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function logSceneError(context: string, error: unknown) {
+  console.log(`[scene] ${context}`, error);
+  return toErrorMessage(error);
+}
+
 function firstObjectAddress(snapshot: RuntimeSceneCatalogSnapshot | null) {
   for (const scene of snapshot?.scenes ?? []) {
     const first = scene.roots[0];
@@ -78,10 +87,11 @@ export function useSceneWorkspaceState({
       setSceneInspectorError(null);
       setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
     } catch (error) {
+      const message = logSceneError('refreshSceneWorkspace failed', error);
       setSceneWorkspace((previous) => ({
         ...previous,
         refreshStatus: 'error',
-        errorMessage: String(error),
+        errorMessage: message,
       }));
     }
   }, [repository, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
@@ -93,10 +103,11 @@ export function useSceneWorkspaceState({
       setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
       return next;
     } catch (error) {
+      const message = logSceneError('getSceneWorkspaceState failed', error);
       setSceneWorkspace((previous) => ({
         ...previous,
         refreshStatus: 'error',
-        errorMessage: String(error),
+        errorMessage: message,
       }));
       return null;
     }
@@ -123,9 +134,10 @@ export function useSceneWorkspaceState({
         [objectAddress]: snapshot.children,
       }));
     } catch (error) {
+      const message = logSceneError(`getSceneObjectChildren failed for ${objectAddress}`, error);
       setChildErrorByParent((previous) => ({
         ...previous,
-        [objectAddress]: String(error),
+        [objectAddress]: message,
       }));
     } finally {
       setLoadingChildrenByParent((previous) => ({
@@ -195,7 +207,7 @@ export function useSceneWorkspaceState({
       })
       .catch((error) => {
         if (!cancelled) {
-          setSceneInspectorError(String(error));
+          setSceneInspectorError(logSceneError(`getSceneObjectInspector failed for ${selectedObjectAddress}`, error));
         }
       })
       .finally(() => {
