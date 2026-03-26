@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Binary, ScanSearch } from 'lucide-react';
 import { SidebarTools } from '@/features/inspector/components/SidebarTools';
 import { GlobalSearchSidebar } from '@/features/inspector/components/GlobalSearchSidebar';
@@ -73,6 +74,23 @@ export function InspectorPage() {
     clearPendingScrollTarget,
   });
 
+  const handleClassClick = useCallback((item: (typeof filteredClasses)[number]) => {
+    openTabForClass({
+      imageStableId: item.imageStableId,
+      classStableId: item.stableId,
+      name: item.name,
+      namespace: item.namespace,
+      imageName: item.imageName,
+    });
+  }, [openTabForClass]);
+
+  const handleNavigateToType = useCallback((typeName: string) => {
+    const entry = classLookupMap.get(typeName);
+    if (entry) {
+      openTabForClass(entry);
+    }
+  }, [classLookupMap, openTabForClass]);
+
   return (
     <div className="flex-1 flex overflow-hidden">
       <SidebarTools
@@ -129,15 +147,7 @@ export function InspectorPage() {
         setClassSearch={setClassSearch}
         classListRef={classListRef}
         activeTab={activeTab}
-        handleClassClick={(item) => {
-          openTabForClass({
-            imageStableId: item.imageStableId,
-            classStableId: item.stableId,
-            name: item.name,
-            namespace: item.namespace,
-            imageName: item.imageName,
-          });
-        }}
+        handleClassClick={handleClassClick}
       />
 
       <div className="flex-1 flex flex-col relative overflow-hidden bg-[#0a0f16]/60 backdrop-blur-xl">
@@ -169,10 +179,7 @@ export function InspectorPage() {
           <ClassInspectorApp
             classInfo={selectedClass}
             classLookupMap={classLookupMap}
-            navigateToType={(typeName: string) => {
-              const entry = classLookupMap.get(typeName);
-              if (entry) openTabForClass(entry);
-            }}
+            navigateToType={handleNavigateToType}
             runtimeStaticFields={displayStaticFields}
             runtimeFields={displayFields}
             isLoadingRuntimeFields={isLoadingRuntimeFields}

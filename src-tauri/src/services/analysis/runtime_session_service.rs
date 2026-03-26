@@ -55,10 +55,7 @@ pub fn ensure_bridge_session_started(app: &AppHandle, state: &AppState) -> Resul
 }
 
 pub fn ensure_scene_bridge_session_started(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    let executable = find_bundled_executable(app, "UnityMonoBridge.exe")?;
-    state.scene_bridge.ensure_runtime_session(executable)?;
-    state.workspace.mark_runtime_bridge_connected();
-    Ok(())
+    ensure_bridge_session_started(app, state)
 }
 
 fn is_bridge_parse_error(error: &str) -> bool {

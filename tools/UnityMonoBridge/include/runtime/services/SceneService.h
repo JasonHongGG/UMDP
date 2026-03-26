@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "bridge/BridgeModels.h"
@@ -63,6 +64,7 @@ private:
         std::optional<Address> instance_address,
         std::vector<InvokeArgument> arguments = {}) const;
 
+    std::optional<FieldRecord> TryFindInstanceField(Address class_handle, const std::string& field_name, const std::string& field_type) const;
     std::optional<int> ReadIntField(Address class_handle, Address instance_address, const std::string& field_name) const;
     std::optional<float> ReadFloatField(Address class_handle, Address instance_address, const std::string& field_name) const;
     std::optional<Vector3Snapshot> ReadVector3(Address boxed_value_address) const;
@@ -82,6 +84,9 @@ private:
     const FieldEnumerationService& field_enumeration_service_;
     const FieldValueReader& field_value_reader_;
     const MethodInvocationService& method_invocation_service_;
+    mutable std::unordered_map<std::string, Address> class_cache_;
+    mutable std::unordered_map<std::string, std::optional<MethodRecord>> method_cache_;
+    mutable std::unordered_map<std::string, std::optional<FieldRecord>> field_cache_;
 };
 
 } // namespace bridge::runtime

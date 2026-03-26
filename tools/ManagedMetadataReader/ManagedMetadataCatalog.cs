@@ -1,5 +1,6 @@
 using Cpp2IL.Core;
 using Mono.Cecil;
+using System.Diagnostics;
 
 namespace ManagedMetadataReader;
 
@@ -101,7 +102,11 @@ internal sealed class ManagedMetadataCatalog : IDisposable
 
     public CanonicalAnalysisSnapshot DumpAll()
     {
+        var startedAt = Stopwatch.StartNew();
+        var phaseTimer = Stopwatch.StartNew();
         var images = GetImages().Select(CreateCanonicalImageDescriptor).ToList();
+        Console.Error.WriteLine($"[perf][ManagedMetadataCatalog] GetImages completed in {phaseTimer.ElapsedMilliseconds}ms image_count={images.Count}");
+        phaseTimer.Restart();
         var imagesByLegacyId = images.ToDictionary(image => image.LegacyImageId, StringComparer.Ordinal);
         var classes = new Dictionary<string, CanonicalClassDescriptor>(StringComparer.Ordinal);
         var imageClassIndex = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -127,6 +132,8 @@ internal sealed class ManagedMetadataCatalog : IDisposable
 
                 imageClassIndex[image.StableId] = classStableIds;
             }
+
+            Console.Error.WriteLine($"[perf][ManagedMetadataCatalog] Enumerated IL2CPP assemblies in {phaseTimer.ElapsedMilliseconds}ms class_count={classes.Count}");
 
             return new CanonicalAnalysisSnapshot
             {
@@ -158,6 +165,9 @@ internal sealed class ManagedMetadataCatalog : IDisposable
                 // Skip failed assemblies so one error doesn't break the entire dump.
             }
         }
+
+        Console.Error.WriteLine($"[perf][ManagedMetadataCatalog] Enumerated managed assemblies in {phaseTimer.ElapsedMilliseconds}ms class_count={classes.Count}");
+        Console.Error.WriteLine($"[perf][ManagedMetadataCatalog] DumpAll total={startedAt.ElapsedMilliseconds}ms image_count={images.Count} class_count={classes.Count}");
 
         return new CanonicalAnalysisSnapshot
         {

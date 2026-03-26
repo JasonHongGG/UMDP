@@ -2,6 +2,7 @@ use crate::domain::analysis_models::{AnalysisSnapshot, RuntimeInstanceFieldSnaps
 use crate::services::analysis::{metadata_query_service, runtime_overlay_service};
 use crate::state::AppState;
 use std::fmt::Display;
+use std::time::Instant;
 use tauri::{AppHandle, Manager, State};
 
 fn join_error_message(error: impl Display) -> String {
@@ -12,6 +13,7 @@ fn join_error_message(error: impl Display) -> String {
 pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> Result<AnalysisSnapshot, String> {
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let session = state.analysis.process_session();
         state.workspace.set_snapshot_loading(session.clone());
@@ -19,10 +21,21 @@ pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> R
         match metadata_query_service::load_all_metadata(&app_handle, &state) {
             Ok(snapshot) => {
                 state.workspace.set_ready(session);
+                eprintln!(
+                    "[perf][tauri] load_all_metadata command completed in {}ms class_count={} image_count={}",
+                    started_at.elapsed().as_millis(),
+                    snapshot.classes.len(),
+                    snapshot.images.len()
+                );
                 Ok(snapshot)
             }
             Err(error) => {
                 state.workspace.set_bridge_error(error.clone());
+                eprintln!(
+                    "[perf][tauri] load_all_metadata command failed in {}ms error={}",
+                    started_at.elapsed().as_millis(),
+                    error
+                );
                 Err(error)
             }
         }

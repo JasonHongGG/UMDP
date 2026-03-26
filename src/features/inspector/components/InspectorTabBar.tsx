@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Boxes, List, Type, Variable } from 'lucide-react';
 import type { InspectorTab } from '@/domain/analysis/workspace-types';
@@ -10,7 +11,7 @@ interface InspectorTabBarProps {
   tabBarRef: React.RefObject<HTMLDivElement | null>;
 }
 
-export function InspectorTabBar({
+export const InspectorTabBar = memo(function InspectorTabBar({
   tabs,
   activeTabIndex,
   setActiveTabIndex,
@@ -99,4 +100,4 @@ export function InspectorTabBar({
       </AnimatePresence>
     </div>
   );
-}
+});

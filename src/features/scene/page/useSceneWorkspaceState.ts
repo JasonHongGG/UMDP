@@ -25,6 +25,14 @@ function logSceneError(context: string, error: unknown) {
   return toErrorMessage(error);
 }
 
+function nowMs() {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function logScenePerf(label: string, startedAt: number, details?: Record<string, unknown>) {
+  console.log(`[perf][scene] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`, details ?? {});
+}
+
 function firstObjectAddress(snapshot: RuntimeSceneCatalogSnapshot | null) {
   for (const scene of snapshot?.scenes ?? []) {
     const first = scene.roots[0];
@@ -71,6 +79,8 @@ export function useSceneWorkspaceState({
       return;
     }
 
+    const startedAt = nowMs();
+
     setSceneWorkspace((previous) => ({
       ...previous,
       refreshStatus: 'refreshing',
@@ -86,6 +96,9 @@ export function useSceneWorkspaceState({
       setSceneInspector(null);
       setSceneInspectorError(null);
       setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
+      logScenePerf('refreshSceneWorkspace', startedAt, {
+        sceneCount: next.snapshot?.scenes.length ?? 0,
+      });
     } catch (error) {
       const message = logSceneError('refreshSceneWorkspace failed', error);
       setSceneWorkspace((previous) => ({
@@ -97,10 +110,15 @@ export function useSceneWorkspaceState({
   }, [repository, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
 
   const loadSceneWorkspaceState = useCallback(async () => {
+    const startedAt = nowMs();
     try {
       const next = await repository.getSceneWorkspaceState();
       setSceneWorkspace(next);
       setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
+      logScenePerf('getSceneWorkspaceState', startedAt, {
+        refreshStatus: next.refreshStatus,
+        sceneCount: next.snapshot?.scenes.length ?? 0,
+      });
       return next;
     } catch (error) {
       const message = logSceneError('getSceneWorkspaceState failed', error);
@@ -118,6 +136,8 @@ export function useSceneWorkspaceState({
       return;
     }
 
+    const startedAt = nowMs();
+
     setLoadingChildrenByParent((previous) => ({
       ...previous,
       [objectAddress]: true,
@@ -133,6 +153,9 @@ export function useSceneWorkspaceState({
         ...previous,
         [objectAddress]: snapshot.children,
       }));
+      logScenePerf(`getSceneObjectChildren:${objectAddress}`, startedAt, {
+        childCount: snapshot.children.length,
+      });
     } catch (error) {
       const message = logSceneError(`getSceneObjectChildren failed for ${objectAddress}`, error);
       setChildErrorByParent((previous) => ({
@@ -176,25 +199,12 @@ export function useSceneWorkspaceState({
   }, [active, loadSceneWorkspaceState, refreshSceneWorkspace, resetSceneState, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
 
   useEffect(() => {
-    if (sceneWorkspace.refreshStatus !== 'refreshing') {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      loadSceneWorkspaceState().catch(() => undefined);
-    }, 1000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [loadSceneWorkspaceState, sceneWorkspace.refreshStatus]);
-
-  useEffect(() => {
     if (!selectedObjectAddress || !active) {
       return;
     }
 
     let cancelled = false;
+    const startedAt = nowMs();
     setSceneInspectorLoading(true);
     setSceneInspectorError(null);
 
@@ -203,6 +213,10 @@ export function useSceneWorkspaceState({
       .then((snapshot) => {
         if (!cancelled) {
           setSceneInspector(snapshot);
+          logScenePerf(`getSceneObjectInspector:${selectedObjectAddress}`, startedAt, {
+            childCount: snapshot.children.length,
+            componentCount: snapshot.components.length,
+          });
         }
       })
       .catch((error) => {

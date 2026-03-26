@@ -192,10 +192,17 @@ SceneObjectInspectorResponse SceneService::InspectSceneObject(Address object_add
 
 Address SceneService::ResolveUnityClass(const std::string& class_namespace, const std::string& class_name) const
 {
+    const std::string cache_key = class_namespace + "." + class_name;
+    if (const auto found = class_cache_.find(cache_key); found != class_cache_.end()) {
+        return found->second;
+    }
+
     for (const auto& image_name : UnityImageCandidates()) {
         try {
             const Address image = assembly_service_.ResolveImage(image_name);
-            return class_service_.ResolveClass(image, class_namespace, class_name);
+            const Address resolved = class_service_.ResolveClass(image, class_namespace, class_name);
+            class_cache_.emplace(cache_key, resolved);
+            return resolved;
         }
         catch (const std::exception&) {
         }
@@ -206,16 +213,23 @@ Address SceneService::ResolveUnityClass(const std::string& class_namespace, cons
 
 std::optional<MethodRecord> SceneService::TryFindMethod(Address class_handle, const std::string& method_name, std::size_t parameter_count) const
 {
+    const std::string cache_key = std::to_string(class_handle) + "::" + method_name + "/" + std::to_string(parameter_count);
+    if (const auto found = method_cache_.find(cache_key); found != method_cache_.end()) {
+        return found->second;
+    }
+
     for (Address current_class = class_handle; current_class != 0; current_class = api_.GetParentClass(current_class)) {
         const auto methods = api_.EnumerateMethods(current_class);
         const auto found = std::find_if(methods.begin(), methods.end(), [&](const MethodRecord& method) {
             return method.name == method_name && method.parameters.size() == parameter_count;
         });
         if (found != methods.end()) {
+            method_cache_[cache_key] = *found;
             return *found;
         }
     }
 
+    method_cache_[cache_key] = std::nullopt;
     return std::nullopt;
 }
 
@@ -330,15 +344,33 @@ Address SceneService::RequireUnboxed(Address boxed_object_address, const std::st
     return raw_value;
 }
 
-std::optional<int> SceneService::ReadIntField(Address class_handle, Address instance_address, const std::string& field_name) const
+std::optional<FieldRecord> SceneService::TryFindInstanceField(Address class_handle, const std::string& field_name, const std::string& field_type) const
 {
+    const std::string cache_key = std::to_string(class_handle) + "::" + field_name + "::" + field_type;
+    if (const auto found = field_cache_.find(cache_key); found != field_cache_.end()) {
+        return found->second;
+    }
+
     std::vector<FieldRecord> static_fields;
     std::vector<FieldRecord> instance_fields;
     field_enumeration_service_.AppendClassFields(class_handle, static_fields, instance_fields);
     const auto found = std::find_if(instance_fields.begin(), instance_fields.end(), [&](const FieldRecord& field) {
-        return field.name == field_name && field.type_name == "System.Int32";
+        return field.name == field_name && field.type_name == field_type;
     });
+
     if (found == instance_fields.end()) {
+        field_cache_[cache_key] = std::nullopt;
+        return std::nullopt;
+    }
+
+    field_cache_[cache_key] = *found;
+    return *found;
+}
+
+std::optional<int> SceneService::ReadIntField(Address class_handle, Address instance_address, const std::string& field_name) const
+{
+    const auto found = TryFindInstanceField(class_handle, field_name, "System.Int32");
+    if (!found.has_value()) {
         return std::nullopt;
     }
 
@@ -347,13 +379,8 @@ std::optional<int> SceneService::ReadIntField(Address class_handle, Address inst
 
 std::optional<float> SceneService::ReadFloatField(Address class_handle, Address instance_address, const std::string& field_name) const
 {
-    std::vector<FieldRecord> static_fields;
-    std::vector<FieldRecord> instance_fields;
-    field_enumeration_service_.AppendClassFields(class_handle, static_fields, instance_fields);
-    const auto found = std::find_if(instance_fields.begin(), instance_fields.end(), [&](const FieldRecord& field) {
-        return field.name == field_name && field.type_name == "System.Single";
-    });
-    if (found == instance_fields.end()) {
+    const auto found = TryFindInstanceField(class_handle, field_name, "System.Single");
+    if (!found.has_value()) {
         return std::nullopt;
     }
 

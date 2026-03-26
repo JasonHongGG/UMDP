@@ -6,14 +6,22 @@ use crate::domain::analysis_models::{
 };
 use crate::domain::bridge_protocol::BridgeOperation;
 use crate::services::analysis::bridge_transport::{
-    execute_json_with, AppSceneBridgeTransport, BridgeRequest,
+    execute_json_with, AppBridgeTransport, BridgeRequest,
 };
 use crate::services::analysis::runtime_session_service::{
     ensure_attached_session, ensure_scene_bridge_session_started, execute_runtime_operation,
 };
 use crate::state::AppState;
 use serde::Deserialize;
+use std::time::Instant;
 use tauri::AppHandle;
+
+fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
+    eprintln!(
+        "[perf][scene-service] {label} completed in {}ms {details}",
+        started_at.elapsed().as_millis()
+    );
+}
 
 #[derive(Debug, Deserialize)]
 struct HelperSceneNodeSummary {
@@ -93,6 +101,7 @@ struct HelperSceneInspectorResponse {
 }
 
 pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWorkspaceState, String> {
+    let started_at = Instant::now();
     ensure_attached_session(state)?;
     ensure_scene_bridge_session_started(app, state)?;
     state.scene.set_refreshing();
@@ -105,7 +114,13 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
         }
     };
 
-    Ok(state.scene.set_snapshot(snapshot))
+    let workspace = state.scene.set_snapshot(snapshot.clone());
+    log_scene_duration(
+        "start_scene_refresh",
+        started_at,
+        &format!("scene_count={}", snapshot.scenes.len()),
+    );
+    Ok(workspace)
 }
 
 pub fn get_scene_object_children(
@@ -113,10 +128,17 @@ pub fn get_scene_object_children(
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneChildrenSnapshot, String> {
+    let started_at = Instant::now();
     ensure_attached_session(state)?;
     ensure_scene_bridge_session_started(app, state)?;
 
-    execute_runtime_operation(state, || load_scene_children(app, state, object_address))
+    let snapshot = execute_runtime_operation(state, || load_scene_children(app, state, object_address))?;
+    log_scene_duration(
+        "get_scene_object_children",
+        started_at,
+        &format!("object_address={object_address} child_count={}", snapshot.children.len()),
+    );
+    Ok(snapshot)
 }
 
 pub fn get_scene_object_inspector(
@@ -124,16 +146,28 @@ pub fn get_scene_object_inspector(
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
+    let started_at = Instant::now();
     ensure_attached_session(state)?;
     ensure_scene_bridge_session_started(app, state)?;
 
-    execute_runtime_operation(state, || load_scene_inspector(app, state, object_address))
+    let snapshot = execute_runtime_operation(state, || load_scene_inspector(app, state, object_address))?;
+    log_scene_duration(
+        "get_scene_object_inspector",
+        started_at,
+        &format!(
+            "object_address={object_address} children={} components={}",
+            snapshot.children.len(),
+            snapshot.components.len()
+        ),
+    );
+    Ok(snapshot)
 }
 
 fn load_scene_catalog(app: &AppHandle, state: &AppState) -> Result<RuntimeSceneCatalogSnapshot, String> {
+    let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
     let helper: HelperSceneCatalogResponse = execute_json_with(
-        &AppSceneBridgeTransport::new(state),
+        &AppBridgeTransport::new(state),
         app,
         BridgeRequest {
             operation: BridgeOperation::SceneCatalogLoad,
@@ -142,10 +176,16 @@ fn load_scene_catalog(app: &AppHandle, state: &AppState) -> Result<RuntimeSceneC
         },
     )?;
 
-    Ok(RuntimeSceneCatalogSnapshot {
+    let snapshot = RuntimeSceneCatalogSnapshot {
         generated_at: helper.generated_at,
         scenes: helper.scenes.into_iter().map(map_scene_descriptor).collect(),
-    })
+    };
+    log_scene_duration(
+        "load_scene_catalog",
+        started_at,
+        &format!("pid={} scene_count={}", attached.pid, snapshot.scenes.len()),
+    );
+    Ok(snapshot)
 }
 
 fn load_scene_children(
@@ -153,9 +193,10 @@ fn load_scene_children(
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneChildrenSnapshot, String> {
+    let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
     let helper: HelperSceneChildrenResponse = execute_json_with(
-        &AppSceneBridgeTransport::new(state),
+        &AppBridgeTransport::new(state),
         app,
         BridgeRequest {
             operation: BridgeOperation::SceneObjectChildrenLoad,
@@ -171,10 +212,16 @@ fn load_scene_children(
         },
     )?;
 
-    Ok(RuntimeSceneChildrenSnapshot {
+    let snapshot = RuntimeSceneChildrenSnapshot {
         parent_object_address: helper.parent_object_address,
         children: helper.children.into_iter().map(map_scene_node_summary).collect(),
-    })
+    };
+    log_scene_duration(
+        "load_scene_children",
+        started_at,
+        &format!("pid={} object_address={} child_count={}", attached.pid, object_address, snapshot.children.len()),
+    );
+    Ok(snapshot)
 }
 
 fn load_scene_inspector(
@@ -182,9 +229,10 @@ fn load_scene_inspector(
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
+    let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
     let helper: HelperSceneInspectorResponse = execute_json_with(
-        &AppSceneBridgeTransport::new(state),
+        &AppBridgeTransport::new(state),
         app,
         BridgeRequest {
             operation: BridgeOperation::SceneObjectInspect,
@@ -200,7 +248,7 @@ fn load_scene_inspector(
         },
     )?;
 
-    Ok(RuntimeSceneObjectInspectorSnapshot {
+    let snapshot = RuntimeSceneObjectInspectorSnapshot {
         generated_at: helper.generated_at,
         scene_handle: helper.scene_handle,
         scene_name: helper.scene_name,
@@ -209,7 +257,19 @@ fn load_scene_inspector(
         children: helper.children.into_iter().map(map_scene_node_summary).collect(),
         components: helper.components.into_iter().map(map_scene_component).collect(),
         transform: helper.transform.map(map_transform_snapshot),
-    })
+    };
+    log_scene_duration(
+        "load_scene_inspector",
+        started_at,
+        &format!(
+            "pid={} object_address={} children={} components={}",
+            attached.pid,
+            object_address,
+            snapshot.children.len(),
+            snapshot.components.len()
+        ),
+    );
+    Ok(snapshot)
 }
 
 fn map_scene_descriptor(value: HelperSceneDescriptor) -> RuntimeSceneDescriptor {

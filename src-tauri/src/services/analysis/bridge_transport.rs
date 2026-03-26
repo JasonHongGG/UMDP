@@ -45,16 +45,6 @@ impl<'a> AppBridgeTransport<'a> {
     }
 }
 
-pub struct AppSceneBridgeTransport<'a> {
-    state: &'a AppState,
-}
-
-impl<'a> AppSceneBridgeTransport<'a> {
-    pub fn new(state: &'a AppState) -> Self {
-        Self { state }
-    }
-}
-
 impl BridgeTransport for AppBridgeTransport<'_> {
     fn execute_raw(&self, app: &AppHandle, request: &BridgeRequest) -> Result<Vec<u8>, String> {
         if request.executable_name == "UnityMonoBridge.exe" {
@@ -62,20 +52,6 @@ impl BridgeTransport for AppBridgeTransport<'_> {
             return self
                 .state
                 .bridge
-                .execute_runtime_request(executable, request.operation.clone(), &request.args);
-        }
-
-        ProcessBridgeTransport.execute_raw(app, request)
-    }
-}
-
-impl BridgeTransport for AppSceneBridgeTransport<'_> {
-    fn execute_raw(&self, app: &AppHandle, request: &BridgeRequest) -> Result<Vec<u8>, String> {
-        if request.executable_name == "UnityMonoBridge.exe" {
-            let executable = find_bundled_executable(app, request.executable_name)?;
-            return self
-                .state
-                .scene_bridge
                 .execute_runtime_request(executable, request.operation.clone(), &request.args);
         }
 

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Layers3 } from 'lucide-react';
 import type { AnalysisImageInfo } from '@/domain/analysis/view-models';
 import { EmptyPanel } from '@/shared/ui/EmptyPanel';
@@ -19,7 +20,7 @@ interface AssembliesColumnProps {
   imageListRef: React.RefObject<HTMLDivElement | null>;
 }
 
-export function AssembliesColumn({
+export const AssembliesColumn = memo(function AssembliesColumn({
   images,
   filteredImages,
   selectedImage,
@@ -68,4 +69,4 @@ export function AssembliesColumn({
       </div>
     </div>
   );
-}
+});

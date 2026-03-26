@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 using ManagedMetadataReader;
@@ -16,6 +17,7 @@ internal static class ProgramEntry
 
     public static async Task<int> RunAsync(string[] args)
     {
+        var startedAt = Stopwatch.StartNew();
         try
         {
             var command = CommandLineParser.Parse(args);
@@ -30,15 +32,18 @@ internal static class ProgramEntry
             };
 
             await JsonSerializer.SerializeAsync(Console.OpenStandardOutput(), payload, JsonOptions);
+            Console.Error.WriteLine($"[perf][ManagedMetadataReader] mode={command.Mode} completed in {startedAt.ElapsedMilliseconds}ms");
             return 0;
         }
         catch (CommandLineException error)
         {
+            Console.Error.WriteLine($"[perf][ManagedMetadataReader] failed after {startedAt.ElapsedMilliseconds}ms: {error.Message}");
             Console.Error.WriteLine(error.Message);
             return error.ExitCode;
         }
         catch (FileNotFoundException error)
         {
+            Console.Error.WriteLine($"[perf][ManagedMetadataReader] failed after {startedAt.ElapsedMilliseconds}ms: {error.Message}");
             Console.Error.WriteLine(error.Message);
             return 5;
         }

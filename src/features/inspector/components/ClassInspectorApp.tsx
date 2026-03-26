@@ -18,7 +18,7 @@ interface ClassInspectorAppProps {
   onAddToStudio?: (binding: ClassBinding) => void;
 }
 
-export default function ClassInspectorApp({
+function ClassInspectorApp({
   classInfo,
   classLookupMap,
   navigateToType,
@@ -136,6 +136,8 @@ export default function ClassInspectorApp({
     </div>
   );
 }
+
+export default React.memo(ClassInspectorApp);
 
 // Internal standard layout utilities
 function Card({ title, children, action }: { title: string, children: React.ReactNode, action?: React.ReactNode }) {

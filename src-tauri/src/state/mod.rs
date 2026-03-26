@@ -463,7 +463,6 @@ fn runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {
 pub struct AppState {
     pub analysis: AnalysisState,
     pub bridge: BridgeClientState,
-    pub scene_bridge: BridgeClientState,
     pub scene: SceneState,
     pub workspace: WorkspaceState,
 }

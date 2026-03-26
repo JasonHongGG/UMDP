@@ -155,11 +155,17 @@ export function useAnalysisInspectorCatalog({
   const activeTab = activeTabIndex >= 0 && activeTabIndex < tabs.length ? tabs[activeTabIndex] : null;
 
   const selectedClass = useMemo<AnalysisClassInfo | null>(() => {
-    if (!activeTab) {
+    if (!activeTab || !analysisSnapshot) {
       return null;
     }
-    return classDetailsByStableId[activeTab.classStableId] ?? null;
-  }, [activeTab, classDetailsByStableId]);
+
+    const descriptor = analysisSnapshot.classes[activeTab.classStableId];
+    if (!descriptor) {
+      return null;
+    }
+
+    return createAnalysisClassInfo(descriptor, runtimeOverlays[activeTab.classStableId]);
+  }, [activeTab, analysisSnapshot, runtimeOverlays]);
 
   useEffect(() => {
     if (!selectedImage && selectedImageStableId !== null) {
@@ -181,22 +187,9 @@ export function useAnalysisInspectorCatalog({
     ensureRuntimeOverlayLoaded(activeTab.classStableId);
   }, [activeTab, ensureRuntimeOverlayLoaded]);
 
-  const studioClassDetailsByStableId = useMemo(() => {
-    if (!analysisSnapshot) {
-      return {} as Record<string, AnalysisClassInfo>;
-    }
-
-    return Object.fromEntries(
-      Object.values(analysisSnapshot.classes).map((descriptor) => [
-        descriptor.stableId,
-        createAnalysisClassInfo(descriptor, runtimeOverlays[descriptor.stableId]),
-      ]),
-    );
-  }, [analysisSnapshot, runtimeOverlays]);
-
   const activeCacheKey = activeTab ? activeTab.classStableId : '';
-  const displayStaticFields = activeTab ? (studioClassDetailsByStableId[activeCacheKey]?.staticFields ?? []) : [];
-  const displayFields = activeTab ? (studioClassDetailsByStableId[activeCacheKey]?.fields ?? []) : [];
+  const displayStaticFields = selectedClass?.staticFields ?? [];
+  const displayFields = selectedClass?.fields ?? [];
   const activeRuntimeFieldError = runtimeFieldErrorByKey[activeCacheKey] ?? null;
   const isLoadingRuntimeFields = loadingRuntimeByKey[activeCacheKey] ?? false;
 

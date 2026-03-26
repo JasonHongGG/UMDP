@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Boxes, ChevronRight } from 'lucide-react';
 import type { AnalysisClassSummary, AnalysisImageInfo } from '@/domain/analysis/view-models';
 import { EmptyPanel } from '@/shared/ui/EmptyPanel';
@@ -20,7 +21,7 @@ interface ClassesColumnProps {
   handleClassClick: (item: AnalysisClassSummary) => void;
 }
 
-export function ClassesColumn({
+export const ClassesColumn = memo(function ClassesColumn({
   images,
   selectedImage,
   loadingImages,
@@ -77,4 +78,4 @@ export function ClassesColumn({
       </div>
     </div>
   );
-}
+});
