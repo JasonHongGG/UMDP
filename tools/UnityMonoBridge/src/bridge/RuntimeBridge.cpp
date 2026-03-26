@@ -2,6 +2,8 @@
 
 #include "runtime/services/RuntimeInspector.h"
 
+#include <chrono>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -9,6 +11,15 @@
 namespace bridge {
 
 namespace {
+
+using PerfClock = std::chrono::steady_clock;
+
+void LogScenePerf(const char* label, PerfClock::time_point started_at, const std::string& details)
+{
+    std::cerr << "[perf][RuntimeBridge] " << label << " completed in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(PerfClock::now() - started_at).count()
+              << "ms " << details << std::endl;
+}
 
 template <typename TValue>
 TValue ParseUnsignedValue(const std::string& value)
@@ -207,17 +218,33 @@ RuntimeFieldSetResponse RuntimeBridge::ExecuteSetField(const BridgeRequest& requ
 
 SceneCatalogResponse RuntimeBridge::ExecuteSceneCatalog(const BridgeRequest& request)
 {
-    return ResolveInspector(request.pid).LoadSceneCatalog(request);
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).LoadSceneCatalog(request);
+    std::size_t root_count = 0;
+    for (const auto& scene : response.scenes) {
+        root_count += scene.roots.size();
+    }
+    LogScenePerf("scene_catalog", started_at, "scene_count=" + std::to_string(response.scenes.size()) + " root_count=" + std::to_string(root_count));
+    return response;
 }
 
 SceneChildrenResponse RuntimeBridge::ExecuteSceneChildren(const BridgeRequest& request)
 {
-    return ResolveInspector(request.pid).LoadSceneChildren(request);
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).LoadSceneChildren(request);
+    LogScenePerf("scene_children", started_at, "parent_object=" + response.parent_object_address + " child_count=" + std::to_string(response.children.size()));
+    return response;
 }
 
 SceneObjectInspectorResponse RuntimeBridge::ExecuteSceneInspect(const BridgeRequest& request)
 {
-    return ResolveInspector(request.pid).InspectSceneObject(request);
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).InspectSceneObject(request);
+    LogScenePerf(
+        "scene_inspect",
+        started_at,
+        "object=" + response.object.object_address + " children=" + std::to_string(response.children.size()) + " components=" + std::to_string(response.components.size()));
+    return response;
 }
 
 } // namespace bridge

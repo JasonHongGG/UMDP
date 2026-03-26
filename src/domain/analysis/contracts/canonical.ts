@@ -213,7 +213,7 @@ export interface RuntimeSceneNodeSummary {
   activeSelf: boolean;
   childCount: number;
   hasChildren: boolean;
-  componentCount: number;
+  componentCount: number | null;
   layer: number | null;
   tag: string | null;
 }

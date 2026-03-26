@@ -30,7 +30,13 @@ public:
     SceneObjectInspectorResponse InspectSceneObject(Address object_address) const;
 
 private:
+    enum class NodeSummaryFlavor {
+        Catalog,
+        Inspector,
+    };
+
     Address ResolveUnityClass(const std::string& class_namespace, const std::string& class_name) const;
+    std::string ResolveCachedTypeName(Address class_handle) const;
     std::optional<MethodRecord> TryFindMethod(Address class_handle, const std::string& method_name, std::size_t parameter_count) const;
     MethodRecord RequireMethod(Address class_handle, const std::string& method_name, std::size_t parameter_count) const;
 
@@ -72,7 +78,7 @@ private:
     Address RequireUnboxed(Address boxed_object_address, const std::string& context) const;
     std::string DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const;
 
-    SceneNodeSummary BuildNodeSummary(Address game_object_address) const;
+    SceneNodeSummary BuildNodeSummary(Address game_object_address, NodeSummaryFlavor flavor) const;
     std::vector<SceneNodeSummary> LoadChildrenForObject(Address game_object_address) const;
     std::vector<SceneComponentSummary> LoadComponentsForObject(Address game_object_address) const;
     std::optional<SceneTransformSnapshotResponse> BuildTransformSnapshot(Address transform_address) const;
@@ -87,6 +93,7 @@ private:
     mutable std::unordered_map<std::string, Address> class_cache_;
     mutable std::unordered_map<std::string, std::optional<MethodRecord>> method_cache_;
     mutable std::unordered_map<std::string, std::optional<FieldRecord>> field_cache_;
+    mutable std::unordered_map<Address, std::string> type_name_cache_;
 };
 
 } // namespace bridge::runtime

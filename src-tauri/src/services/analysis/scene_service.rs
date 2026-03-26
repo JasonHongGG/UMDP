@@ -31,7 +31,7 @@ struct HelperSceneNodeSummary {
     active_self: bool,
     child_count: usize,
     has_children: bool,
-    component_count: usize,
+    component_count: Option<usize>,
     layer: Option<i32>,
     tag: Option<String>,
 }
@@ -114,11 +114,13 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
         }
     };
 
-    let workspace = state.scene.set_snapshot(snapshot.clone());
+    let scene_count = snapshot.scenes.len();
+    let root_count = snapshot.scenes.iter().map(|scene| scene.roots.len()).sum::<usize>();
+    let workspace = state.scene.set_snapshot(snapshot);
     log_scene_duration(
         "start_scene_refresh",
         started_at,
-        &format!("scene_count={}", snapshot.scenes.len()),
+        &format!("scene_count={scene_count} root_count={root_count}"),
     );
     Ok(workspace)
 }
@@ -345,7 +347,7 @@ mod tests {
             active_self: true,
             child_count: 2,
             has_children: true,
-            component_count: 3,
+            component_count: Some(3),
             layer: Some(0),
             tag: Some("Player".into()),
         });
@@ -353,7 +355,7 @@ mod tests {
         assert_eq!(mapped.object_address, "0x10");
         assert_eq!(mapped.transform_address.as_deref(), Some("0x20"));
         assert!(mapped.has_children);
-        assert_eq!(mapped.component_count, 3);
+        assert_eq!(mapped.component_count, Some(3));
     }
 
     #[test]

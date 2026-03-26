@@ -188,7 +188,7 @@ export function ScenePage() {
                     <KeyValue label="Layer" value={sceneInspector.object.layer == null ? 'n/a' : String(sceneInspector.object.layer)} />
                     <KeyValue label="Tag" value={sceneInspector.object.tag ?? 'untagged'} />
                     <KeyValue label="Children" value={String(sceneInspector.object.childCount)} />
-                    <KeyValue label="Components" value={String(sceneInspector.object.componentCount)} />
+                    <KeyValue label="Components" value={sceneInspector.object.componentCount == null ? 'n/a' : String(sceneInspector.object.componentCount)} />
                   </SceneCard>
 
                   <SceneCard title="Transform" icon={<Box size={15} />}>
@@ -319,7 +319,6 @@ function SceneNodeRow({
           </button>
           <button onClick={() => onSelect(node.objectAddress)} className="min-w-0 flex-1 text-left">
             <div className="text-sm text-slate-200 truncate">{node.name}</div>
-            <div className="text-[11px] text-slate-500 truncate">{node.componentCount} comps · {node.childCount} children</div>
           </button>
         </div>
       </div>

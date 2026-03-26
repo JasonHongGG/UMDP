@@ -52,6 +52,16 @@ void WriteOptionalInt(std::ostringstream& output, const std::optional<int>& valu
     }
 }
 
+void WriteOptionalSize(std::ostringstream& output, const std::optional<std::size_t>& value)
+{
+    if (value.has_value()) {
+        output << *value;
+    }
+    else {
+        output << "null";
+    }
+}
+
 void WriteFieldRows(std::ostringstream& output, const std::vector<bridge::FieldRow>& rows, bool include_runtime_values)
 {
     for (std::size_t index = 0; index < rows.size(); ++index) {
@@ -160,7 +170,9 @@ void WriteSceneNode(std::ostringstream& output, const bridge::SceneNodeSummary& 
     output << "\"active_self\":" << (node.active_self ? "true" : "false") << ',';
     output << "\"child_count\":" << node.child_count << ',';
     output << "\"has_children\":" << (node.has_children ? "true" : "false") << ',';
-    output << "\"component_count\":" << node.component_count << ',';
+    output << "\"component_count\":";
+    WriteOptionalSize(output, node.component_count);
+    output << ',';
     output << "\"layer\":";
     WriteOptionalInt(output, node.layer);
     output << ",\"tag\":";

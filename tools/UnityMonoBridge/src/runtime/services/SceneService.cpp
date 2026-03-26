@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iostream>
 #include <stdexcept>
 
 #include "shared/Formatting.h"
@@ -9,6 +10,15 @@
 namespace bridge::runtime {
 
 namespace {
+
+using PerfClock = std::chrono::steady_clock;
+
+void LogScenePerf(const char* label, PerfClock::time_point started_at, const std::string& details)
+{
+    std::cerr << "[perf][SceneService] " << label << " completed in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(PerfClock::now() - started_at).count()
+              << "ms " << details << std::endl;
+}
 
 std::string FormatAddress(Address value)
 {
@@ -81,6 +91,7 @@ SceneService::SceneService(
 
 SceneCatalogResponse SceneService::LoadSceneCatalog() const
 {
+    const auto started_at = PerfClock::now();
     const Address scene_manager_class = ResolveUnityClass("UnityEngine.SceneManagement", "SceneManager");
     const Address scene_class = ResolveUnityClass("UnityEngine.SceneManagement", "Scene");
     const MethodRecord get_scene_count = RequireMethod(scene_manager_class, "get_sceneCount", 0);
@@ -92,8 +103,11 @@ SceneCatalogResponse SceneService::LoadSceneCatalog() const
     SceneCatalogResponse response;
     response.generated_at = CurrentTimestamp();
 
+    const auto scene_count_started_at = PerfClock::now();
     const int scene_count = InvokeInt(scene_manager_class, get_scene_count, std::nullopt);
+    LogScenePerf("catalog_scene_count", scene_count_started_at, "scene_count=" + std::to_string(scene_count));
     response.scenes.reserve(static_cast<std::size_t>(scene_count));
+    std::size_t total_root_count = 0;
     for (int index = 0; index < scene_count; ++index) {
         const Address scene_boxed = InvokeObject(scene_manager_class, get_scene_at, std::nullopt, { NumberArgument(index) });
         if (scene_boxed == 0) {
@@ -114,6 +128,7 @@ SceneCatalogResponse SceneService::LoadSceneCatalog() const
         }
 
         Address root_array = 0;
+        const auto roots_started_at = PerfClock::now();
         try {
             root_array = InvokeObject(scene_class, get_root_game_objects, raw_scene);
         }
@@ -138,37 +153,59 @@ SceneCatalogResponse SceneService::LoadSceneCatalog() const
         scene.is_loaded = true;
 
         const auto root_count = api_.GetArrayLength(root_array);
+        LogScenePerf(
+            "catalog_root_array",
+            roots_started_at,
+            "scene_index=" + std::to_string(index) + " scene_handle=" + std::to_string(*scene_handle) + " root_count=" + std::to_string(root_count));
+
         scene.roots.reserve(root_count);
+        const auto root_summaries_started_at = PerfClock::now();
         for (std::size_t root_index = 0; root_index < root_count; ++root_index) {
             const Address root_object = api_.GetArrayElementAddress(root_array, root_index);
             if (root_object != 0) {
-                scene.roots.push_back(BuildNodeSummary(root_object));
+                scene.roots.push_back(BuildNodeSummary(root_object, NodeSummaryFlavor::Catalog));
             }
         }
+        total_root_count += scene.roots.size();
+        LogScenePerf(
+            "catalog_root_summaries",
+            root_summaries_started_at,
+            "scene_index=" + std::to_string(index) + " scene_handle=" + std::to_string(*scene_handle) + " root_count=" + std::to_string(scene.roots.size()));
 
         response.scenes.push_back(std::move(scene));
     }
+
+    LogScenePerf(
+        "load_scene_catalog",
+        started_at,
+        "scene_count=" + std::to_string(response.scenes.size()) + " root_count=" + std::to_string(total_root_count));
 
     return response;
 }
 
 SceneChildrenResponse SceneService::LoadSceneChildren(Address object_address) const
 {
+    const auto started_at = PerfClock::now();
     SceneChildrenResponse response;
     response.parent_object_address = FormatAddress(object_address);
     response.children = LoadChildrenForObject(object_address);
+    LogScenePerf(
+        "load_scene_children",
+        started_at,
+        "parent_object=" + response.parent_object_address + " child_count=" + std::to_string(response.children.size()));
     return response;
 }
 
 SceneObjectInspectorResponse SceneService::InspectSceneObject(Address object_address) const
 {
+    const auto started_at = PerfClock::now();
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
     const MethodRecord get_scene = RequireMethod(game_object_class, "get_scene", 0);
     const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
 
     SceneObjectInspectorResponse response;
     response.generated_at = CurrentTimestamp();
-    response.object = BuildNodeSummary(object_address);
+    response.object = BuildNodeSummary(object_address, NodeSummaryFlavor::Inspector);
 
     const Address scene_object = InvokeObject(game_object_class, get_scene, object_address);
     const auto [scene_handle, scene_name] = ReadSceneIdentity(scene_object);
@@ -183,9 +220,14 @@ SceneObjectInspectorResponse SceneService::InspectSceneObject(Address object_add
     if (response.transform.has_value() && response.transform->parent_object_address.has_value()) {
         const Address parent_object = static_cast<Address>(std::stoull(*response.transform->parent_object_address, nullptr, 0));
         if (parent_object != 0) {
-            response.parent = BuildNodeSummary(parent_object);
+            response.parent = BuildNodeSummary(parent_object, NodeSummaryFlavor::Inspector);
         }
     }
+
+    LogScenePerf(
+        "inspect_scene_object",
+        started_at,
+        "object=" + response.object.object_address + " children=" + std::to_string(response.children.size()) + " components=" + std::to_string(response.components.size()));
 
     return response;
 }
@@ -209,6 +251,17 @@ Address SceneService::ResolveUnityClass(const std::string& class_namespace, cons
     }
 
     throw std::runtime_error("unity class not found: " + class_namespace + "." + class_name);
+}
+
+std::string SceneService::ResolveCachedTypeName(Address class_handle) const
+{
+    if (const auto found = type_name_cache_.find(class_handle); found != type_name_cache_.end()) {
+        return found->second;
+    }
+
+    const auto type_name = api_.GetClassTypeName(class_handle);
+    type_name_cache_.emplace(class_handle, type_name);
+    return type_name;
 }
 
 std::optional<MethodRecord> SceneService::TryFindMethod(Address class_handle, const std::string& method_name, std::size_t parameter_count) const
@@ -424,32 +477,25 @@ std::optional<QuaternionSnapshot> SceneService::ReadQuaternion(Address boxed_val
     return QuaternionSnapshot { *x, *y, *z, *w };
 }
 
-SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address) const
+SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address, NodeSummaryFlavor flavor) const
 {
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
     const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
 
-    const MethodRecord get_active_self = RequireMethod(game_object_class, "get_activeSelf", 0);
     const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
-    const MethodRecord get_layer = RequireMethod(game_object_class, "get_layer", 0);
     const MethodRecord get_child_count = RequireMethod(transform_class, "get_childCount", 0);
+    const auto get_name = TryFindMethod(game_object_class, "get_name", 0);
 
     const Address transform_address = InvokeObject(game_object_class, get_transform, game_object_address);
 
     SceneNodeSummary node;
     node.object_address = FormatAddress(game_object_address);
     node.transform_address = transform_address == 0 ? std::nullopt : std::optional<std::string>(FormatAddress(transform_address));
-    if (const auto get_name = TryFindMethod(game_object_class, "get_name", 0); get_name.has_value()) {
+    if (get_name.has_value()) {
         node.name = TryInvokeString(game_object_class, *get_name, game_object_address).value_or("<unnamed>");
     }
     else {
         node.name = "<unnamed>";
-    }
-    node.active_self = InvokeBool(game_object_class, get_active_self, game_object_address);
-    node.layer = InvokeInt(game_object_class, get_layer, game_object_address);
-
-    if (const auto get_tag = TryFindMethod(game_object_class, "get_tag", 0); get_tag.has_value()) {
-        node.tag = TryInvokeString(game_object_class, *get_tag, game_object_address);
     }
 
     if (transform_address != 0) {
@@ -457,8 +503,19 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address) con
         node.has_children = node.child_count > 0;
     }
 
-    if (const auto get_component_count = TryFindMethod(game_object_class, "GetComponentCount", 0); get_component_count.has_value()) {
-        node.component_count = static_cast<std::size_t>(InvokeInt(game_object_class, *get_component_count, game_object_address));
+    if (flavor == NodeSummaryFlavor::Inspector) {
+        const MethodRecord get_active_self = RequireMethod(game_object_class, "get_activeSelf", 0);
+        const MethodRecord get_layer = RequireMethod(game_object_class, "get_layer", 0);
+        node.active_self = InvokeBool(game_object_class, get_active_self, game_object_address);
+        node.layer = InvokeInt(game_object_class, get_layer, game_object_address);
+
+        if (const auto get_tag = TryFindMethod(game_object_class, "get_tag", 0); get_tag.has_value()) {
+            node.tag = TryInvokeString(game_object_class, *get_tag, game_object_address);
+        }
+
+        if (const auto get_component_count = TryFindMethod(game_object_class, "GetComponentCount", 0); get_component_count.has_value()) {
+            node.component_count = static_cast<std::size_t>(InvokeInt(game_object_class, *get_component_count, game_object_address));
+        }
     }
 
     return node;
@@ -466,6 +523,7 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address) con
 
 std::vector<SceneNodeSummary> SceneService::LoadChildrenForObject(Address game_object_address) const
 {
+    const auto started_at = PerfClock::now();
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
     const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
     const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
@@ -481,6 +539,7 @@ std::vector<SceneNodeSummary> SceneService::LoadChildrenForObject(Address game_o
     const int child_count = InvokeInt(transform_class, get_child_count, transform_address);
     std::vector<SceneNodeSummary> children;
     children.reserve(static_cast<std::size_t>(child_count));
+    const auto summaries_started_at = PerfClock::now();
     for (int index = 0; index < child_count; ++index) {
         const Address child_transform = InvokeObject(transform_class, get_child, transform_address, { NumberArgument(index) });
         if (child_transform == 0) {
@@ -488,15 +547,25 @@ std::vector<SceneNodeSummary> SceneService::LoadChildrenForObject(Address game_o
         }
         const Address child_object = InvokeObject(transform_class, get_game_object, child_transform);
         if (child_object != 0) {
-            children.push_back(BuildNodeSummary(child_object));
+            children.push_back(BuildNodeSummary(child_object, NodeSummaryFlavor::Catalog));
         }
     }
+
+    LogScenePerf(
+        "build_child_summaries",
+        summaries_started_at,
+        "parent_object=" + FormatAddress(game_object_address) + " child_count=" + std::to_string(children.size()));
+    LogScenePerf(
+        "load_children_for_object",
+        started_at,
+        "parent_object=" + FormatAddress(game_object_address) + " child_count=" + std::to_string(children.size()));
 
     return children;
 }
 
 std::vector<SceneComponentSummary> SceneService::LoadComponentsForObject(Address game_object_address) const
 {
+    const auto started_at = PerfClock::now();
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
     const auto get_component_count = TryFindMethod(game_object_class, "GetComponentCount", 0);
     if (!get_component_count.has_value()) {
@@ -522,9 +591,14 @@ std::vector<SceneComponentSummary> SceneService::LoadComponentsForObject(Address
 
         SceneComponentSummary component;
         component.component_address = FormatAddress(component_address);
-        component.type_name = api_.GetClassTypeName(api_.GetObjectClass(component_address));
+        component.type_name = ResolveCachedTypeName(api_.GetObjectClass(component_address));
         components.push_back(std::move(component));
     }
+
+    LogScenePerf(
+        "load_components_for_object",
+        started_at,
+        "object=" + FormatAddress(game_object_address) + " component_count=" + std::to_string(components.size()));
 
     return components;
 }

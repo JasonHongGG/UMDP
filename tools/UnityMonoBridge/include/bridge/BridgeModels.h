@@ -132,7 +132,7 @@ struct SceneNodeSummary {
     bool active_self = false;
     std::size_t child_count = 0;
     bool has_children = false;
-    std::size_t component_count = 0;
+    std::optional<std::size_t> component_count;
     std::optional<int> layer;
     std::optional<std::string> tag;
 };

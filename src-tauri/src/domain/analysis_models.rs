@@ -9,7 +9,7 @@ pub struct ProcessInfo {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeFlavor {
     Mono,
@@ -311,7 +311,7 @@ pub struct RuntimeSceneNodeSummary {
     pub active_self: bool,
     pub child_count: usize,
     pub has_children: bool,
-    pub component_count: usize,
+    pub component_count: Option<usize>,
     pub layer: Option<i32>,
     pub tag: Option<String>,
 }

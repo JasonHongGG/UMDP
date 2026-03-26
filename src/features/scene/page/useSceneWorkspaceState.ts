@@ -33,15 +33,12 @@ function logScenePerf(label: string, startedAt: number, details?: Record<string,
   console.log(`[perf][scene] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`, details ?? {});
 }
 
-function firstObjectAddress(snapshot: RuntimeSceneCatalogSnapshot | null) {
-  for (const scene of snapshot?.scenes ?? []) {
-    const first = scene.roots[0];
-    if (first) {
-      return first.objectAddress;
-    }
+function snapshotContainsObject(snapshot: RuntimeSceneCatalogSnapshot | null, objectAddress: string | null) {
+  if (!snapshot || !objectAddress) {
+    return false;
   }
 
-  return null;
+  return snapshot.scenes.some((scene) => scene.roots.some((root) => root.objectAddress === objectAddress));
 }
 
 export function useSceneWorkspaceState({
@@ -95,7 +92,7 @@ export function useSceneWorkspaceState({
       setChildErrorByParent({});
       setSceneInspector(null);
       setSceneInspectorError(null);
-      setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
+      setSelectedObjectAddress((current) => (snapshotContainsObject(next.snapshot, current) ? current : null));
       logScenePerf('refreshSceneWorkspace', startedAt, {
         sceneCount: next.snapshot?.scenes.length ?? 0,
       });
@@ -114,7 +111,7 @@ export function useSceneWorkspaceState({
     try {
       const next = await repository.getSceneWorkspaceState();
       setSceneWorkspace(next);
-      setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
+      setSelectedObjectAddress((current) => (snapshotContainsObject(next.snapshot, current) ? current : null));
       logScenePerf('getSceneWorkspaceState', startedAt, {
         refreshStatus: next.refreshStatus,
         sceneCount: next.snapshot?.scenes.length ?? 0,

@@ -3,6 +3,14 @@ use crate::state::AppState;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
 
+fn same_metadata_source(left: &ProcessSession, right: &ProcessSession) -> bool {
+    left.pid == right.pid
+        && left.exe_path == right.exe_path
+        && left.data_dir == right.data_dir
+        && left.managed_dir == right.managed_dir
+        && left.runtime == right.runtime
+}
+
 pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
     state.bridge.reset();
     state.scene.reset();
@@ -32,8 +40,17 @@ pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<Pro
         runtime,
     };
 
+    let preserve_metadata = state
+        .analysis
+        .process_session()
+        .as_ref()
+        .is_some_and(|existing| same_metadata_source(existing, &session))
+        && state.analysis.metadata_snapshot().is_some();
+
     state.analysis.set_process_session(session.clone());
-    state.analysis.clear_metadata();
+    if !preserve_metadata {
+        state.analysis.clear_metadata();
+    }
 
     Ok(session)
 }
