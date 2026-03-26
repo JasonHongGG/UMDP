@@ -68,6 +68,8 @@ mod tests {
         assert_eq!(fixture.operation, "runtime-method-invoke");
         assert_eq!(fixture.request_id, "bridge-42-1");
         assert!(fixture.payload.is_object());
+        assert_eq!(fixture.payload["arguments"][0]["valueKind"], "address");
+        assert_eq!(fixture.payload["arguments"][0]["typeName"], "UnityEngine.Transform");
     }
 
     #[test]

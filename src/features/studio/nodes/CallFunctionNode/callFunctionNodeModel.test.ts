@@ -10,6 +10,7 @@ import {
   findSelectedFunction,
   getClassInfoPayloadFromValue,
   reconcileCallFunctionArguments,
+  toRuntimeInvokeAddressArgument,
   toRuntimeInvokeArgument,
 } from './callFunctionNodeModel';
 
@@ -94,5 +95,32 @@ describe('callFunctionNodeModel', () => {
       valueKind: 'string',
       value: 'player',
     });
+
+    expect(toRuntimeInvokeArgument('target', 'UnityEngine.Transform', '0x1234')).toEqual({
+      name: 'target',
+      typeName: 'UnityEngine.Transform',
+      valueKind: 'address',
+      value: '0x1234',
+    });
+
+    expect(toRuntimeInvokeArgument('pointer', 'System.IntPtr', '0x1234')).toEqual({
+      name: 'pointer',
+      typeName: 'System.IntPtr',
+      valueKind: 'number',
+      value: '0x1234',
+    });
+  });
+
+  it('rejects malformed invoke address arguments and exposes an explicit address helper', () => {
+    expect(toRuntimeInvokeAddressArgument('target', 'UnityEngine.GameObject', '0x1234')).toEqual({
+      name: 'target',
+      typeName: 'UnityEngine.GameObject',
+      valueKind: 'address',
+      value: '0x1234',
+    });
+
+    expect(() => toRuntimeInvokeAddressArgument('target', 'UnityEngine.GameObject', 'not-an-address')).toThrow(
+      'Unsupported address argument value for target',
+    );
   });
 });

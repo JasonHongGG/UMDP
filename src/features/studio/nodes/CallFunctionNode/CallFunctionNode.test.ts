@@ -12,7 +12,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 const IMAGE_ID = createImageStableId({ imageName: 'Assembly-CSharp.dll', imagePath: 'Assembly-CSharp.dll' });
 const CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, namespace: 'Gameplay', className: 'PlayerController' });
 const METHOD_ID = createMethodStableId({ classStableId: CLASS_ID, methodName: 'Move', signature: 'System.Void (System.Single x)' });
+const METHOD_ATTACH_TARGET = createMethodStableId({ classStableId: CLASS_ID, methodName: 'AttachTarget', signature: 'System.Void (UnityEngine.Transform target)' });
 const ARGUMENT_ID = createStableId('binding', ['call-1', 'x']);
+const TARGET_ARGUMENT_ID = createStableId('binding', ['call-1', 'target']);
 
 function createExecutionContext(overrides: Partial<Parameters<NonNullable<typeof CallFunctionNodeDef.executionContract>['execute']>[0]> = {}) {
   return {
@@ -151,6 +153,76 @@ describe('CallFunctionNode', () => {
         runtimeTypeHint: 'System.Void',
         displayName: 'Move result',
       },
+    });
+  });
+
+  it('propagates explicit hex addresses as invoke address arguments for reference-type parameters', async () => {
+    invokeMock.mockResolvedValueOnce({
+      classStableId: CLASS_ID,
+      methodStableId: METHOD_ATTACH_TARGET,
+      methodName: 'AttachTarget',
+      methodSignature: 'System.Void (UnityEngine.Transform target)',
+      returnType: 'System.Void',
+      success: true,
+      failureKind: 'none',
+      error: null,
+      exception: null,
+      result: {
+        kind: 'void',
+        value: null,
+        objectAddress: null,
+      },
+    });
+
+    const result = await CallFunctionNodeDef.executionContract!.execute(createExecutionContext({
+      documentState: {
+        selectedMethodStableId: METHOD_ATTACH_TARGET,
+        arguments: [{
+          stableId: TARGET_ARGUMENT_ID,
+          name: 'target',
+          valueSource: createLiteralExpressionSource('0x244190AB960', 'address'),
+        }],
+      },
+      resolvedBindings: {
+        [TARGET_ARGUMENT_ID]: '0x244190AB960',
+      },
+      resolvedInputs: {
+        'class-info-in': [{
+          basic: {
+            imageName: 'Assembly-CSharp.dll',
+            className: 'PlayerController',
+            namespace: 'Gameplay',
+            fullName: 'Gameplay.PlayerController',
+          },
+          instanceAddress: '0x1234',
+          statics: [],
+          members: [],
+          functions: [{
+            name: 'AttachTarget',
+            signature: 'System.Void (UnityEngine.Transform target)',
+            returnType: 'System.Void',
+            parameters: [{ position: 0, name: 'target', typeName: 'UnityEngine.Transform' }],
+            isStatic: false,
+            runtimeRef: {
+              imageStableId: IMAGE_ID,
+              classStableId: CLASS_ID,
+              methodStableId: METHOD_ATTACH_TARGET,
+            },
+          }],
+        }],
+      },
+    }));
+
+    expect(result.state).toBe('success');
+    expect(invokeMock).toHaveBeenCalledWith('invoke_runtime_method', {
+      request: expect.objectContaining({
+        arguments: [{
+          name: 'target',
+          typeName: 'UnityEngine.Transform',
+          valueKind: 'address',
+          value: '0x244190AB960',
+        }],
+      }),
     });
   });
 });

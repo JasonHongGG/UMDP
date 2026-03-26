@@ -21,6 +21,7 @@ enum class InvokeValueKind {
     Boolean,
     Number,
     String,
+    Address,
 };
 
 struct InvokeArgument {

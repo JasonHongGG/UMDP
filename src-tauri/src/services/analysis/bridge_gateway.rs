@@ -275,6 +275,7 @@ fn push_invoke_argument(args: &mut Vec<String>, argument: &RuntimeMethodInvokeAr
         RuntimeInvokeArgumentKind::Boolean => "boolean",
         RuntimeInvokeArgumentKind::Number => "number",
         RuntimeInvokeArgumentKind::String => "string",
+        RuntimeInvokeArgumentKind::Address => "address",
     };
 
     args.push("--arg-kind".into());
@@ -292,5 +293,45 @@ fn encode_value_kind(kind: &RuntimeFieldValueKind) -> &'static str {
         RuntimeFieldValueKind::Float => "float",
         RuntimeFieldValueKind::String => "string",
         RuntimeFieldValueKind::Address => "address",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::push_invoke_argument;
+    use crate::domain::analysis_models::{RuntimeInvokeArgumentKind, RuntimeMethodInvokeArgument};
+
+    #[test]
+    fn push_invoke_argument_encodes_address_arguments() {
+        let mut args = Vec::new();
+
+        push_invoke_argument(
+            &mut args,
+            &RuntimeMethodInvokeArgument {
+                name: "target".into(),
+                type_name: "UnityEngine.Transform".into(),
+                value_kind: RuntimeInvokeArgumentKind::Address,
+                value: Some("0x1234".into()),
+            },
+        );
+
+        assert_eq!(args, vec!["--arg-kind", "address", "--arg-value", "0x1234"]);
+    }
+
+    #[test]
+    fn push_invoke_argument_keeps_null_arguments_value_less() {
+        let mut args = Vec::new();
+
+        push_invoke_argument(
+            &mut args,
+            &RuntimeMethodInvokeArgument {
+                name: "target".into(),
+                type_name: "UnityEngine.Transform".into(),
+                value_kind: RuntimeInvokeArgumentKind::Null,
+                value: None,
+            },
+        );
+
+        assert_eq!(args, vec!["--arg-kind", "null"]);
     }
 }

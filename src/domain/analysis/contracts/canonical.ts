@@ -98,7 +98,7 @@ export interface RuntimeInstanceFieldSnapshot {
   fields: RuntimeResolvedFieldDescriptor[];
 }
 
-export type RuntimeInvokeArgumentKind = 'null' | 'boolean' | 'number' | 'string';
+export type RuntimeInvokeArgumentKind = 'null' | 'boolean' | 'number' | 'string' | 'address';
 
 export type RuntimeInvokeFailureKind =
   | 'none'

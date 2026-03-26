@@ -5,14 +5,14 @@
   "requestId": "bridge-42-1",
   "payload": {
     "classStableId": "class:image:Assembly-CSharp.dll|Gameplay|PlayerController",
-    "methodStableId": "method:class:image:Assembly-CSharp.dll|Gameplay|PlayerController|Move|System.Void (System.Single x)",
+    "methodStableId": "method:class:image:Assembly-CSharp.dll|Gameplay|PlayerController|AttachTarget|System.Void (UnityEngine.Transform target)",
     "instanceAddress": "0x0000000000001000",
     "arguments": [
       {
-        "name": "x",
-        "typeName": "System.Single",
-        "valueKind": "number",
-        "value": "1.5"
+        "name": "target",
+        "typeName": "UnityEngine.Transform",
+        "valueKind": "address",
+        "value": "0x0000000000002000"
       }
     ]
   }

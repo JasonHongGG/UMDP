@@ -6,9 +6,9 @@
   "result": {
     "success": true,
     "classStableId": "class:image:Assembly-CSharp.dll|Gameplay|PlayerController",
-    "methodStableId": "method:class:image:Assembly-CSharp.dll|Gameplay|PlayerController|Move|System.Void (System.Single x)",
-    "methodName": "Move",
-    "methodSignature": "System.Void (System.Single x)",
+    "methodStableId": "method:class:image:Assembly-CSharp.dll|Gameplay|PlayerController|AttachTarget|System.Void (UnityEngine.Transform target)",
+    "methodName": "AttachTarget",
+    "methodSignature": "System.Void (UnityEngine.Transform target)",
     "returnType": "System.Void",
     "failureKind": "none",
     "error": null,

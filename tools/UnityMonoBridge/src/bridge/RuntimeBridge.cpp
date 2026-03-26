@@ -27,6 +27,9 @@ InvokeValueKind ParseInvokeValueKind(const std::string& value)
     if (value == "string") {
         return InvokeValueKind::String;
     }
+    if (value == "address") {
+        return InvokeValueKind::Address;
+    }
 
     return InvokeValueKind::Null;
 }

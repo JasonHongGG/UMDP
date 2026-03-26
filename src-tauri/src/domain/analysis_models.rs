@@ -150,6 +150,7 @@ pub enum RuntimeInvokeArgumentKind {
     Boolean,
     Number,
     String,
+    Address,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

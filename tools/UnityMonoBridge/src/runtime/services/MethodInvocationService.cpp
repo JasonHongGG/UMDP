@@ -251,6 +251,35 @@ bool IsStringType(const std::string& type_name)
     return type_name == "System.String";
 }
 
+bool IsOutOfScopeAddressParameterType(const std::string& type_name)
+{
+    if (type_name.empty()) {
+        return true;
+    }
+
+    if (type_name == "System.Void" || type_name == "System.Decimal" || type_name == "System.DateTime" || type_name == "System.TimeSpan" || type_name == "System.Guid") {
+        return true;
+    }
+
+    if (type_name == "UnityEngine.Vector2" || type_name == "UnityEngine.Vector3" || type_name == "UnityEngine.Vector4"
+        || type_name == "UnityEngine.Quaternion" || type_name == "UnityEngine.Color" || type_name == "UnityEngine.Color32"
+        || type_name == "UnityEngine.Rect" || type_name == "UnityEngine.Bounds" || type_name == "UnityEngine.RaycastHit") {
+        return true;
+    }
+
+    return type_name.find('<') != std::string::npos
+        || type_name.ends_with("[]")
+        || type_name.ends_with('&')
+        || type_name.ends_with('*');
+}
+
+bool SupportsManagedReferenceAddressArgument(const std::string& type_name)
+{
+    return PrimitiveSizeForType(type_name) == 0
+        && !IsStringType(type_name)
+        && !IsOutOfScopeAddressParameterType(type_name);
+}
+
 Address ParseAddress(const std::string& value)
 {
     return static_cast<Address>(std::stoull(value, nullptr, 0));
@@ -384,18 +413,38 @@ RuntimeMethodInvokeResponse MethodInvocationService::InvokeClassMethod(Address c
         }
 
         if (IsStringType(parameter_type)) {
+            if (argument.kind == InvokeValueKind::Address) {
+                response.error = "address argument is not valid for parameter type: " + parameter.type_name;
+                return response;
+            }
             argument_pointers.push_back(api_.CreateManagedString(*argument.value));
             continue;
         }
 
         const auto primitive_size = PrimitiveSizeForType(parameter_type);
         if (primitive_size == 0) {
-            if (parameter_type == "System.Object") {
-                argument_pointers.push_back(ParseAddress(*argument.value));
-                continue;
+            if (argument.kind != InvokeValueKind::Address) {
+                response.error = "reference-type parameter requires address argument: " + parameter.type_name;
+                return response;
             }
 
-            response.error = "unsupported parameter type: " + parameter.type_name;
+            if (!SupportsManagedReferenceAddressArgument(parameter_type)) {
+                response.error = "unsupported address parameter type: " + parameter.type_name;
+                return response;
+            }
+
+            try {
+                argument_pointers.push_back(ParseAddress(*argument.value));
+            }
+            catch (const std::exception&) {
+                response.error = "invalid address argument for parameter type: " + parameter.type_name;
+                return response;
+            }
+            continue;
+        }
+
+        if (argument.kind == InvokeValueKind::Address) {
+            response.error = "address argument is not valid for parameter type: " + parameter.type_name;
             return response;
         }
 

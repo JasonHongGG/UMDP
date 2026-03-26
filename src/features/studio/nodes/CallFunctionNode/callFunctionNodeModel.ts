@@ -1,5 +1,7 @@
 import { createLiteralExpressionSource } from '@/features/studio/core/expression';
 import { createCallFunctionResultEnvelope, createInstanceReferenceEnvelope } from '@/features/studio/core/contracts';
+import { formatExplicitHexAddress } from '@/core/addressFormat';
+import { classifySchemaTypeSemantic } from '@/features/studio/core/expression/semantic';
 import type {
   CallFunctionResultPayload,
   ClassInfoFunctionPayload,
@@ -148,6 +150,37 @@ export function createCallFunctionPreviewEnvelope(
   });
 }
 
+function isReferenceLikeInvokeType(typeName: string): boolean {
+  const normalized = typeName.trim().toLowerCase();
+  if (!normalized || normalized === 'system.void') {
+    return false;
+  }
+
+  if (normalized.endsWith('[]') || normalized.endsWith('&') || normalized.endsWith('*')) {
+    return false;
+  }
+
+  return classifySchemaTypeSemantic(typeName).kind === 'unsupported';
+}
+
+export function toRuntimeInvokeAddressArgument(
+  argumentName: string,
+  typeName: string,
+  value: string,
+): RuntimeMethodInvokeArgument {
+  const normalizedAddress = formatExplicitHexAddress(value);
+  if (!normalizedAddress) {
+    throw new Error(`Unsupported address argument value for ${argumentName}`);
+  }
+
+  return {
+    name: argumentName,
+    typeName,
+    valueKind: 'address',
+    value: normalizedAddress,
+  };
+}
+
 export function toRuntimeInvokeArgument(
   argumentName: string,
   typeName: string,
@@ -181,6 +214,23 @@ export function toRuntimeInvokeArgument(
   }
 
   if (typeof value === 'string') {
+    const normalizedAddress = formatExplicitHexAddress(value);
+    if (normalizedAddress) {
+      const schemaSemantic = classifySchemaTypeSemantic(typeName);
+      if (schemaSemantic.kind === 'address') {
+        return {
+          name: argumentName,
+          typeName,
+          valueKind: 'number',
+          value: normalizedAddress,
+        };
+      }
+
+      if (isReferenceLikeInvokeType(typeName)) {
+        return toRuntimeInvokeAddressArgument(argumentName, typeName, normalizedAddress);
+      }
+    }
+
     return {
       name: argumentName,
       typeName,

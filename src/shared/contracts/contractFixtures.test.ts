@@ -25,6 +25,12 @@ describe('shared contract fixtures', () => {
     expect(fixture.commandVersion).toBe(BRIDGE_PROTOCOL_VERSION);
     expect(fixture.schemaVersion).toBe(BRIDGE_SCHEMA_VERSION);
     expect(fixture.operation).toBe('runtime-method-invoke');
+    expect(fixture.payload.arguments[0]).toEqual({
+      name: 'target',
+      typeName: 'UnityEngine.Transform',
+      valueKind: 'address',
+      value: '0x0000000000002000',
+    });
     expect(createBridgeCommandEnvelope(fixture.operation, fixture.requestId, fixture.payload)).toEqual(fixture);
   });
 
