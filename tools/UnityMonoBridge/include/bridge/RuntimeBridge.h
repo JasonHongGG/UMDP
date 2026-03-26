@@ -21,6 +21,9 @@ public:
     RuntimeClassOverlayResponse Execute(const BridgeRequest& request);
     RuntimeMethodInvokeResponse ExecuteInvoke(const BridgeRequest& request);
     RuntimeFieldSetResponse ExecuteSetField(const BridgeRequest& request);
+    SceneCatalogResponse ExecuteSceneCatalog(const BridgeRequest& request);
+    SceneChildrenResponse ExecuteSceneChildren(const BridgeRequest& request);
+    SceneObjectInspectorResponse ExecuteSceneInspect(const BridgeRequest& request);
 
 private:
     runtime::RuntimeInspector& ResolveInspector(std::size_t pid);

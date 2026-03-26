@@ -50,6 +50,10 @@ public:
     virtual Address GetParentClass(Address klass) const = 0;
     virtual std::vector<FieldRecord> EnumerateFields(Address class_handle) const = 0;
     virtual std::vector<MethodRecord> EnumerateMethods(Address class_handle) const = 0;
+    virtual Address GetObjectClass(Address object_address) const = 0;
+    virtual std::string GetClassTypeName(Address class_handle) const = 0;
+    virtual std::size_t GetArrayLength(Address array_object) const = 0;
+    virtual Address GetArrayElementAddress(Address array_object, std::size_t index) const = 0;
     virtual bool TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const = 0;
     virtual bool TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const = 0;
     virtual Address InvokeMethod(Address method_handle, Address instance_address, Address parameters_address, Address exception_address) const = 0;

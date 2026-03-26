@@ -3,6 +3,9 @@ import type {
   ProcessSession,
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
+  RuntimeSceneChildrenSnapshot,
+  RuntimeSceneObjectInspectorSnapshot,
+  SceneWorkspaceState,
 } from '../contracts';
 import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
 
@@ -23,4 +26,8 @@ export interface AnalysisRepository {
   loadAllMetadata(): Promise<AnalysisSnapshot>;
   getRuntimeStaticFields(classStableId: string): Promise<RuntimeOverlaySnapshot>;
   getRuntimeInstanceFields(request: RuntimeInstanceFieldsRequest): Promise<RuntimeInstanceFieldSnapshot>;
+  startSceneRefresh(): Promise<SceneWorkspaceState>;
+  getSceneWorkspaceState(): Promise<SceneWorkspaceState>;
+  getSceneObjectChildren(objectAddress: string): Promise<RuntimeSceneChildrenSnapshot>;
+  getSceneObjectInspector(objectAddress: string): Promise<RuntimeSceneObjectInspectorSnapshot>;
 }

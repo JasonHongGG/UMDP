@@ -3,6 +3,9 @@ export type BridgeOperation =
   | 'process-attach'
   | 'analysis-snapshot-load'
   | 'analysis-overlay-load'
+  | 'scene-catalog-load'
+  | 'scene-object-children-load'
+  | 'scene-object-inspect'
   | 'runtime-field-read'
   | 'runtime-field-write'
   | 'runtime-method-invoke';

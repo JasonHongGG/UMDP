@@ -1,4 +1,7 @@
-use crate::domain::analysis_models::{AnalysisSnapshot, ProcessSession, RuntimeFlavor};
+use crate::domain::analysis_models::{
+    AnalysisSnapshot, ProcessSession, RuntimeFlavor, RuntimeSceneCatalogSnapshot,
+    SceneRefreshStatus, SceneWorkspaceState,
+};
 use crate::domain::bridge_protocol::BridgeOperation;
 use crate::domain::workspace::{
     RuntimeCapability, RuntimeSessionState, RuntimeSessionStatus, WorkspaceLifecycleState,
@@ -35,6 +38,44 @@ impl AnalysisState {
 
     pub fn clear_metadata(&self) {
         self.metadata_snapshot.lock().take();
+    }
+}
+
+#[derive(Default)]
+pub struct SceneState {
+    workspace: Mutex<SceneWorkspaceState>,
+}
+
+impl SceneState {
+    pub fn current(&self) -> SceneWorkspaceState {
+        self.workspace.lock().clone()
+    }
+
+    pub fn set_refreshing(&self) -> SceneWorkspaceState {
+        let mut workspace = self.workspace.lock();
+        workspace.refresh_status = SceneRefreshStatus::Refreshing;
+        workspace.error_message = None;
+        workspace.clone()
+    }
+
+    pub fn set_snapshot(&self, snapshot: RuntimeSceneCatalogSnapshot) -> SceneWorkspaceState {
+        let mut workspace = self.workspace.lock();
+        workspace.refresh_status = SceneRefreshStatus::Ready;
+        workspace.error_message = None;
+        workspace.last_updated_at = Some(snapshot.generated_at.clone());
+        workspace.snapshot = Some(snapshot);
+        workspace.clone()
+    }
+
+    pub fn set_error(&self, error: impl Into<String>) -> SceneWorkspaceState {
+        let mut workspace = self.workspace.lock();
+        workspace.refresh_status = SceneRefreshStatus::Error;
+        workspace.error_message = Some(error.into());
+        workspace.clone()
+    }
+
+    pub fn reset(&self) {
+        *self.workspace.lock() = SceneWorkspaceState::default();
     }
 }
 
@@ -412,6 +453,7 @@ fn runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {
             RuntimeCapability::FieldRead,
             RuntimeCapability::FieldWrite,
             RuntimeCapability::MethodInvoke,
+            RuntimeCapability::SceneRead,
         ],
         RuntimeFlavor::Unknown => vec![RuntimeCapability::Metadata],
     }
@@ -421,6 +463,8 @@ fn runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {
 pub struct AppState {
     pub analysis: AnalysisState,
     pub bridge: BridgeClientState,
+    pub scene_bridge: BridgeClientState,
+    pub scene: SceneState,
     pub workspace: WorkspaceState,
 }
 

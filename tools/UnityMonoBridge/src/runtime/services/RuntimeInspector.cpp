@@ -9,9 +9,16 @@ RuntimeInspector::RuntimeInspector(std::size_t pid)
       assembly_service_(context_.api()),
       class_service_(context_.api()),
       field_enumeration_service_(context_.api()),
-    field_value_reader_(context_.api()),
-    field_value_writer_(context_.api(), context_.memory(), field_value_reader_),
-    method_invocation_service_(context_.api(), context_.memory())
+            field_value_reader_(context_.api()),
+            field_value_writer_(context_.api(), context_.memory(), field_value_reader_),
+            method_invocation_service_(context_.api(), context_.memory()),
+            scene_service_(
+                    context_.api(),
+                    assembly_service_,
+                    class_service_,
+                    field_enumeration_service_,
+                    field_value_reader_,
+                    method_invocation_service_)
 {
 }
 
@@ -103,6 +110,21 @@ RuntimeFieldSetResponse RuntimeInspector::SetFieldValue(const BridgeRequest& req
     }
 
     return field_value_writer_.SetFieldValue(*match, request);
+}
+
+SceneCatalogResponse RuntimeInspector::LoadSceneCatalog(const BridgeRequest&) const
+{
+    return scene_service_.LoadSceneCatalog();
+}
+
+SceneChildrenResponse RuntimeInspector::LoadSceneChildren(const BridgeRequest& request) const
+{
+    return scene_service_.LoadSceneChildren(*request.object_address);
+}
+
+SceneObjectInspectorResponse RuntimeInspector::InspectSceneObject(const BridgeRequest& request) const
+{
+    return scene_service_.InspectSceneObject(*request.object_address);
 }
 
 } // namespace bridge::runtime

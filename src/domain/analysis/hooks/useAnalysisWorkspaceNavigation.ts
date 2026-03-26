@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react';
 import { createPendingClassNodeRequest, type ClassBinding, type ClassInfoCatalog, type PendingClassNodeRequest } from '@/domain/studio/editor';
 import type { StableId } from '../../contracts/shared-identity';
-
-type ActivePage = 'inspector' | 'studio';
+import type { ActivePage } from '../workspace-types';
 
 interface InspectorTabEntry {
   imageStableId: StableId;

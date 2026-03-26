@@ -28,6 +28,7 @@ pub enum RuntimeCapability {
     FieldRead,
     FieldWrite,
     MethodInvoke,
+    SceneRead,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

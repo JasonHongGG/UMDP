@@ -17,6 +17,7 @@ constexpr int kFieldAttributeStatic = 0x0010;
 constexpr int kFieldAttributeLiteral = 0x0040;
 constexpr int kFieldAttributeHasFieldRva = 0x0100;
 constexpr int kMethodAttributeStatic = 0x0010;
+constexpr Address kManagedArrayDataOffset = 0x20;
 
 bool ShouldSkipField(const std::string& field_name)
 {
@@ -60,6 +61,8 @@ MonoRuntimeApi::MonoRuntimeApi(const win32::Process& process, const win32::Memor
             "mono_vtable_get_static_field_data",
             "mono_class_get_fields",
             "mono_class_get_methods",
+            "mono_object_get_class",
+            "mono_class_get_type",
             "mono_field_get_name",
             "mono_field_get_flags",
             "mono_field_get_type",
@@ -76,6 +79,7 @@ MonoRuntimeApi::MonoRuntimeApi(const win32::Process& process, const win32::Memor
             "mono_string_new",
             "mono_string_length",
             "mono_string_chars",
+            "mono_array_length",
             "mono_object_unbox",
             "mono_object_to_string",
         },
@@ -271,6 +275,35 @@ std::vector<MethodRecord> MonoRuntimeApi::EnumerateMethods(Address class_handle)
     }
 
     return methods;
+}
+
+Address MonoRuntimeApi::GetObjectClass(Address object_address) const
+{
+    return object_address == 0 ? 0 : Invoke("mono_object_get_class", { object_address });
+}
+
+std::string MonoRuntimeApi::GetClassTypeName(Address class_handle) const
+{
+    if (class_handle == 0) {
+        return {};
+    }
+
+    const Address type_handle = Invoke("mono_class_get_type", { class_handle });
+    return type_handle == 0 ? std::string() : InvokeString("mono_type_get_name", { type_handle });
+}
+
+std::size_t MonoRuntimeApi::GetArrayLength(Address array_object) const
+{
+    return array_object == 0 ? 0 : static_cast<std::size_t>(Invoke("mono_array_length", { array_object }));
+}
+
+Address MonoRuntimeApi::GetArrayElementAddress(Address array_object, std::size_t index) const
+{
+    if (array_object == 0 || index >= GetArrayLength(array_object)) {
+        return 0;
+    }
+
+    return memory().Read<Address>(array_object + kManagedArrayDataOffset + index * sizeof(Address));
 }
 
 bool MonoRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const

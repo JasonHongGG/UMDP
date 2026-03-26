@@ -270,6 +270,116 @@ pub struct RuntimeFieldSetResult {
     pub applied_value: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SceneRefreshStatus {
+    Idle,
+    Refreshing,
+    Ready,
+    Error,
+}
+
+impl Default for SceneRefreshStatus {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeVector3Snapshot {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeQuaternionSnapshot {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneNodeSummary {
+    pub object_address: String,
+    pub transform_address: Option<String>,
+    pub name: String,
+    pub active_self: bool,
+    pub child_count: usize,
+    pub has_children: bool,
+    pub component_count: usize,
+    pub layer: Option<i32>,
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneDescriptor {
+    pub scene_handle: i32,
+    pub name: String,
+    pub is_loaded: bool,
+    pub roots: Vec<RuntimeSceneNodeSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneCatalogSnapshot {
+    pub generated_at: String,
+    pub scenes: Vec<RuntimeSceneDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneComponentSummary {
+    pub component_address: String,
+    pub type_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneTransformSnapshot {
+    pub transform_address: String,
+    pub local_position: Option<RuntimeVector3Snapshot>,
+    pub local_rotation: Option<RuntimeQuaternionSnapshot>,
+    pub local_scale: Option<RuntimeVector3Snapshot>,
+    pub parent_transform_address: Option<String>,
+    pub parent_object_address: Option<String>,
+    pub child_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneChildrenSnapshot {
+    pub parent_object_address: String,
+    pub children: Vec<RuntimeSceneNodeSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneObjectInspectorSnapshot {
+    pub generated_at: String,
+    pub scene_handle: Option<i32>,
+    pub scene_name: Option<String>,
+    pub object: RuntimeSceneNodeSummary,
+    pub parent: Option<RuntimeSceneNodeSummary>,
+    pub children: Vec<RuntimeSceneNodeSummary>,
+    pub components: Vec<RuntimeSceneComponentSummary>,
+    pub transform: Option<RuntimeSceneTransformSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneWorkspaceState {
+    pub refresh_status: SceneRefreshStatus,
+    pub error_message: Option<String>,
+    pub snapshot: Option<RuntimeSceneCatalogSnapshot>,
+    pub last_updated_at: Option<String>,
+}
+
 fn normalize_segment(segment: &str) -> String {
     segment.trim().replace(['|', '\\'], "_")
 }

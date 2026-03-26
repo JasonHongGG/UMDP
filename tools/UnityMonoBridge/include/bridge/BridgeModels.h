@@ -14,6 +14,9 @@ enum class BridgeOperation {
     InspectClass,
     InvokeMethod,
     SetField,
+    LoadSceneCatalog,
+    LoadSceneChildren,
+    InspectSceneObject,
 };
 
 enum class InvokeValueKind {
@@ -71,6 +74,7 @@ struct BridgeRequest {
     std::optional<Address> target_address;
     FieldValueKind field_value_kind = FieldValueKind::Null;
     std::optional<std::string> field_value;
+    std::optional<Address> object_address;
 };
 
 struct FieldRow {
@@ -106,6 +110,74 @@ struct RuntimeFieldSetResponse {
     std::optional<std::string> error;
     std::optional<std::string> previous_value;
     std::optional<std::string> applied_value;
+};
+
+struct Vector3Snapshot {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+struct QuaternionSnapshot {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 0.0f;
+};
+
+struct SceneNodeSummary {
+    std::string object_address;
+    std::optional<std::string> transform_address;
+    std::string name;
+    bool active_self = false;
+    std::size_t child_count = 0;
+    bool has_children = false;
+    std::size_t component_count = 0;
+    std::optional<int> layer;
+    std::optional<std::string> tag;
+};
+
+struct SceneDescriptorResponse {
+    int scene_handle = 0;
+    std::string name;
+    bool is_loaded = true;
+    std::vector<SceneNodeSummary> roots;
+};
+
+struct SceneCatalogResponse {
+    std::string generated_at;
+    std::vector<SceneDescriptorResponse> scenes;
+};
+
+struct SceneChildrenResponse {
+    std::string parent_object_address;
+    std::vector<SceneNodeSummary> children;
+};
+
+struct SceneComponentSummary {
+    std::string component_address;
+    std::string type_name;
+};
+
+struct SceneTransformSnapshotResponse {
+    std::string transform_address;
+    std::optional<Vector3Snapshot> local_position;
+    std::optional<QuaternionSnapshot> local_rotation;
+    std::optional<Vector3Snapshot> local_scale;
+    std::optional<std::string> parent_transform_address;
+    std::optional<std::string> parent_object_address;
+    std::size_t child_count = 0;
+};
+
+struct SceneObjectInspectorResponse {
+    std::string generated_at;
+    std::optional<int> scene_handle;
+    std::optional<std::string> scene_name;
+    SceneNodeSummary object;
+    std::optional<SceneNodeSummary> parent;
+    std::vector<SceneNodeSummary> children;
+    std::vector<SceneComponentSummary> components;
+    std::optional<SceneTransformSnapshotResponse> transform;
 };
 
 } // namespace bridge

@@ -190,3 +190,80 @@ export interface RuntimeFieldSetResult {
   previousValue: string | null;
   appliedValue: string | null;
 }
+
+export type SceneRefreshStatus = 'idle' | 'refreshing' | 'ready' | 'error';
+
+export interface RuntimeVector3Snapshot {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface RuntimeQuaternionSnapshot {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}
+
+export interface RuntimeSceneNodeSummary {
+  objectAddress: string;
+  transformAddress: string | null;
+  name: string;
+  activeSelf: boolean;
+  childCount: number;
+  hasChildren: boolean;
+  componentCount: number;
+  layer: number | null;
+  tag: string | null;
+}
+
+export interface RuntimeSceneDescriptor {
+  sceneHandle: number;
+  name: string;
+  isLoaded: boolean;
+  roots: RuntimeSceneNodeSummary[];
+}
+
+export interface RuntimeSceneCatalogSnapshot {
+  generatedAt: string;
+  scenes: RuntimeSceneDescriptor[];
+}
+
+export interface RuntimeSceneComponentSummary {
+  componentAddress: string;
+  typeName: string;
+}
+
+export interface RuntimeSceneTransformSnapshot {
+  transformAddress: string;
+  localPosition: RuntimeVector3Snapshot | null;
+  localRotation: RuntimeQuaternionSnapshot | null;
+  localScale: RuntimeVector3Snapshot | null;
+  parentTransformAddress: string | null;
+  parentObjectAddress: string | null;
+  childCount: number;
+}
+
+export interface RuntimeSceneChildrenSnapshot {
+  parentObjectAddress: string;
+  children: RuntimeSceneNodeSummary[];
+}
+
+export interface RuntimeSceneObjectInspectorSnapshot {
+  generatedAt: string;
+  sceneHandle: number | null;
+  sceneName: string | null;
+  object: RuntimeSceneNodeSummary;
+  parent: RuntimeSceneNodeSummary | null;
+  children: RuntimeSceneNodeSummary[];
+  components: RuntimeSceneComponentSummary[];
+  transform: RuntimeSceneTransformSnapshot | null;
+}
+
+export interface SceneWorkspaceState {
+  refreshStatus: SceneRefreshStatus;
+  errorMessage: string | null;
+  snapshot: RuntimeSceneCatalogSnapshot | null;
+  lastUpdatedAt: string | null;
+}

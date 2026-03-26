@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { useAnalysisRuntimeState } from './useAnalysisRuntimeState';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
-import type { AnalysisSnapshot, ProcessSession } from '../contracts';
+import type { AnalysisSnapshot, ProcessSession, SceneWorkspaceState } from '../contracts';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { createClassStableId, createImageStableId, createFieldStableId } from '../../contracts/shared-identity';
@@ -25,6 +25,13 @@ interface HookSnapshot {
 }
 
 let latestState: HookSnapshot | null = null;
+
+const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
+  refreshStatus: 'idle',
+  errorMessage: null,
+  snapshot: null,
+  lastUpdatedAt: null,
+};
 
 function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): WorkspaceLifecycleState {
   return {
@@ -78,6 +85,10 @@ function createRepository(): AnalysisRepository {
         value: '2.5',
       }],
     }),
+    startSceneRefresh: vi.fn().mockResolvedValue(EMPTY_SCENE_WORKSPACE_STATE),
+    getSceneWorkspaceState: vi.fn().mockResolvedValue(EMPTY_SCENE_WORKSPACE_STATE),
+    getSceneObjectChildren: vi.fn(),
+    getSceneObjectInspector: vi.fn(),
   } as AnalysisRepository;
 }
 

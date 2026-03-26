@@ -1,6 +1,6 @@
 import type { ProcessSession, RuntimeFlavor } from './analysis';
 
-export type WorkspacePage = 'inspector' | 'studio';
+export type WorkspacePage = 'inspector' | 'studio' | 'scene';
 
 export type RuntimeSessionStatus =
   | 'idle'
@@ -17,7 +17,8 @@ export type RuntimeCapability =
   | 'instance-enumeration'
   | 'field-read'
   | 'field-write'
-  | 'method-invoke';
+  | 'method-invoke'
+  | 'scene-read';
 
 export interface RuntimeSessionState {
   status: RuntimeSessionStatus;

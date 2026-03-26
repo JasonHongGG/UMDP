@@ -4,13 +4,20 @@ import React, { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
-import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
+import type { AnalysisSnapshot, ProcessInfo, ProcessSession, SceneWorkspaceState } from '../contracts';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { useAnalysisSessionState } from './useAnalysisSessionState';
 
 let processSelectedHandler: ((process: ProcessInfo) => void | Promise<void>) | null = null;
 const disposeProcessSelected = vi.fn();
+
+const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
+  refreshStatus: 'idle',
+  errorMessage: null,
+  snapshot: null,
+  lastUpdatedAt: null,
+};
 
 vi.mock('@/infrastructure/tauri/TauriWorkspaceGateway', () => ({
   onProcessSelected: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
@@ -48,6 +55,10 @@ function createRepository(overrides: Partial<AnalysisRepository> = {}): Analysis
     loadAllMetadata: vi.fn(),
     getRuntimeStaticFields: vi.fn(),
     getRuntimeInstanceFields: vi.fn(),
+    startSceneRefresh: vi.fn().mockResolvedValue(EMPTY_SCENE_WORKSPACE_STATE),
+    getSceneWorkspaceState: vi.fn().mockResolvedValue(EMPTY_SCENE_WORKSPACE_STATE),
+    getSceneObjectChildren: vi.fn(),
+    getSceneObjectInspector: vi.fn(),
     ...overrides,
   } as AnalysisRepository;
 }

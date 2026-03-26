@@ -5,6 +5,9 @@ import type {
   ProcessSession,
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
+  RuntimeSceneChildrenSnapshot,
+  RuntimeSceneObjectInspectorSnapshot,
+  SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
 
@@ -21,6 +24,18 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     },
     loadAllMetadata() {
       return invoke<AnalysisSnapshot>('load_all_metadata');
+    },
+    startSceneRefresh() {
+      return invoke<SceneWorkspaceState>('start_scene_refresh');
+    },
+    getSceneWorkspaceState() {
+      return invoke<SceneWorkspaceState>('get_scene_workspace_state');
+    },
+    getSceneObjectChildren(objectAddress: string) {
+      return invoke<RuntimeSceneChildrenSnapshot>('get_scene_object_children', { objectAddress });
+    },
+    getSceneObjectInspector(objectAddress: string) {
+      return invoke<RuntimeSceneObjectInspectorSnapshot>('get_scene_object_inspector', { objectAddress });
     },
     getRuntimeStaticFields(classStableId: string) {
       return invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', { classStableId });

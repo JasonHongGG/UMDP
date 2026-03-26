@@ -10,7 +10,7 @@ export interface InspectorTab {
 
 export type ReferenceMode = 'Inheritance' | 'Member' | 'Function';
 export type GlobalSearchMode = 'Class' | 'Field' | 'StaticField' | 'Method';
-export type ActivePage = 'inspector' | 'studio';
+export type ActivePage = 'inspector' | 'studio' | 'scene';
 
 export interface ClassLookupEntry {
   imageStableId: StableId;

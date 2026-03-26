@@ -8,6 +8,7 @@
 #include "runtime/services/FieldValueWriter.h"
 #include "runtime/services/FieldValueReader.h"
 #include "runtime/services/MethodInvocationService.h"
+#include "runtime/services/SceneService.h"
 
 namespace bridge::runtime {
 
@@ -18,6 +19,9 @@ public:
     RuntimeClassOverlayResponse InspectClass(const BridgeRequest& request) const;
     RuntimeMethodInvokeResponse InvokeClassMethod(const BridgeRequest& request) const;
     RuntimeFieldSetResponse SetFieldValue(const BridgeRequest& request) const;
+    SceneCatalogResponse LoadSceneCatalog(const BridgeRequest& request) const;
+    SceneChildrenResponse LoadSceneChildren(const BridgeRequest& request) const;
+    SceneObjectInspectorResponse InspectSceneObject(const BridgeRequest& request) const;
 
 private:
     RuntimeContext context_;
@@ -27,6 +31,7 @@ private:
     FieldValueReader field_value_reader_;
     FieldValueWriter field_value_writer_;
     MethodInvocationService method_invocation_service_;
+    SceneService scene_service_;
 };
 
 } // namespace bridge::runtime

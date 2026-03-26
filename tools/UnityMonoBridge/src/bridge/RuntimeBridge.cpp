@@ -72,6 +72,15 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
             else if (value == "set-field") {
                 request.operation = BridgeOperation::SetField;
             }
+            else if (value == "scene-catalog") {
+                request.operation = BridgeOperation::LoadSceneCatalog;
+            }
+            else if (value == "scene-children") {
+                request.operation = BridgeOperation::LoadSceneChildren;
+            }
+            else if (value == "scene-inspect") {
+                request.operation = BridgeOperation::InspectSceneObject;
+            }
             else {
                 request.operation = BridgeOperation::InspectClass;
             }
@@ -106,6 +115,9 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         else if (key == "--target-address") {
             request.target_address = ParseUnsignedValue<std::size_t>(value);
         }
+        else if (key == "--object-address") {
+            request.object_address = ParseUnsignedValue<std::size_t>(value);
+        }
         else if (key == "--value-kind") {
             request.field_value_kind = ParseFieldValueKind(value);
         }
@@ -123,7 +135,14 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         }
     }
 
-    if (request.pid == 0 || request.image_name.empty() || request.class_name.empty()) {
+    if (request.pid == 0) {
+        throw std::runtime_error("Missing required arguments");
+    }
+
+    if ((request.operation == BridgeOperation::InspectClass
+            || request.operation == BridgeOperation::InvokeMethod
+            || request.operation == BridgeOperation::SetField)
+        && (request.image_name.empty() || request.class_name.empty())) {
         throw std::runtime_error("Missing required arguments");
     }
 
@@ -133,6 +152,11 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
 
     if (request.operation == BridgeOperation::SetField && (request.field_name.empty() || request.field_type_name.empty())) {
         throw std::runtime_error("Missing field write arguments");
+    }
+
+    if ((request.operation == BridgeOperation::LoadSceneChildren || request.operation == BridgeOperation::InspectSceneObject)
+        && !request.object_address.has_value()) {
+        throw std::runtime_error("Missing scene object address");
     }
 
     return request;
@@ -179,6 +203,21 @@ RuntimeMethodInvokeResponse RuntimeBridge::ExecuteInvoke(const BridgeRequest& re
 RuntimeFieldSetResponse RuntimeBridge::ExecuteSetField(const BridgeRequest& request)
 {
     return ResolveInspector(request.pid).SetFieldValue(request);
+}
+
+SceneCatalogResponse RuntimeBridge::ExecuteSceneCatalog(const BridgeRequest& request)
+{
+    return ResolveInspector(request.pid).LoadSceneCatalog(request);
+}
+
+SceneChildrenResponse RuntimeBridge::ExecuteSceneChildren(const BridgeRequest& request)
+{
+    return ResolveInspector(request.pid).LoadSceneChildren(request);
+}
+
+SceneObjectInspectorResponse RuntimeBridge::ExecuteSceneInspect(const BridgeRequest& request)
+{
+    return ResolveInspector(request.pid).InspectSceneObject(request);
 }
 
 } // namespace bridge

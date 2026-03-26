@@ -1,0 +1,230 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  RuntimeSceneChildrenSnapshot,
+  RuntimeSceneCatalogSnapshot,
+  RuntimeSceneNodeSummary,
+  RuntimeSceneObjectInspectorSnapshot,
+  SceneWorkspaceState,
+} from '@/domain/analysis/contracts';
+import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
+
+const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
+  refreshStatus: 'idle',
+  errorMessage: null,
+  snapshot: null,
+  lastUpdatedAt: null,
+};
+
+function firstObjectAddress(snapshot: RuntimeSceneCatalogSnapshot | null) {
+  for (const scene of snapshot?.scenes ?? []) {
+    const first = scene.roots[0];
+    if (first) {
+      return first.objectAddress;
+    }
+  }
+
+  return null;
+}
+
+export function useSceneWorkspaceState({
+  repository,
+  workspaceLifecycle,
+  active,
+}: {
+  repository: AnalysisRepository;
+  workspaceLifecycle: WorkspaceLifecycleState;
+  active: boolean;
+}) {
+  const [sceneWorkspace, setSceneWorkspace] = useState<SceneWorkspaceState>(EMPTY_SCENE_WORKSPACE_STATE);
+  const [selectedObjectAddress, setSelectedObjectAddress] = useState<string | null>(null);
+  const [childrenByParent, setChildrenByParent] = useState<Record<string, RuntimeSceneNodeSummary[]>>({});
+  const [loadingChildrenByParent, setLoadingChildrenByParent] = useState<Record<string, boolean>>({});
+  const [childErrorByParent, setChildErrorByParent] = useState<Record<string, string | null>>({});
+  const [sceneInspector, setSceneInspector] = useState<RuntimeSceneObjectInspectorSnapshot | null>(null);
+  const [sceneInspectorLoading, setSceneInspectorLoading] = useState(false);
+  const [sceneInspectorError, setSceneInspectorError] = useState<string | null>(null);
+  const processKeyRef = useRef<string | null>(null);
+
+  const resetSceneState = useCallback(() => {
+    setSceneWorkspace(EMPTY_SCENE_WORKSPACE_STATE);
+    setSelectedObjectAddress(null);
+    setChildrenByParent({});
+    setLoadingChildrenByParent({});
+    setChildErrorByParent({});
+    setSceneInspector(null);
+    setSceneInspectorLoading(false);
+    setSceneInspectorError(null);
+  }, []);
+
+  const refreshSceneWorkspace = useCallback(async () => {
+    if (!workspaceLifecycle.processSession || !workspaceLifecycle.hasSnapshot) {
+      return;
+    }
+
+    setSceneWorkspace((previous) => ({
+      ...previous,
+      refreshStatus: 'refreshing',
+      errorMessage: null,
+    }));
+
+    try {
+      const next = await repository.startSceneRefresh();
+      setSceneWorkspace(next);
+      setChildrenByParent({});
+      setLoadingChildrenByParent({});
+      setChildErrorByParent({});
+      setSceneInspector(null);
+      setSceneInspectorError(null);
+      setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
+    } catch (error) {
+      setSceneWorkspace((previous) => ({
+        ...previous,
+        refreshStatus: 'error',
+        errorMessage: String(error),
+      }));
+    }
+  }, [repository, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
+
+  const loadSceneWorkspaceState = useCallback(async () => {
+    try {
+      const next = await repository.getSceneWorkspaceState();
+      setSceneWorkspace(next);
+      setSelectedObjectAddress((current) => current ?? firstObjectAddress(next.snapshot));
+      return next;
+    } catch (error) {
+      setSceneWorkspace((previous) => ({
+        ...previous,
+        refreshStatus: 'error',
+        errorMessage: String(error),
+      }));
+      return null;
+    }
+  }, [repository]);
+
+  const ensureSceneObjectChildrenLoaded = useCallback(async (objectAddress: string) => {
+    if (childrenByParent[objectAddress] || loadingChildrenByParent[objectAddress]) {
+      return;
+    }
+
+    setLoadingChildrenByParent((previous) => ({
+      ...previous,
+      [objectAddress]: true,
+    }));
+    setChildErrorByParent((previous) => ({
+      ...previous,
+      [objectAddress]: null,
+    }));
+
+    try {
+      const snapshot: RuntimeSceneChildrenSnapshot = await repository.getSceneObjectChildren(objectAddress);
+      setChildrenByParent((previous) => ({
+        ...previous,
+        [objectAddress]: snapshot.children,
+      }));
+    } catch (error) {
+      setChildErrorByParent((previous) => ({
+        ...previous,
+        [objectAddress]: String(error),
+      }));
+    } finally {
+      setLoadingChildrenByParent((previous) => ({
+        ...previous,
+        [objectAddress]: false,
+      }));
+    }
+  }, [childrenByParent, loadingChildrenByParent, repository]);
+
+  useEffect(() => {
+    const processKey = workspaceLifecycle.processSession
+      ? `${workspaceLifecycle.processSession.pid}:${workspaceLifecycle.processSession.processName}`
+      : null;
+
+    if (processKeyRef.current !== processKey) {
+      processKeyRef.current = processKey;
+      resetSceneState();
+    }
+  }, [resetSceneState, workspaceLifecycle.processSession]);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    if (!workspaceLifecycle.processSession || !workspaceLifecycle.hasSnapshot) {
+      resetSceneState();
+      return;
+    }
+
+    loadSceneWorkspaceState().then((state) => {
+      if (!state?.snapshot) {
+        refreshSceneWorkspace().catch(() => undefined);
+      }
+    }).catch(() => undefined);
+  }, [active, loadSceneWorkspaceState, refreshSceneWorkspace, resetSceneState, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
+
+  useEffect(() => {
+    if (sceneWorkspace.refreshStatus !== 'refreshing') {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      loadSceneWorkspaceState().catch(() => undefined);
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadSceneWorkspaceState, sceneWorkspace.refreshStatus]);
+
+  useEffect(() => {
+    if (!selectedObjectAddress || !active) {
+      return;
+    }
+
+    let cancelled = false;
+    setSceneInspectorLoading(true);
+    setSceneInspectorError(null);
+
+    repository
+      .getSceneObjectInspector(selectedObjectAddress)
+      .then((snapshot) => {
+        if (!cancelled) {
+          setSceneInspector(snapshot);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSceneInspectorError(String(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSceneInspectorLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, repository, selectedObjectAddress]);
+
+  const sceneRootsByHandle = useMemo(() => {
+    return Object.fromEntries((sceneWorkspace.snapshot?.scenes ?? []).map((scene) => [scene.sceneHandle, scene.roots]));
+  }, [sceneWorkspace.snapshot]);
+
+  return {
+    sceneWorkspace,
+    refreshSceneWorkspace,
+    selectedObjectAddress,
+    setSelectedObjectAddress,
+    childrenByParent,
+    loadingChildrenByParent,
+    childErrorByParent,
+    ensureSceneObjectChildrenLoaded,
+    sceneInspector,
+    sceneInspectorLoading,
+    sceneInspectorError,
+    sceneRootsByHandle,
+  };
+}

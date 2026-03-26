@@ -16,6 +16,7 @@ constexpr int kFieldAttributeStatic = 0x0010;
 constexpr int kFieldAttributeLiteral = 0x0040;
 constexpr int kFieldAttributeHasFieldRva = 0x0100;
 constexpr int kMethodAttributeStatic = 0x0010;
+constexpr Address kManagedArrayDataOffset = 0x20;
 
 bool ShouldSkipField(const std::string& field_name)
 {
@@ -44,6 +45,8 @@ Il2CppRuntimeApi::Il2CppRuntimeApi(const win32::Process& process, const win32::M
             "il2cpp_class_get_parent",
             "il2cpp_class_get_fields",
             "il2cpp_class_get_methods",
+            "il2cpp_object_get_class",
+            "il2cpp_class_get_type",
             "il2cpp_field_get_name",
             "il2cpp_field_get_flags",
             "il2cpp_field_get_type",
@@ -60,6 +63,7 @@ Il2CppRuntimeApi::Il2CppRuntimeApi(const win32::Process& process, const win32::M
             "il2cpp_string_new",
             "il2cpp_string_length",
             "il2cpp_string_chars",
+            "il2cpp_array_length",
             "il2cpp_object_unbox",
             "il2cpp_object_to_string",
         });
@@ -215,6 +219,35 @@ std::vector<MethodRecord> Il2CppRuntimeApi::EnumerateMethods(Address class_handl
     }
 
     return methods;
+}
+
+Address Il2CppRuntimeApi::GetObjectClass(Address object_address) const
+{
+    return object_address == 0 ? 0 : Invoke("il2cpp_object_get_class", { object_address });
+}
+
+std::string Il2CppRuntimeApi::GetClassTypeName(Address class_handle) const
+{
+    if (class_handle == 0) {
+        return {};
+    }
+
+    const Address type_handle = Invoke("il2cpp_class_get_type", { class_handle });
+    return type_handle == 0 ? std::string() : InvokeString("il2cpp_type_get_name", { type_handle });
+}
+
+std::size_t Il2CppRuntimeApi::GetArrayLength(Address array_object) const
+{
+    return array_object == 0 ? 0 : static_cast<std::size_t>(Invoke("il2cpp_array_length", { array_object }));
+}
+
+Address Il2CppRuntimeApi::GetArrayElementAddress(Address array_object, std::size_t index) const
+{
+    if (array_object == 0 || index >= GetArrayLength(array_object)) {
+        return 0;
+    }
+
+    return memory().Read<Address>(array_object + kManagedArrayDataOffset + index * sizeof(Address));
 }
 
 bool Il2CppRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const

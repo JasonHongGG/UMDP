@@ -15,6 +15,10 @@ const InspectorPage = lazy(async () => ({
   default: (await import('@/features/inspector/page/InspectorPage')).InspectorPage,
 }));
 
+const ScenePage = lazy(async () => ({
+  default: (await import('@/features/scene/page/ScenePage')).ScenePage,
+}));
+
 export default function App() {
   return (
     <AnalysisWorkspaceProvider>
@@ -42,6 +46,8 @@ function AppContent() {
       <Suspense fallback={<WorkspacePageFallback activePage={activePage} />}>
         {activePage === 'inspector' ? (
           <InspectorPage />
+        ) : activePage === 'scene' ? (
+          <ScenePage />
         ) : (
           <StudioPage />
         )}
@@ -52,10 +58,10 @@ function AppContent() {
   );
 }
 
-function WorkspacePageFallback({ activePage }: { activePage: 'studio' | 'inspector' }) {
+function WorkspacePageFallback({ activePage }: { activePage: 'studio' | 'inspector' | 'scene' }) {
   return (
     <div className="flex-1 flex items-center justify-center bg-[#0a0f16] text-slate-400 text-sm tracking-wide">
-      Loading {activePage === 'inspector' ? 'Inspector' : 'Studio'} workspace...
+      Loading {activePage === 'inspector' ? 'Inspector' : activePage === 'scene' ? 'Scene' : 'Studio'} workspace...
     </div>
   );
 }

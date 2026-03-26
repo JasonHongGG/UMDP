@@ -16,6 +16,10 @@ public:
     Address GetParentClass(Address klass) const override;
     std::vector<FieldRecord> EnumerateFields(Address class_handle) const override;
     std::vector<MethodRecord> EnumerateMethods(Address class_handle) const override;
+    Address GetObjectClass(Address object_address) const override;
+    std::string GetClassTypeName(Address class_handle) const override;
+    std::size_t GetArrayLength(Address array_object) const override;
+    Address GetArrayElementAddress(Address array_object, std::size_t index) const override;
     bool TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const override;
     bool TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const override;
     Address InvokeMethod(Address method_handle, Address instance_address, Address parameters_address, Address exception_address) const override;

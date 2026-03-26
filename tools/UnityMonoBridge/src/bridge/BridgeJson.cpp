@@ -42,6 +42,16 @@ void WriteOptionalString(std::ostringstream& output, const std::optional<std::st
     }
 }
 
+void WriteOptionalInt(std::ostringstream& output, const std::optional<int>& value)
+{
+    if (value.has_value()) {
+        output << *value;
+    }
+    else {
+        output << "null";
+    }
+}
+
 void WriteFieldRows(std::ostringstream& output, const std::vector<bridge::FieldRow>& rows, bool include_runtime_values)
 {
     for (std::size_t index = 0; index < rows.size(); ++index) {
@@ -101,6 +111,105 @@ std::string FailureKindToString(bridge::RuntimeFieldSetFailureKind kind)
     }
 }
 
+void WriteVector3(std::ostringstream& output, const bridge::Vector3Snapshot& value)
+{
+    output << '{'
+           << "\"x\":" << value.x << ','
+           << "\"y\":" << value.y << ','
+           << "\"z\":" << value.z
+           << '}';
+}
+
+void WriteQuaternion(std::ostringstream& output, const bridge::QuaternionSnapshot& value)
+{
+    output << '{'
+           << "\"x\":" << value.x << ','
+           << "\"y\":" << value.y << ','
+           << "\"z\":" << value.z << ','
+           << "\"w\":" << value.w
+           << '}';
+}
+
+void WriteOptionalVector3(std::ostringstream& output, const std::optional<bridge::Vector3Snapshot>& value)
+{
+    if (value.has_value()) {
+        WriteVector3(output, *value);
+    }
+    else {
+        output << "null";
+    }
+}
+
+void WriteOptionalQuaternion(std::ostringstream& output, const std::optional<bridge::QuaternionSnapshot>& value)
+{
+    if (value.has_value()) {
+        WriteQuaternion(output, *value);
+    }
+    else {
+        output << "null";
+    }
+}
+
+void WriteSceneNode(std::ostringstream& output, const bridge::SceneNodeSummary& node)
+{
+    output << '{'
+           << "\"object_address\":\"" << JsonEscape(node.object_address) << "\",";
+    output << "\"transform_address\":";
+    WriteOptionalString(output, node.transform_address);
+    output << ",\"name\":\"" << JsonEscape(node.name) << "\",";
+    output << "\"active_self\":" << (node.active_self ? "true" : "false") << ',';
+    output << "\"child_count\":" << node.child_count << ',';
+    output << "\"has_children\":" << (node.has_children ? "true" : "false") << ',';
+    output << "\"component_count\":" << node.component_count << ',';
+    output << "\"layer\":";
+    WriteOptionalInt(output, node.layer);
+    output << ",\"tag\":";
+    WriteOptionalString(output, node.tag);
+    output << '}';
+}
+
+void WriteSceneNodes(std::ostringstream& output, const std::vector<bridge::SceneNodeSummary>& nodes)
+{
+    for (std::size_t index = 0; index < nodes.size(); ++index) {
+        if (index > 0) {
+            output << ',';
+        }
+        WriteSceneNode(output, nodes[index]);
+    }
+}
+
+void WriteSceneComponents(std::ostringstream& output, const std::vector<bridge::SceneComponentSummary>& components)
+{
+    for (std::size_t index = 0; index < components.size(); ++index) {
+        if (index > 0) {
+            output << ',';
+        }
+
+        output << '{'
+               << "\"component_address\":\"" << JsonEscape(components[index].component_address) << "\"," 
+               << "\"type_name\":\"" << JsonEscape(components[index].type_name) << "\""
+               << '}';
+    }
+}
+
+void WriteTransformSnapshot(std::ostringstream& output, const bridge::SceneTransformSnapshotResponse& value)
+{
+    output << '{'
+           << "\"transform_address\":\"" << JsonEscape(value.transform_address) << "\",";
+    output << "\"local_position\":";
+    WriteOptionalVector3(output, value.local_position);
+    output << ",\"local_rotation\":";
+    WriteOptionalQuaternion(output, value.local_rotation);
+    output << ",\"local_scale\":";
+    WriteOptionalVector3(output, value.local_scale);
+    output << ",\"parent_transform_address\":";
+    WriteOptionalString(output, value.parent_transform_address);
+    output << ",\"parent_object_address\":";
+    WriteOptionalString(output, value.parent_object_address);
+    output << ",\"child_count\":" << value.child_count;
+    output << '}';
+}
+
 } // namespace
 
 namespace bridge {
@@ -156,6 +265,74 @@ std::string SerializeResponse(const RuntimeFieldSetResponse& response)
     WriteOptionalString(output, response.previous_value);
     output << ",\"applied_value\":";
     WriteOptionalString(output, response.applied_value);
+    output << '}';
+    return output.str();
+}
+
+std::string SerializeResponse(const SceneCatalogResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"generated_at\":\"" << JsonEscape(response.generated_at) << "\",";
+    output << "\"scenes\":[";
+    for (std::size_t index = 0; index < response.scenes.size(); ++index) {
+        if (index > 0) {
+            output << ',';
+        }
+
+        const auto& scene = response.scenes[index];
+        output << '{'
+               << "\"scene_handle\":" << scene.scene_handle << ','
+               << "\"name\":\"" << JsonEscape(scene.name) << "\"," 
+               << "\"is_loaded\":" << (scene.is_loaded ? "true" : "false") << ','
+               << "\"roots\":[";
+        WriteSceneNodes(output, scene.roots);
+        output << "]}";
+    }
+    output << "]}";
+    return output.str();
+}
+
+std::string SerializeResponse(const SceneChildrenResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"parent_object_address\":\"" << JsonEscape(response.parent_object_address) << "\",";
+    output << "\"children\":[";
+    WriteSceneNodes(output, response.children);
+    output << "]}";
+    return output.str();
+}
+
+std::string SerializeResponse(const SceneObjectInspectorResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"generated_at\":\"" << JsonEscape(response.generated_at) << "\",";
+    output << "\"scene_handle\":";
+    WriteOptionalInt(output, response.scene_handle);
+    output << ",\"scene_name\":";
+    WriteOptionalString(output, response.scene_name);
+    output << ",\"object\":";
+    WriteSceneNode(output, response.object);
+    output << ",\"parent\":";
+    if (response.parent.has_value()) {
+        WriteSceneNode(output, *response.parent);
+    }
+    else {
+        output << "null";
+    }
+    output << ",\"children\":[";
+    WriteSceneNodes(output, response.children);
+    output << "],\"components\":[";
+    WriteSceneComponents(output, response.components);
+    output << "],\"transform\":";
+    if (response.transform.has_value()) {
+        WriteTransformSnapshot(output, *response.transform);
+    }
+    else {
+        output << "null";
+    }
     output << '}';
     return output.str();
 }

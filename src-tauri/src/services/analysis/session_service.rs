@@ -5,6 +5,8 @@ use sysinfo::System;
 
 pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
     state.bridge.reset();
+    state.scene_bridge.reset();
+    state.scene.reset();
 
     let mut sys = System::new_all();
     sys.refresh_processes();

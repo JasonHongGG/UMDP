@@ -24,6 +24,12 @@ std::string NormalizeProtocolLine(std::string value)
 const char* ProtocolOperationName(bridge::BridgeOperation operation)
 {
     switch (operation) {
+    case bridge::BridgeOperation::LoadSceneCatalog:
+        return "scene-catalog-load";
+    case bridge::BridgeOperation::LoadSceneChildren:
+        return "scene-object-children-load";
+    case bridge::BridgeOperation::InspectSceneObject:
+        return "scene-object-inspect";
     case bridge::BridgeOperation::InvokeMethod:
         return "runtime-method-invoke";
     case bridge::BridgeOperation::SetField:
@@ -49,6 +55,15 @@ void WriteSessionEnvelopeResponse(const std::string& status, const std::string& 
 
 std::string ExecuteRequest(bridge::RuntimeBridge& runtime_bridge, const bridge::BridgeRequest& request)
 {
+    if (request.operation == bridge::BridgeOperation::LoadSceneCatalog) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneCatalog(request));
+    }
+    if (request.operation == bridge::BridgeOperation::LoadSceneChildren) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneChildren(request));
+    }
+    if (request.operation == bridge::BridgeOperation::InspectSceneObject) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspect(request));
+    }
     if (request.operation == bridge::BridgeOperation::InvokeMethod) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteInvoke(request));
     }

@@ -9,8 +9,8 @@ import {
 
 interface TopBarProps {
     onOpenSelector: () => void;
-    activePage: 'inspector' | 'studio';
-    onPageChange: (page: 'inspector' | 'studio') => void;
+    activePage: 'inspector' | 'studio' | 'scene';
+    onPageChange: (page: 'inspector' | 'studio' | 'scene') => void;
     workspace: WorkspaceLifecycleState;
 }
 
