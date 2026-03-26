@@ -7,9 +7,9 @@ import type {
 } from '../contracts';
 import type { StableId } from '../../contracts/shared-identity';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
-import type { WorkspaceLifecycleState } from '../../../shared/contracts';
-import { formatHexAddress } from '../../../core/addressFormat';
-import type { ResolvedMemberRuntimeValue } from '../../../core/studio/contracts';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import { formatHexAddress } from '@/core/addressFormat';
+import type { ResolvedMemberRuntimeValue } from '@/features/studio/core/contracts';
 
 interface UseAnalysisRuntimeStateOptions {
   repository: AnalysisRepository;

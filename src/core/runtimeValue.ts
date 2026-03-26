@@ -1,4 +1,4 @@
-import type { WorkflowJsonValue } from '../domain/studio/contracts';
+import type { WorkflowJsonValue } from '@/domain/studio/contracts';
 import { formatHexAddress } from './addressFormat';
 
 const BOOLEAN_TYPES = new Set(['System.Boolean', 'bool']);

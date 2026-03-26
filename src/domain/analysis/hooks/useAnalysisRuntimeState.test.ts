@@ -6,8 +6,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useAnalysisRuntimeState } from './useAnalysisRuntimeState';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import type { AnalysisSnapshot, ProcessSession } from '../contracts';
-import type { WorkspaceLifecycleState } from '../../../shared/contracts';
-import { EMPTY_WORKSPACE_LIFECYCLE } from '../../../app/shell/workspaceLifecycle';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { createClassStableId, createImageStableId, createFieldStableId } from '../../contracts/shared-identity';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

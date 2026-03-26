@@ -10,7 +10,7 @@ import {
   type BridgeResponseEnvelope,
 } from './bridge';
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from './analysis';
-import type { GraphDocumentEnvelope } from '../../domain/studio/contracts';
+import type { GraphDocumentEnvelope } from '@/domain/studio/contracts';
 import type { SystemContractVersions } from './workspace';
 
 function readFixture<T>(name: string): T {

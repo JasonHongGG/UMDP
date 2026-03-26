@@ -6,7 +6,7 @@ import type {
   RuntimeMethodInvokeRequest,
   RuntimeMethodInvokeResult,
   RuntimeOverlaySnapshot,
-} from '../../domain/analysis/contracts';
+} from '@/domain/analysis/contracts';
 
 export async function getRuntimeStaticFields(classStableId: string) {
   return invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', {

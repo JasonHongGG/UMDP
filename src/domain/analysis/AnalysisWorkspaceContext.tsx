@@ -1,20 +1,20 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { createStudioRuntimeDataState, type StudioRuntimeDataState } from '../../core/studio/runtimeData';
+import { createStudioRuntimeDataState, type StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import type {
   AnalysisSnapshot,
   ProcessSession,
   RuntimeClassOverlayDescriptor,
 } from './contracts';
-import type { WorkspaceLifecycleState } from '../../shared/contracts';
-import type { SystemContractVersions } from '../../shared/contracts';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import type { SystemContractVersions } from '@/shared/contracts';
 import {
   type ClassBinding,
   type ClassInfoCatalog,
   type PendingClassNodeRequest,
   type StudioClassCatalogEntry,
-} from '../studio/editor';
+} from '@/domain/studio/editor';
 import type { StableId } from '../contracts/shared-identity';
-import type { ResolvedMemberRuntimeValue } from '../../core/studio/contracts';
+import type { ResolvedMemberRuntimeValue } from '@/features/studio/core/contracts';
 import { useAnalysisInspectorCatalog } from './hooks/useAnalysisInspectorCatalog';
 import { useAnalysisInspectorSearch } from './hooks/useAnalysisInspectorSearch';
 import { useAnalysisRepository } from './hooks/useAnalysisRepository';

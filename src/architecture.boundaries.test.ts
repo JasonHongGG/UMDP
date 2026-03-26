@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -8,25 +8,42 @@ const ALLOWED_TAURI_IMPORT_PREFIXES = [
 ];
 const STUDIO_KERNEL_PROTECTED_PREFIXES = [
   'domain/studio/kernel/',
-  'application/studio/kernel/',
+  'features/studio/application/kernel/',
 ];
-const NODES_PROTECTED_PREFIX = 'nodes/';
-const FEATURES_PROTECTED_PREFIX = 'components/features/';
-const STUDIO_COMPONENTS_PROTECTED_PREFIX = 'components/studio/';
+const STUDIO_CORE_PREFIX = 'features/studio/core/';
+const STUDIO_COMPONENTS_PREFIX = 'features/studio/components/';
+const STUDIO_NODES_PREFIX = 'features/studio/nodes/';
+const INSPECTOR_COMPONENTS_PREFIX = 'features/inspector/components/';
+const APP_SHELL_PREFIX = 'app/shell/';
+const SHARED_UI_PREFIX = 'shared/ui/';
+const LEGACY_FRONTEND_BUCKETS = [
+  'components',
+  'nodes',
+  'app/pages',
+  'application/studio',
+  'core/studio',
+];
+
+function containsImport(contents: string, specifier: string): boolean {
+  return contents.includes(`'${specifier}'`) || contents.includes(`"${specifier}"`);
+}
 
 function importsStudioContextDirectly(contents: string): boolean {
-  return contents.includes("/core/studio/StudioContext'")
-    || contents.includes('/core/studio/StudioContext"');
+  return containsImport(contents, '@/features/studio/core/StudioContext')
+    || contents.includes('/features/studio/core/StudioContext\'')
+    || contents.includes('/features/studio/core/StudioContext"');
 }
 
 function importsStudioRuntimeDataDirectly(contents: string): boolean {
-  return contents.includes("/core/studio/runtimeData'")
-    || contents.includes('/core/studio/runtimeData"');
+  return containsImport(contents, '@/features/studio/core/runtimeData')
+    || contents.includes('/features/studio/core/runtimeData\'')
+    || contents.includes('/features/studio/core/runtimeData"');
 }
 
 function importsStudioExpressionDragDirectly(contents: string): boolean {
-  return contents.includes("/core/studio/drag/ExpressionDragContext'")
-    || contents.includes('/core/studio/drag/ExpressionDragContext"');
+  return containsImport(contents, '@/features/studio/core/drag/ExpressionDragContext')
+    || contents.includes('/features/studio/core/drag/ExpressionDragContext\'')
+    || contents.includes('/features/studio/core/drag/ExpressionDragContext"');
 }
 
 function collectSourceFiles(directory: string): string[] {
@@ -49,162 +66,133 @@ function collectSourceFiles(directory: string): string[] {
   });
 }
 
+function listViolations(predicate: (relativePath: string, contents: string) => boolean): string[] {
+  return collectSourceFiles(SRC_ROOT)
+    .map((filePath) => ({
+      relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
+      contents: readFileSync(filePath, 'utf8'),
+    }))
+    .filter(({ relativePath, contents }) => predicate(relativePath, contents))
+    .map(({ relativePath }) => relativePath);
+}
+
 describe('frontend architecture boundaries', () => {
   it('does not import Tauri APIs outside infrastructure adapters', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (ALLOWED_TAURI_IMPORT_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {
-          return false;
-        }
+    const violations = listViolations((relativePath, contents) => {
+      if (ALLOWED_TAURI_IMPORT_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {
+        return false;
+      }
 
-        return contents.includes("@tauri-apps/api/");
-      })
-      .map(({ relativePath }) => relativePath);
+      return contents.includes('@tauri-apps/api/');
+    });
 
     expect(violations).toEqual([]);
   });
 
-  it('does not allow the new studio kernel subtree to import infrastructure directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!STUDIO_KERNEL_PROTECTED_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {
-          return false;
-        }
+  it('removes legacy frontend bucket directories', () => {
+    const existing = LEGACY_FRONTEND_BUCKETS.filter((bucket) => existsSync(join(SRC_ROOT, bucket)));
+    expect(existing).toEqual([]);
+  });
 
-        return /from\s+['"].*infrastructure\//.test(contents) || /from\s+['"]\.\.\/.*infrastructure\//.test(contents);
-      })
-      .map(({ relativePath }) => relativePath);
+  it('does not allow the studio kernel subtrees to import infrastructure directly', () => {
+    const violations = listViolations((relativePath, contents) => {
+      if (!STUDIO_KERNEL_PROTECTED_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {
+        return false;
+      }
+
+      return /from\s+['"].*infrastructure\//.test(contents);
+    });
 
     expect(violations).toEqual([]);
   });
 
-  it('does not allow graphStore to import infrastructure directly', () => {
-    const graphStorePath = join(SRC_ROOT, 'core', 'studio', 'graphStore.ts');
+  it('does not allow studio graphStore to import infrastructure directly', () => {
+    const graphStorePath = join(SRC_ROOT, 'features', 'studio', 'core', 'graphStore.ts');
     const contents = readFileSync(graphStorePath, 'utf8');
 
     expect(/from\s+['"].*infrastructure\//.test(contents)).toBe(false);
   });
 
   it('does not allow studio nodes to import infrastructure directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!relativePath.startsWith(NODES_PROTECTED_PREFIX)) {
-          return false;
-        }
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(STUDIO_NODES_PREFIX)) {
+        return false;
+      }
 
-        return /from\s+['"].*infrastructure\//.test(contents) || /from\s+['"]\.\.\/.*infrastructure\//.test(contents);
-      })
-      .map(({ relativePath }) => relativePath);
+      return /from\s+['"].*infrastructure\//.test(contents);
+    });
 
     expect(violations).toEqual([]);
   });
 
   it('does not allow feature components to import StudioContext directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!relativePath.startsWith(FEATURES_PROTECTED_PREFIX)) {
-          return false;
-        }
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(INSPECTOR_COMPONENTS_PREFIX) && !relativePath.startsWith(STUDIO_COMPONENTS_PREFIX)) {
+        return false;
+      }
 
-        return importsStudioContextDirectly(contents);
-      })
-      .map(({ relativePath }) => relativePath);
-
-    expect(violations).toEqual([]);
-  });
-
-  it('does not allow studio components to import StudioContext directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!relativePath.startsWith(STUDIO_COMPONENTS_PROTECTED_PREFIX)) {
-          return false;
-        }
-
-        return importsStudioContextDirectly(contents);
-      })
-      .map(({ relativePath }) => relativePath);
+      return importsStudioContextDirectly(contents);
+    });
 
     expect(violations).toEqual([]);
   });
 
   it('does not allow studio nodes to import StudioContext directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!relativePath.startsWith(NODES_PROTECTED_PREFIX)) {
-          return false;
-        }
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(STUDIO_NODES_PREFIX)) {
+        return false;
+      }
 
-        return importsStudioContextDirectly(contents);
-      })
-      .map(({ relativePath }) => relativePath);
+      return importsStudioContextDirectly(contents);
+    });
 
     expect(violations).toEqual([]);
   });
 
-  it('does not allow studio components to import runtimeData or ExpressionDragContext directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!relativePath.startsWith(STUDIO_COMPONENTS_PROTECTED_PREFIX)) {
-          return false;
-        }
+  it('does not allow studio components or nodes to import runtimeData or ExpressionDragContext directly', () => {
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(STUDIO_COMPONENTS_PREFIX) && !relativePath.startsWith(STUDIO_NODES_PREFIX)) {
+        return false;
+      }
 
-        return importsStudioRuntimeDataDirectly(contents) || importsStudioExpressionDragDirectly(contents);
-      })
-      .map(({ relativePath }) => relativePath);
+      return importsStudioRuntimeDataDirectly(contents) || importsStudioExpressionDragDirectly(contents);
+    });
 
     expect(violations).toEqual([]);
   });
 
-  it('does not allow studio nodes to import runtimeData or ExpressionDragContext directly', () => {
-    const violations = collectSourceFiles(SRC_ROOT)
-      .map((filePath) => ({
-        filePath,
-        relativePath: relative(SRC_ROOT, filePath).replace(/\\/g, '/'),
-        contents: readFileSync(filePath, 'utf8'),
-      }))
-      .filter(({ relativePath, contents }) => {
-        if (!relativePath.startsWith(NODES_PROTECTED_PREFIX)) {
-          return false;
-        }
+  it('does not allow shared ui to import feature internals', () => {
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(SHARED_UI_PREFIX)) {
+        return false;
+      }
 
-        return importsStudioRuntimeDataDirectly(contents) || importsStudioExpressionDragDirectly(contents);
-      })
-      .map(({ relativePath }) => relativePath);
+      return contents.includes('@/features/') || /from\s+['"].*features\//.test(contents);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('does not allow app shell to import feature internals', () => {
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(APP_SHELL_PREFIX)) {
+        return false;
+      }
+
+      return contents.includes('@/features/') || /from\s+['"].*features\//.test(contents);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps studio core isolated under the feature slice', () => {
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith(STUDIO_CORE_PREFIX)) {
+        return false;
+      }
+
+      return /from\s+['"].*app\/shell\//.test(contents);
+    });
 
     expect(violations).toEqual([]);
   });

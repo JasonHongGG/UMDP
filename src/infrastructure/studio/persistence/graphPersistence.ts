@@ -3,7 +3,7 @@ import {
   type GraphDocument,
   type GraphDocumentEnvelope,
   type NodeInstance,
-} from '../../../domain/studio/contracts';
+} from '@/domain/studio/contracts';
 
 export interface StoredGraphDocumentRecord {
   savedAt: number;

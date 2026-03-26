@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
-import type { WorkspaceLifecycleState } from '../../../shared/contracts';
-import { EMPTY_WORKSPACE_LIFECYCLE } from '../../../app/shell/workspaceLifecycle';
-import { onProcessSelected } from '../../../infrastructure/tauri/TauriWorkspaceGateway';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
+import { onProcessSelected } from '@/infrastructure/tauri/TauriWorkspaceGateway';
 
 interface UseAnalysisSessionStateOptions {
   repository: AnalysisRepository;

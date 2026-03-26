@@ -8,7 +8,7 @@ import type {
   RuntimeMethodInvokeResult,
   RuntimeOverlaySnapshot,
 } from '../../analysis/contracts';
-import type { SystemContractVersions, WorkspaceLifecycleState } from '../../../shared/contracts';
+import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
 
 export interface StudioAttachRequest {
   pid: number;

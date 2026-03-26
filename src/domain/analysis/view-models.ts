@@ -1,6 +1,6 @@
 import type { StableId } from '../contracts/shared-identity';
 import type { ClassDescriptor, ImageDescriptor, RuntimeClassOverlayDescriptor } from './contracts';
-import { formatHexAddress } from '../../core/addressFormat';
+import { formatHexAddress } from '@/core/addressFormat';
 
 export type AnalysisImageInfo = ImageDescriptor;
 

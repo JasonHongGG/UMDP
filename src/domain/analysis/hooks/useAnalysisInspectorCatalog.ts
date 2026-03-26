@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { formatHexAddress } from '../../../core/addressFormat';
+import { formatHexAddress } from '@/core/addressFormat';
 import type { AnalysisSnapshot, RuntimeClassOverlayDescriptor } from '../contracts';
 import type {
   AnalysisClassInfo,
@@ -15,7 +15,7 @@ import {
   type ClassBinding,
   type ClassInfoCatalog,
   type StudioClassCatalogEntry,
-} from '../../studio/editor';
+} from '@/domain/studio/editor';
 import type { StableId } from '../../contracts/shared-identity';
 import type { ClassLookupEntry, InspectorTab } from '../workspace-types';
 
@@ -89,7 +89,9 @@ export function useAnalysisInspectorCatalog({
   const studioClassCatalogEntries = useMemo(() => buildStudioClassCatalog(images, classesByImage), [classesByImage, images]);
 
   const classBindingByStableId = useMemo(() => {
-    return new Map(studioClassCatalogEntries.map((entry) => [entry.classStableId, entry as ClassBinding]));
+    return new Map<string, ClassBinding>(
+      studioClassCatalogEntries.map((entry: StudioClassCatalogEntry) => [entry.classStableId, entry as ClassBinding]),
+    );
   }, [studioClassCatalogEntries]);
 
   const classInfoCatalogByStableId = useMemo(() => {

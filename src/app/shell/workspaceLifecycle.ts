@@ -1,4 +1,4 @@
-import type { WorkspaceLifecycleState } from '../../shared/contracts';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
 
 export const EMPTY_WORKSPACE_LIFECYCLE: WorkspaceLifecycleState = {
   status: 'detached',

@@ -4,7 +4,7 @@ import type {
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
 } from '../contracts';
-import type { SystemContractVersions, WorkspaceLifecycleState } from '../../../shared/contracts';
+import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
 
 export interface AttachToProcessRequest {
   pid: number;

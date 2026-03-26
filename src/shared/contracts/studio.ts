@@ -43,7 +43,7 @@ export type {
   ValidationIssue,
   WorkflowJsonEnvelope,
   WorkflowJsonValue,
-} from '../../domain/studio/contracts';
+} from '@/domain/studio/contracts';
 export {
   WORKFLOW_SCHEMA_IDS,
   createGraphDocumentEnvelope,
@@ -58,4 +58,4 @@ export {
   parseParameterNodeDocumentState,
   parseTriggerNodeDocumentState,
   serializeExpressionSource,
-} from '../../domain/studio/contracts';
+} from '@/domain/studio/contracts';

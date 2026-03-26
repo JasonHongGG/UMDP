@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import type { ProcessInfo } from '../../domain/analysis/contracts';
+import type { ProcessInfo } from '@/domain/analysis/contracts';
 
 export async function fetchSystemProcesses() {
   return invoke<ProcessInfo[]>('fetch_system_processes');

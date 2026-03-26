@@ -1,18 +1,18 @@
 
 import { Suspense, lazy } from 'react';
-import { MainLayout } from './components/layout/MainLayout';
-import { TopBar } from './components/features/TopBar';
+import { MainLayout } from '@/app/shell/MainLayout';
+import { TopBar } from '@/app/shell/TopBar';
 import { AnalysisWorkspaceProvider, useWorkspaceShellState } from './domain/analysis/AnalysisWorkspaceContext';
 import { StatusBar } from './app/shell/StatusBar';
 import { openProcessSelectorWindow } from './infrastructure/tauri/TauriWorkspaceGateway';
 import './styles.css';
 
 const StudioPage = lazy(async () => ({
-  default: (await import('./components/features/StudioPage')).StudioPage,
+  default: (await import('@/features/studio/page/StudioPage')).StudioPage,
 }));
 
 const InspectorPage = lazy(async () => ({
-  default: (await import('./app/pages/InspectorPage')).InspectorPage,
+  default: (await import('@/features/inspector/page/InspectorPage')).InspectorPage,
 }));
 
 export default function App() {

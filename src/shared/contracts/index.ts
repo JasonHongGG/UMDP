@@ -1,4 +1,4 @@
-export type { StableId } from '../../domain/contracts/shared-identity';
+export type { StableId } from '@/domain/contracts/shared-identity';
 export * from './analysis';
 export * from './bridge';
 export * from './studio';

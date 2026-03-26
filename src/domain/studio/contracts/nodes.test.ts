@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLiteralExpressionSource } from '../../../core/studio/expression';
+import { createLiteralExpressionSource } from '@/features/studio/core/expression';
 import { parseParameterNodeDocumentState } from './nodes';
 
 describe('parseParameterNodeDocumentState', () => {

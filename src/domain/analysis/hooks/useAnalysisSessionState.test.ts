@@ -5,14 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
-import type { WorkspaceLifecycleState } from '../../../shared/contracts';
-import { EMPTY_WORKSPACE_LIFECYCLE } from '../../../app/shell/workspaceLifecycle';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { useAnalysisSessionState } from './useAnalysisSessionState';
 
 let processSelectedHandler: ((process: ProcessInfo) => void | Promise<void>) | null = null;
 const disposeProcessSelected = vi.fn();
 
-vi.mock('../../../infrastructure/tauri/TauriWorkspaceGateway', () => ({
+vi.mock('@/infrastructure/tauri/TauriWorkspaceGateway', () => ({
   onProcessSelected: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
     processSelectedHandler = handler;
     return disposeProcessSelected;

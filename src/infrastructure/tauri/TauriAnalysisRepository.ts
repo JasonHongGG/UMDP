@@ -1,12 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AnalysisRepository, AttachToProcessRequest, RuntimeInstanceFieldsRequest } from '../../domain/analysis/repository/AnalysisRepository';
+import type { AnalysisRepository, AttachToProcessRequest, RuntimeInstanceFieldsRequest } from '@/domain/analysis/repository/AnalysisRepository';
 import type {
   AnalysisSnapshot,
   ProcessSession,
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
-} from '../../domain/analysis/contracts';
-import type { SystemContractVersions, WorkspaceLifecycleState } from '../../shared/contracts';
+} from '@/domain/analysis/contracts';
+import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
 
 export function createTauriAnalysisRepository(): AnalysisRepository {
   return {

@@ -21,4 +21,4 @@ export type {
   RuntimeOverlaySnapshot,
   RuntimeResolvedFieldDescriptor,
   StaticFieldDescriptor,
-} from '../../domain/analysis/contracts';
+} from '@/domain/analysis/contracts';

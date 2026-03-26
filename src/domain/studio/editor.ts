@@ -1,7 +1,7 @@
 import type { ClassDescriptor, RuntimeClassOverlayDescriptor } from '../analysis/contracts';
 import type { AnalysisClassSummary, AnalysisImageInfo } from '../analysis/view-models';
 import type { StableId } from '../contracts/shared-identity';
-import { formatHexAddress } from '../../core/addressFormat';
+import { formatHexAddress } from '@/core/addressFormat';
 
 export interface ClassBinding {
   imageStableId: StableId;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ClassBinding } from '../../studio/editor';
+import type { ClassBinding } from '@/domain/studio/editor';
 import type { StableId } from '../../contracts/shared-identity';
 import type {
   AnalysisClassInfo,

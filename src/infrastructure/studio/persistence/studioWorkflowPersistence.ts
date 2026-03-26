@@ -1,4 +1,4 @@
-import type { GraphDocument } from '../../../domain/studio/contracts';
+import type { GraphDocument } from '@/domain/studio/contracts';
 import {
   clearStoredGraphDocument,
   readStoredGraphDocument,

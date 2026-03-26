@@ -1,5 +1,5 @@
 import { Binary, Database } from 'lucide-react';
-import type { WorkspaceLifecycleState } from '../../shared/contracts';
+import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { getWorkspaceLifecycleLabel, getWorkspaceLifecycleTone } from './workspaceLifecycle';
 
 interface StatusBarProps {
