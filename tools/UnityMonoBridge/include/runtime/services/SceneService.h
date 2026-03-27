@@ -79,7 +79,7 @@ private:
     std::string DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const;
 
     SceneNodeSummary BuildNodeSummary(Address game_object_address, NodeSummaryFlavor flavor) const;
-    std::vector<SceneNodeSummary> LoadChildrenForObject(Address game_object_address) const;
+    std::vector<SceneNodeSummary> LoadChildrenForObject(Address game_object_address, NodeSummaryFlavor flavor) const;
     std::vector<SceneComponentSummary> LoadComponentsForObject(Address game_object_address) const;
     std::optional<SceneTransformSnapshotResponse> BuildTransformSnapshot(Address transform_address) const;
     std::pair<std::optional<int>, std::optional<std::string>> ReadSceneIdentity(Address scene_boxed_address) const;

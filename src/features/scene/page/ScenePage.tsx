@@ -48,10 +48,6 @@ export function ScenePage() {
   };
 
   const toggleNode = (node: RuntimeSceneNodeSummary) => {
-    if (!node.hasChildren) {
-      return;
-    }
-
     setExpandedNodes((previous) => {
       const nextExpanded = !previous[node.objectAddress];
       if (nextExpanded) {
@@ -214,7 +210,6 @@ export function ScenePage() {
                           <div className="text-sm text-slate-200">{child.name}</div>
                           <div className="text-[11px] text-slate-500 mt-1">{child.objectAddress}</div>
                         </div>
-                        <div className="text-[11px] text-slate-500">{child.childCount} children</div>
                       </button>
                     ))}
                   </SceneCard>
@@ -302,10 +297,13 @@ function SceneNodeRow({
   loadingChildrenByParent: Record<string, boolean>;
   childErrorByParent: Record<string, string | null>;
 }) {
-  const expanded = expandedNodes[node.objectAddress] ?? false;
   const children = childrenByParent[node.objectAddress] ?? [];
   const loading = loadingChildrenByParent[node.objectAddress];
   const childError = childErrorByParent[node.objectAddress];
+  const hasLoadedChildren = Object.prototype.hasOwnProperty.call(childrenByParent, node.objectAddress);
+  const isKnownLeaf = hasLoadedChildren && children.length === 0 && !loading && !childError;
+  const expanded = isKnownLeaf ? false : (expandedNodes[node.objectAddress] ?? false);
+  const canExpand = !isKnownLeaf;
 
   return (
     <div>
@@ -313,9 +311,10 @@ function SceneNodeRow({
         <div className="flex items-center gap-1 px-2 py-2" style={{ paddingLeft: `${12 + depth * 18}px` }}>
           <button
             onClick={() => onToggle(node)}
-            className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center ${node.hasChildren ? 'text-slate-400 hover:text-slate-200' : 'text-slate-700 cursor-default'}`}
+            disabled={!canExpand}
+            className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center ${canExpand ? 'text-slate-400 hover:text-slate-200' : 'text-slate-700 cursor-default'}`}
           >
-            {node.hasChildren ? (expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />) : <ChevronRight size={15} />}
+            {canExpand ? (expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />) : <ChevronRight size={15} />}
           </button>
           <button onClick={() => onSelect(node.objectAddress)} className="min-w-0 flex-1 text-left">
             <div className="text-sm text-slate-200 truncate">{node.name}</div>

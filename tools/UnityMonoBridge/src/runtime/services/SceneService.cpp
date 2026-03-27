@@ -188,7 +188,7 @@ SceneChildrenResponse SceneService::LoadSceneChildren(Address object_address) co
     const auto started_at = PerfClock::now();
     SceneChildrenResponse response;
     response.parent_object_address = FormatAddress(object_address);
-    response.children = LoadChildrenForObject(object_address);
+    response.children = LoadChildrenForObject(object_address, NodeSummaryFlavor::Catalog);
     LogScenePerf(
         "load_scene_children",
         started_at,
@@ -214,7 +214,7 @@ SceneObjectInspectorResponse SceneService::InspectSceneObject(Address object_add
 
     const Address transform_address = InvokeObject(game_object_class, get_transform, object_address);
     response.transform = BuildTransformSnapshot(transform_address);
-    response.children = LoadChildrenForObject(object_address);
+    response.children = LoadChildrenForObject(object_address, NodeSummaryFlavor::Catalog);
     response.components = LoadComponentsForObject(object_address);
 
     if (response.transform.has_value() && response.transform->parent_object_address.has_value()) {
@@ -480,17 +480,10 @@ std::optional<QuaternionSnapshot> SceneService::ReadQuaternion(Address boxed_val
 SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address, NodeSummaryFlavor flavor) const
 {
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
-    const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
-
-    const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
-    const MethodRecord get_child_count = RequireMethod(transform_class, "get_childCount", 0);
     const auto get_name = TryFindMethod(game_object_class, "get_name", 0);
-
-    const Address transform_address = InvokeObject(game_object_class, get_transform, game_object_address);
 
     SceneNodeSummary node;
     node.object_address = FormatAddress(game_object_address);
-    node.transform_address = transform_address == 0 ? std::nullopt : std::optional<std::string>(FormatAddress(transform_address));
     if (get_name.has_value()) {
         node.name = TryInvokeString(game_object_class, *get_name, game_object_address).value_or("<unnamed>");
     }
@@ -498,16 +491,22 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address, Nod
         node.name = "<unnamed>";
     }
 
-    if (transform_address != 0) {
-        node.child_count = static_cast<std::size_t>(InvokeInt(transform_class, get_child_count, transform_address));
-        node.has_children = node.child_count > 0;
-    }
-
     if (flavor == NodeSummaryFlavor::Inspector) {
+        const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
         const MethodRecord get_active_self = RequireMethod(game_object_class, "get_activeSelf", 0);
+        const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
         const MethodRecord get_layer = RequireMethod(game_object_class, "get_layer", 0);
+        const MethodRecord get_child_count = RequireMethod(transform_class, "get_childCount", 0);
+        const Address transform_address = InvokeObject(game_object_class, get_transform, game_object_address);
+
+        node.transform_address = transform_address == 0 ? std::nullopt : std::optional<std::string>(FormatAddress(transform_address));
         node.active_self = InvokeBool(game_object_class, get_active_self, game_object_address);
         node.layer = InvokeInt(game_object_class, get_layer, game_object_address);
+
+        if (transform_address != 0) {
+            node.child_count = static_cast<std::size_t>(InvokeInt(transform_class, get_child_count, transform_address));
+            node.has_children = node.child_count > 0;
+        }
 
         if (const auto get_tag = TryFindMethod(game_object_class, "get_tag", 0); get_tag.has_value()) {
             node.tag = TryInvokeString(game_object_class, *get_tag, game_object_address);
@@ -521,7 +520,7 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address, Nod
     return node;
 }
 
-std::vector<SceneNodeSummary> SceneService::LoadChildrenForObject(Address game_object_address) const
+std::vector<SceneNodeSummary> SceneService::LoadChildrenForObject(Address game_object_address, NodeSummaryFlavor flavor) const
 {
     const auto started_at = PerfClock::now();
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
@@ -547,7 +546,7 @@ std::vector<SceneNodeSummary> SceneService::LoadChildrenForObject(Address game_o
         }
         const Address child_object = InvokeObject(transform_class, get_game_object, child_transform);
         if (child_object != 0) {
-            children.push_back(BuildNodeSummary(child_object, NodeSummaryFlavor::Catalog));
+            children.push_back(BuildNodeSummary(child_object, flavor));
         }
     }
 
