@@ -371,6 +371,28 @@ pub struct RuntimeSceneObjectInspectorSnapshot {
     pub transform: Option<RuntimeSceneTransformSnapshot>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneMutationOperation {
+    CreateChild,
+    Duplicate,
+    Delete,
+    SetActive,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneMutationResult {
+    pub operation: RuntimeSceneMutationOperation,
+    pub scene_handle: Option<i32>,
+    pub target_object_address: Option<String>,
+    pub parent_object_address: Option<String>,
+    pub object: Option<RuntimeSceneNodeSummary>,
+    pub deleted_object_address: Option<String>,
+    pub preferred_selection_address: Option<String>,
+    pub active_self: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneWorkspaceState {

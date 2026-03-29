@@ -1,5 +1,7 @@
 #include "runtime/services/RuntimeInspector.h"
 
+#include <stdexcept>
+
 #include "shared/Formatting.h"
 
 namespace bridge::runtime {
@@ -125,6 +127,22 @@ SceneChildrenResponse RuntimeInspector::LoadSceneChildren(const BridgeRequest& r
 SceneObjectInspectorResponse RuntimeInspector::InspectSceneObject(const BridgeRequest& request) const
 {
     return scene_service_.InspectSceneObject(*request.object_address);
+}
+
+SceneMutationResponse RuntimeInspector::MutateSceneObject(const BridgeRequest& request) const
+{
+    switch (request.operation) {
+    case BridgeOperation::CreateSceneChild:
+        return scene_service_.CreateSceneChild(*request.object_address, request.object_name.value_or("GameObject"));
+    case BridgeOperation::DuplicateSceneObject:
+        return scene_service_.DuplicateSceneObject(*request.object_address);
+    case BridgeOperation::DeleteSceneObject:
+        return scene_service_.DeleteSceneObject(*request.object_address);
+    case BridgeOperation::SetSceneObjectActive:
+        return scene_service_.SetSceneObjectActive(*request.object_address, request.active_self.value_or(false));
+    default:
+        throw std::runtime_error("unsupported scene mutation operation");
+    }
 }
 
 } // namespace bridge::runtime

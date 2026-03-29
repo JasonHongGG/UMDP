@@ -22,6 +22,7 @@ public:
     SceneCatalogResponse LoadSceneCatalog(const BridgeRequest& request) const;
     SceneChildrenResponse LoadSceneChildren(const BridgeRequest& request) const;
     SceneObjectInspectorResponse InspectSceneObject(const BridgeRequest& request) const;
+    SceneMutationResponse MutateSceneObject(const BridgeRequest& request) const;
 
 private:
     RuntimeContext context_;

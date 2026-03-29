@@ -23,6 +23,8 @@ export type {
   RuntimeSceneChildrenSnapshot,
   RuntimeSceneComponentSummary,
   RuntimeSceneDescriptor,
+  RuntimeSceneMutationOperation,
+  RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectInspectorSnapshot,
   RuntimeSceneTransformSnapshot,

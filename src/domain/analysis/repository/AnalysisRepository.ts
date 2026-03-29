@@ -4,6 +4,7 @@ import type {
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
   RuntimeSceneChildrenSnapshot,
+  RuntimeSceneMutationResult,
   RuntimeSceneObjectInspectorSnapshot,
   SceneWorkspaceState,
 } from '../contracts';
@@ -30,4 +31,8 @@ export interface AnalysisRepository {
   getSceneWorkspaceState(): Promise<SceneWorkspaceState>;
   getSceneObjectChildren(objectAddress: string): Promise<RuntimeSceneChildrenSnapshot>;
   getSceneObjectInspector(objectAddress: string): Promise<RuntimeSceneObjectInspectorSnapshot>;
+  createSceneChild(parentObjectAddress: string, name: string): Promise<RuntimeSceneMutationResult>;
+  duplicateSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;
+  deleteSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;
+  setSceneObjectActive(objectAddress: string, activeSelf: boolean): Promise<RuntimeSceneMutationResult>;
 }

@@ -33,6 +33,17 @@ const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   lastUpdatedAt: null,
 };
 
+const EMPTY_SCENE_MUTATION_RESULT = {
+  operation: 'set-active' as const,
+  sceneHandle: null,
+  targetObjectAddress: null,
+  parentObjectAddress: null,
+  object: null,
+  deletedObjectAddress: null,
+  preferredSelectionAddress: null,
+  activeSelf: null,
+};
+
 function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): WorkspaceLifecycleState {
   return {
     ...EMPTY_WORKSPACE_LIFECYCLE,
@@ -89,6 +100,10 @@ function createRepository(): AnalysisRepository {
     getSceneWorkspaceState: vi.fn().mockResolvedValue(EMPTY_SCENE_WORKSPACE_STATE),
     getSceneObjectChildren: vi.fn(),
     getSceneObjectInspector: vi.fn(),
+    createSceneChild: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    duplicateSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    deleteSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneObjectActive: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
   } as AnalysisRepository;
 }
 

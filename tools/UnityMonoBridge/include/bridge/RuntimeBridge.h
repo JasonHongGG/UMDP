@@ -24,6 +24,7 @@ public:
     SceneCatalogResponse ExecuteSceneCatalog(const BridgeRequest& request);
     SceneChildrenResponse ExecuteSceneChildren(const BridgeRequest& request);
     SceneObjectInspectorResponse ExecuteSceneInspect(const BridgeRequest& request);
+    SceneMutationResponse ExecuteSceneMutation(const BridgeRequest& request);
 
 private:
     runtime::RuntimeInspector& ResolveInspector(std::size_t pid);

@@ -92,6 +92,18 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
             else if (value == "scene-inspect") {
                 request.operation = BridgeOperation::InspectSceneObject;
             }
+            else if (value == "scene-create-child") {
+                request.operation = BridgeOperation::CreateSceneChild;
+            }
+            else if (value == "scene-duplicate") {
+                request.operation = BridgeOperation::DuplicateSceneObject;
+            }
+            else if (value == "scene-delete") {
+                request.operation = BridgeOperation::DeleteSceneObject;
+            }
+            else if (value == "scene-set-active") {
+                request.operation = BridgeOperation::SetSceneObjectActive;
+            }
             else {
                 request.operation = BridgeOperation::InspectClass;
             }
@@ -128,6 +140,12 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         }
         else if (key == "--object-address") {
             request.object_address = ParseUnsignedValue<std::size_t>(value);
+        }
+        else if (key == "--name") {
+            request.object_name = value;
+        }
+        else if (key == "--active-self") {
+            request.active_self = value == "true";
         }
         else if (key == "--value-kind") {
             request.field_value_kind = ParseFieldValueKind(value);
@@ -168,6 +186,23 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
     if ((request.operation == BridgeOperation::LoadSceneChildren || request.operation == BridgeOperation::InspectSceneObject)
         && !request.object_address.has_value()) {
         throw std::runtime_error("Missing scene object address");
+    }
+
+    if ((request.operation == BridgeOperation::DuplicateSceneObject
+            || request.operation == BridgeOperation::DeleteSceneObject
+            || request.operation == BridgeOperation::SetSceneObjectActive)
+        && !request.object_address.has_value()) {
+        throw std::runtime_error("Missing scene object address");
+    }
+
+    if (request.operation == BridgeOperation::CreateSceneChild
+        && (!request.object_address.has_value() || !request.object_name.has_value())) {
+        throw std::runtime_error("Missing scene child creation arguments");
+    }
+
+    if (request.operation == BridgeOperation::SetSceneObjectActive
+        && (!request.object_address.has_value() || !request.active_self.has_value())) {
+        throw std::runtime_error("Missing scene active-state arguments");
     }
 
     return request;
@@ -244,6 +279,19 @@ SceneObjectInspectorResponse RuntimeBridge::ExecuteSceneInspect(const BridgeRequ
         "scene_inspect",
         started_at,
         "object=" + response.object.object_address + " children=" + std::to_string(response.children.size()) + " components=" + std::to_string(response.components.size()));
+    return response;
+}
+
+SceneMutationResponse RuntimeBridge::ExecuteSceneMutation(const BridgeRequest& request)
+{
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).MutateSceneObject(request);
+    const auto object_address = response.target_object_address.value_or(std::string("null"));
+    const auto parent_address = response.parent_object_address.value_or(std::string("null"));
+    LogScenePerf(
+        "scene_mutation",
+        started_at,
+        "object=" + object_address + " parent=" + parent_address);
     return response;
 }
 

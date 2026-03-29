@@ -30,6 +30,14 @@ const char* ProtocolOperationName(bridge::BridgeOperation operation)
         return "scene-object-children-load";
     case bridge::BridgeOperation::InspectSceneObject:
         return "scene-object-inspect";
+    case bridge::BridgeOperation::CreateSceneChild:
+        return "scene-object-create-child";
+    case bridge::BridgeOperation::DuplicateSceneObject:
+        return "scene-object-duplicate";
+    case bridge::BridgeOperation::DeleteSceneObject:
+        return "scene-object-delete";
+    case bridge::BridgeOperation::SetSceneObjectActive:
+        return "scene-object-set-active";
     case bridge::BridgeOperation::InvokeMethod:
         return "runtime-method-invoke";
     case bridge::BridgeOperation::SetField:
@@ -63,6 +71,12 @@ std::string ExecuteRequest(bridge::RuntimeBridge& runtime_bridge, const bridge::
     }
     if (request.operation == bridge::BridgeOperation::InspectSceneObject) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspect(request));
+    }
+    if (request.operation == bridge::BridgeOperation::CreateSceneChild
+        || request.operation == bridge::BridgeOperation::DuplicateSceneObject
+        || request.operation == bridge::BridgeOperation::DeleteSceneObject
+        || request.operation == bridge::BridgeOperation::SetSceneObjectActive) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneMutation(request));
     }
     if (request.operation == bridge::BridgeOperation::InvokeMethod) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteInvoke(request));

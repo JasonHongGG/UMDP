@@ -21,6 +21,7 @@ public:
     std::size_t GetArrayLength(Address array_object) const override;
     Address GetArrayElementAddress(Address array_object, std::size_t index) const override;
     Address UnboxObject(Address object_address) const override;
+    Address CreateManagedObject(Address class_handle) const override;
     bool TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const override;
     bool TryReadInstanceFieldBytes(Address instance_address, const FieldRecord& field, void* buffer, std::size_t size) const override;
     Address InvokeMethod(Address method_handle, Address instance_address, Address parameters_address, Address exception_address) const override;

@@ -62,6 +62,16 @@ void WriteOptionalSize(std::ostringstream& output, const std::optional<std::size
     }
 }
 
+void WriteOptionalBool(std::ostringstream& output, const std::optional<bool>& value)
+{
+    if (value.has_value()) {
+        output << (*value ? "true" : "false");
+    }
+    else {
+        output << "null";
+    }
+}
+
 void WriteFieldRows(std::ostringstream& output, const std::vector<bridge::FieldRow>& rows, bool include_runtime_values)
 {
     for (std::size_t index = 0; index < rows.size(); ++index) {
@@ -201,6 +211,22 @@ void WriteSceneComponents(std::ostringstream& output, const std::vector<bridge::
                << "\"component_address\":\"" << JsonEscape(components[index].component_address) << "\"," 
                << "\"type_name\":\"" << JsonEscape(components[index].type_name) << "\""
                << '}';
+    }
+}
+
+std::string SceneMutationOperationToString(bridge::SceneMutationOperation operation)
+{
+    switch (operation) {
+    case bridge::SceneMutationOperation::CreateChild:
+        return "create-child";
+    case bridge::SceneMutationOperation::Duplicate:
+        return "duplicate";
+    case bridge::SceneMutationOperation::Delete:
+        return "delete";
+    case bridge::SceneMutationOperation::SetActive:
+        return "set-active";
+    default:
+        return "set-active";
     }
 }
 
@@ -345,6 +371,34 @@ std::string SerializeResponse(const SceneObjectInspectorResponse& response)
     else {
         output << "null";
     }
+    output << '}';
+    return output.str();
+}
+
+std::string SerializeResponse(const SceneMutationResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"operation\":\"" << JsonEscape(SceneMutationOperationToString(response.operation)) << "\",";
+    output << "\"scene_handle\":";
+    WriteOptionalInt(output, response.scene_handle);
+    output << ",\"target_object_address\":";
+    WriteOptionalString(output, response.target_object_address);
+    output << ",\"parent_object_address\":";
+    WriteOptionalString(output, response.parent_object_address);
+    output << ",\"object\":";
+    if (response.object.has_value()) {
+        WriteSceneNode(output, *response.object);
+    }
+    else {
+        output << "null";
+    }
+    output << ",\"deleted_object_address\":";
+    WriteOptionalString(output, response.deleted_object_address);
+    output << ",\"preferred_selection_address\":";
+    WriteOptionalString(output, response.preferred_selection_address);
+    output << ",\"active_self\":";
+    WriteOptionalBool(output, response.active_self);
     output << '}';
     return output.str();
 }

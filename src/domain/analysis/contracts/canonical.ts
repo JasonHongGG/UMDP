@@ -261,6 +261,19 @@ export interface RuntimeSceneObjectInspectorSnapshot {
   transform: RuntimeSceneTransformSnapshot | null;
 }
 
+export type RuntimeSceneMutationOperation = 'create-child' | 'duplicate' | 'delete' | 'set-active';
+
+export interface RuntimeSceneMutationResult {
+  operation: RuntimeSceneMutationOperation;
+  sceneHandle: number | null;
+  targetObjectAddress: string | null;
+  parentObjectAddress: string | null;
+  object: RuntimeSceneNodeSummary | null;
+  deletedObjectAddress: string | null;
+  preferredSelectionAddress: string | null;
+  activeSelf: boolean | null;
+}
+
 export interface SceneWorkspaceState {
   refreshStatus: SceneRefreshStatus;
   errorMessage: string | null;

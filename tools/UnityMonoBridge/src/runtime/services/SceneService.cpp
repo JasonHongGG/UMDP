@@ -44,6 +44,30 @@ InvokeArgument NumberArgument(int value)
     return argument;
 }
 
+InvokeArgument BooleanArgument(bool value)
+{
+    InvokeArgument argument;
+    argument.kind = InvokeValueKind::Boolean;
+    argument.value = value ? std::optional<std::string>("true") : std::optional<std::string>("false");
+    return argument;
+}
+
+InvokeArgument StringArgument(const std::string& value)
+{
+    InvokeArgument argument;
+    argument.kind = InvokeValueKind::String;
+    argument.value = value;
+    return argument;
+}
+
+InvokeArgument AddressArgument(Address value)
+{
+    InvokeArgument argument;
+    argument.kind = InvokeValueKind::Address;
+    argument.value = FormatAddress(value);
+    return argument;
+}
+
 std::optional<int> ParseOptionalInt(const std::optional<std::string>& value)
 {
     if (!value.has_value()) {
@@ -232,6 +256,135 @@ SceneObjectInspectorResponse SceneService::InspectSceneObject(Address object_add
     return response;
 }
 
+SceneMutationResponse SceneService::CreateSceneChild(Address parent_object_address, const std::string& name) const
+{
+    const auto started_at = PerfClock::now();
+    const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
+    const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
+    const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
+
+    const Address child_object = CreateManagedObject(game_object_class, "UnityEngine.GameObject");
+    if (const auto ctor_with_name = TryFindMethod(game_object_class, ".ctor", 1); ctor_with_name.has_value()) {
+        InvokeVoid(game_object_class, *ctor_with_name, child_object, { StringArgument(name) });
+    }
+    else {
+        const MethodRecord ctor_without_name = RequireMethod(game_object_class, ".ctor", 0);
+        InvokeVoid(game_object_class, ctor_without_name, child_object);
+        if (const auto set_name = TryFindMethod(game_object_class, "set_name", 1); set_name.has_value()) {
+            InvokeVoid(game_object_class, *set_name, child_object, { StringArgument(name) });
+        }
+    }
+
+    const Address parent_transform = InvokeObject(game_object_class, get_transform, parent_object_address);
+    const Address child_transform = InvokeObject(game_object_class, get_transform, child_object);
+    if (parent_transform != 0 && child_transform != 0) {
+        if (const auto set_parent = TryFindMethod(transform_class, "SetParent", 1); set_parent.has_value()) {
+            InvokeVoid(transform_class, *set_parent, child_transform, { AddressArgument(parent_transform) });
+        }
+        else {
+            const MethodRecord set_parent_world = RequireMethod(transform_class, "SetParent", 2);
+            InvokeVoid(transform_class, set_parent_world, child_transform, { AddressArgument(parent_transform), BooleanArgument(false) });
+        }
+    }
+
+    SceneMutationResponse response;
+    response.operation = SceneMutationOperation::CreateChild;
+    response.scene_handle = ReadSceneHandleForObject(child_object);
+    response.target_object_address = FormatAddress(child_object);
+    response.parent_object_address = FormatAddress(parent_object_address);
+    response.object = BuildNodeSummary(child_object, NodeSummaryFlavor::Inspector);
+    response.preferred_selection_address = response.target_object_address;
+    response.active_self = response.object->active_self;
+
+    LogScenePerf(
+        "create_scene_child",
+        started_at,
+        "parent_object=" + *response.parent_object_address + " child_object=" + *response.target_object_address);
+    return response;
+}
+
+SceneMutationResponse SceneService::DuplicateSceneObject(Address object_address) const
+{
+    const auto started_at = PerfClock::now();
+    const Address object_class = ResolveUnityClass("UnityEngine", "Object");
+    const MethodRecord instantiate = RequireMethod(object_class, "Instantiate", 1);
+    const Address duplicated_object = InvokeObject(object_class, instantiate, std::nullopt, { AddressArgument(object_address) });
+
+    SceneMutationResponse response;
+    response.operation = SceneMutationOperation::Duplicate;
+    response.scene_handle = ReadSceneHandleForObject(duplicated_object);
+    response.target_object_address = FormatAddress(duplicated_object);
+    if (const auto parent_object = TryReadParentObjectAddress(duplicated_object); parent_object.has_value()) {
+        response.parent_object_address = FormatAddress(*parent_object);
+    }
+    response.object = BuildNodeSummary(duplicated_object, NodeSummaryFlavor::Inspector);
+    response.preferred_selection_address = response.target_object_address;
+    response.active_self = response.object->active_self;
+
+    LogScenePerf(
+        "duplicate_scene_object",
+        started_at,
+        "source_object=" + FormatAddress(object_address) + " duplicated_object=" + *response.target_object_address);
+    return response;
+}
+
+SceneMutationResponse SceneService::DeleteSceneObject(Address object_address) const
+{
+    const auto started_at = PerfClock::now();
+    const Address object_class = ResolveUnityClass("UnityEngine", "Object");
+    const std::optional<Address> parent_object = TryReadParentObjectAddress(object_address);
+    const std::optional<int> scene_handle = ReadSceneHandleForObject(object_address);
+    if (const auto destroy_immediate = TryFindMethod(object_class, "DestroyImmediate", 1); destroy_immediate.has_value()) {
+        InvokeVoid(object_class, *destroy_immediate, std::nullopt, { AddressArgument(object_address) });
+    }
+    else {
+        const MethodRecord destroy = RequireMethod(object_class, "Destroy", 1);
+        InvokeVoid(object_class, destroy, std::nullopt, { AddressArgument(object_address) });
+    }
+
+    SceneMutationResponse response;
+    response.operation = SceneMutationOperation::Delete;
+    response.scene_handle = scene_handle;
+    response.target_object_address = FormatAddress(object_address);
+    response.deleted_object_address = response.target_object_address;
+    if (parent_object.has_value()) {
+        response.parent_object_address = FormatAddress(*parent_object);
+        response.preferred_selection_address = response.parent_object_address;
+    }
+    response.active_self = std::nullopt;
+
+    LogScenePerf(
+        "delete_scene_object",
+        started_at,
+        "object=" + *response.target_object_address + " parent=" + response.parent_object_address.value_or(std::string("null")));
+    return response;
+}
+
+SceneMutationResponse SceneService::SetSceneObjectActive(Address object_address, bool active_self) const
+{
+    const auto started_at = PerfClock::now();
+    const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
+    const MethodRecord set_active = RequireMethod(game_object_class, "SetActive", 1);
+    InvokeVoid(game_object_class, set_active, object_address, { BooleanArgument(active_self) });
+
+    SceneMutationResponse response;
+    response.operation = SceneMutationOperation::SetActive;
+    response.scene_handle = ReadSceneHandleForObject(object_address);
+    response.target_object_address = FormatAddress(object_address);
+    if (const auto parent_object = TryReadParentObjectAddress(object_address); parent_object.has_value()) {
+        response.parent_object_address = FormatAddress(*parent_object);
+    }
+    response.object = BuildNodeSummary(object_address, NodeSummaryFlavor::Inspector);
+    response.preferred_selection_address = response.target_object_address;
+    response.active_self = response.object->active_self;
+
+    LogScenePerf(
+        "set_scene_object_active",
+        started_at,
+        "object=" + *response.target_object_address + " active=" + (active_self ? "true" : "false"));
+    return response;
+}
+
 Address SceneService::ResolveUnityClass(const std::string& class_namespace, const std::string& class_name) const
 {
     const std::string cache_key = class_namespace + "." + class_name;
@@ -341,6 +494,18 @@ int SceneService::InvokeInt(
     return std::stoi(*response.result->value, nullptr, 0);
 }
 
+void SceneService::InvokeVoid(
+    Address class_handle,
+    const MethodRecord& method,
+    std::optional<Address> instance_address,
+    std::vector<InvokeArgument> arguments) const
+{
+    const auto response = InvokeMethod(class_handle, method, instance_address, std::move(arguments));
+    if (!response.success) {
+        throw std::runtime_error(DescribeInvokeFailure(response, method, "scene void invoke failed"));
+    }
+}
+
 bool SceneService::InvokeBool(
     Address class_handle,
     const MethodRecord& method,
@@ -397,6 +562,16 @@ Address SceneService::RequireUnboxed(Address boxed_object_address, const std::st
     return raw_value;
 }
 
+Address SceneService::CreateManagedObject(Address class_handle, const std::string& context) const
+{
+    const Address object_address = api_.CreateManagedObject(class_handle);
+    if (object_address == 0) {
+        throw std::runtime_error(context + ": failed to allocate managed object");
+    }
+
+    return object_address;
+}
+
 std::optional<FieldRecord> SceneService::TryFindInstanceField(Address class_handle, const std::string& field_name, const std::string& field_type) const
 {
     const std::string cache_key = std::to_string(class_handle) + "::" + field_name + "::" + field_type;
@@ -440,6 +615,36 @@ std::optional<float> SceneService::ReadFloatField(Address class_handle, Address 
     return ParseOptionalFloat(field_value_reader_.ReadFieldValue(*found, instance_address));
 }
 
+std::optional<Address> SceneService::TryReadParentObjectAddress(Address game_object_address) const
+{
+    const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
+    const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
+    const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
+    const MethodRecord get_parent = RequireMethod(transform_class, "get_parent", 0);
+    const MethodRecord get_game_object = RequireMethod(transform_class, "get_gameObject", 0);
+
+    const Address transform_address = InvokeObject(game_object_class, get_transform, game_object_address);
+    if (transform_address == 0) {
+        return std::nullopt;
+    }
+
+    const Address parent_transform = InvokeObject(transform_class, get_parent, transform_address);
+    if (parent_transform == 0) {
+        return std::nullopt;
+    }
+
+    const Address parent_object = InvokeObject(transform_class, get_game_object, parent_transform);
+    return parent_object == 0 ? std::nullopt : std::optional<Address>(parent_object);
+}
+
+std::optional<int> SceneService::ReadSceneHandleForObject(Address game_object_address) const
+{
+    const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
+    const MethodRecord get_scene = RequireMethod(game_object_class, "get_scene", 0);
+    const Address scene_object = InvokeObject(game_object_class, get_scene, game_object_address);
+    return ReadSceneIdentity(scene_object).first;
+}
+
 std::optional<Vector3Snapshot> SceneService::ReadVector3(Address boxed_value_address) const
 {
     if (boxed_value_address == 0) {
@@ -481,6 +686,7 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address, Nod
 {
     const Address game_object_class = ResolveUnityClass("UnityEngine", "GameObject");
     const auto get_name = TryFindMethod(game_object_class, "get_name", 0);
+    const auto get_transform = TryFindMethod(game_object_class, "get_transform", 0);
 
     SceneNodeSummary node;
     node.object_address = FormatAddress(game_object_address);
@@ -491,22 +697,24 @@ SceneNodeSummary SceneService::BuildNodeSummary(Address game_object_address, Nod
         node.name = "<unnamed>";
     }
 
-    if (flavor == NodeSummaryFlavor::Inspector) {
-        const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
-        const MethodRecord get_active_self = RequireMethod(game_object_class, "get_activeSelf", 0);
-        const MethodRecord get_transform = RequireMethod(game_object_class, "get_transform", 0);
-        const MethodRecord get_layer = RequireMethod(game_object_class, "get_layer", 0);
-        const MethodRecord get_child_count = RequireMethod(transform_class, "get_childCount", 0);
-        const Address transform_address = InvokeObject(game_object_class, get_transform, game_object_address);
-
+    Address transform_address = 0;
+    if (get_transform.has_value()) {
+        transform_address = InvokeObject(game_object_class, *get_transform, game_object_address);
         node.transform_address = transform_address == 0 ? std::nullopt : std::optional<std::string>(FormatAddress(transform_address));
+    }
+
+    if (transform_address != 0) {
+        const Address transform_class = ResolveUnityClass("UnityEngine", "Transform");
+        const MethodRecord get_child_count = RequireMethod(transform_class, "get_childCount", 0);
+        node.child_count = static_cast<std::size_t>(InvokeInt(transform_class, get_child_count, transform_address));
+        node.has_children = node.child_count > 0;
+    }
+
+    if (flavor == NodeSummaryFlavor::Inspector) {
+        const MethodRecord get_active_self = RequireMethod(game_object_class, "get_activeSelf", 0);
+        const MethodRecord get_layer = RequireMethod(game_object_class, "get_layer", 0);
         node.active_self = InvokeBool(game_object_class, get_active_self, game_object_address);
         node.layer = InvokeInt(game_object_class, get_layer, game_object_address);
-
-        if (transform_address != 0) {
-            node.child_count = static_cast<std::size_t>(InvokeInt(transform_class, get_child_count, transform_address));
-            node.has_children = node.child_count > 0;
-        }
 
         if (const auto get_tag = TryFindMethod(game_object_class, "get_tag", 0); get_tag.has_value()) {
             node.tag = TryInvokeString(game_object_class, *get_tag, game_object_address);

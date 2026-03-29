@@ -65,6 +65,7 @@ Il2CppRuntimeApi::Il2CppRuntimeApi(const win32::Process& process, const win32::M
             "il2cpp_string_chars",
             "il2cpp_array_length",
             "il2cpp_object_unbox",
+            "il2cpp_object_new",
             "il2cpp_object_to_string",
         });
 }
@@ -253,6 +254,11 @@ Address Il2CppRuntimeApi::GetArrayElementAddress(Address array_object, std::size
 Address Il2CppRuntimeApi::UnboxObject(Address object_address) const
 {
     return object_address == 0 ? 0 : Invoke("il2cpp_object_unbox", { object_address });
+}
+
+Address Il2CppRuntimeApi::CreateManagedObject(Address class_handle) const
+{
+    return class_handle == 0 ? 0 : Invoke("il2cpp_object_new", { class_handle });
 }
 
 bool Il2CppRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const

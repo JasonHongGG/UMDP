@@ -81,6 +81,7 @@ MonoRuntimeApi::MonoRuntimeApi(const win32::Process& process, const win32::Memor
             "mono_string_chars",
             "mono_array_length",
             "mono_object_unbox",
+            "mono_object_new",
             "mono_object_to_string",
         },
         { "mono_class_from_name_case" });
@@ -309,6 +310,11 @@ Address MonoRuntimeApi::GetArrayElementAddress(Address array_object, std::size_t
 Address MonoRuntimeApi::UnboxObject(Address object_address) const
 {
     return object_address == 0 ? 0 : Invoke("mono_object_unbox", { object_address });
+}
+
+Address MonoRuntimeApi::CreateManagedObject(Address class_handle) const
+{
+    return class_handle == 0 ? 0 : Invoke("mono_object_new", { root_domain(), class_handle });
 }
 
 bool MonoRuntimeApi::TryReadStaticFieldBytes(const FieldRecord& field, void* buffer, std::size_t size) const

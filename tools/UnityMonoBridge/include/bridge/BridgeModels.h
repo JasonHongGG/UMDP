@@ -17,6 +17,10 @@ enum class BridgeOperation {
     LoadSceneCatalog,
     LoadSceneChildren,
     InspectSceneObject,
+    CreateSceneChild,
+    DuplicateSceneObject,
+    DeleteSceneObject,
+    SetSceneObjectActive,
 };
 
 enum class InvokeValueKind {
@@ -75,6 +79,8 @@ struct BridgeRequest {
     FieldValueKind field_value_kind = FieldValueKind::Null;
     std::optional<std::string> field_value;
     std::optional<Address> object_address;
+    std::optional<std::string> object_name;
+    std::optional<bool> active_self;
 };
 
 struct FieldRow {
@@ -178,6 +184,24 @@ struct SceneObjectInspectorResponse {
     std::vector<SceneNodeSummary> children;
     std::vector<SceneComponentSummary> components;
     std::optional<SceneTransformSnapshotResponse> transform;
+};
+
+enum class SceneMutationOperation {
+    CreateChild,
+    Duplicate,
+    Delete,
+    SetActive,
+};
+
+struct SceneMutationResponse {
+    SceneMutationOperation operation = SceneMutationOperation::SetActive;
+    std::optional<int> scene_handle;
+    std::optional<std::string> target_object_address;
+    std::optional<std::string> parent_object_address;
+    std::optional<SceneNodeSummary> object;
+    std::optional<std::string> deleted_object_address;
+    std::optional<std::string> preferred_selection_address;
+    std::optional<bool> active_self;
 };
 
 } // namespace bridge

@@ -17,6 +17,10 @@ pub fn get_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool {
         scene::get_scene_workspace_state,
         scene::get_scene_object_children,
         scene::get_scene_object_inspector,
+        scene::create_scene_child,
+        scene::duplicate_scene_object,
+        scene::delete_scene_object,
+        scene::set_scene_object_active,
         invocation::invoke_runtime_method,
         field_setting::set_runtime_field_value,
     ]

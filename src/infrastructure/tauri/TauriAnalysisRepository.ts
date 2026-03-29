@@ -6,6 +6,7 @@ import type {
   RuntimeInstanceFieldSnapshot,
   RuntimeOverlaySnapshot,
   RuntimeSceneChildrenSnapshot,
+  RuntimeSceneMutationResult,
   RuntimeSceneObjectInspectorSnapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -53,6 +54,18 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     },
     getSceneObjectInspector(objectAddress: string) {
       return timedInvoke<RuntimeSceneObjectInspectorSnapshot>('get_scene_object_inspector', 'get_scene_object_inspector', { objectAddress });
+    },
+    createSceneChild(parentObjectAddress: string, name: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('create_scene_child', 'create_scene_child', { parentObjectAddress, name });
+    },
+    duplicateSceneObject(objectAddress: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('duplicate_scene_object', 'duplicate_scene_object', { objectAddress });
+    },
+    deleteSceneObject(objectAddress: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('delete_scene_object', 'delete_scene_object', { objectAddress });
+    },
+    setSceneObjectActive(objectAddress: string, activeSelf: boolean) {
+      return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_active', 'set_scene_object_active', { objectAddress, activeSelf });
     },
     getRuntimeStaticFields(classStableId: string) {
       return timedInvoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', 'get_runtime_static_fields', { classStableId });

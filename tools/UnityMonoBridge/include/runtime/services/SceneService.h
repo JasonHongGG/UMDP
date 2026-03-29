@@ -28,6 +28,10 @@ public:
     SceneCatalogResponse LoadSceneCatalog() const;
     SceneChildrenResponse LoadSceneChildren(Address object_address) const;
     SceneObjectInspectorResponse InspectSceneObject(Address object_address) const;
+    SceneMutationResponse CreateSceneChild(Address parent_object_address, const std::string& name) const;
+    SceneMutationResponse DuplicateSceneObject(Address object_address) const;
+    SceneMutationResponse DeleteSceneObject(Address object_address) const;
+    SceneMutationResponse SetSceneObjectActive(Address object_address, bool active_self) const;
 
 private:
     enum class NodeSummaryFlavor {
@@ -47,6 +51,12 @@ private:
         std::vector<InvokeArgument> arguments = {}) const;
 
     int InvokeInt(
+        Address class_handle,
+        const MethodRecord& method,
+        std::optional<Address> instance_address,
+        std::vector<InvokeArgument> arguments = {}) const;
+
+    void InvokeVoid(
         Address class_handle,
         const MethodRecord& method,
         std::optional<Address> instance_address,
@@ -73,9 +83,12 @@ private:
     std::optional<FieldRecord> TryFindInstanceField(Address class_handle, const std::string& field_name, const std::string& field_type) const;
     std::optional<int> ReadIntField(Address class_handle, Address instance_address, const std::string& field_name) const;
     std::optional<float> ReadFloatField(Address class_handle, Address instance_address, const std::string& field_name) const;
+    std::optional<Address> TryReadParentObjectAddress(Address game_object_address) const;
+    std::optional<int> ReadSceneHandleForObject(Address game_object_address) const;
     std::optional<Vector3Snapshot> ReadVector3(Address boxed_value_address) const;
     std::optional<QuaternionSnapshot> ReadQuaternion(Address boxed_value_address) const;
     Address RequireUnboxed(Address boxed_object_address, const std::string& context) const;
+    Address CreateManagedObject(Address class_handle, const std::string& context) const;
     std::string DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const;
 
     SceneNodeSummary BuildNodeSummary(Address game_object_address, NodeSummaryFlavor flavor) const;

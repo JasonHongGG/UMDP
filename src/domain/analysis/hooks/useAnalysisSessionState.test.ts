@@ -19,6 +19,17 @@ const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   lastUpdatedAt: null,
 };
 
+const EMPTY_SCENE_MUTATION_RESULT = {
+  operation: 'set-active' as const,
+  sceneHandle: null,
+  targetObjectAddress: null,
+  parentObjectAddress: null,
+  object: null,
+  deletedObjectAddress: null,
+  preferredSelectionAddress: null,
+  activeSelf: null,
+};
+
 vi.mock('@/infrastructure/tauri/TauriWorkspaceGateway', () => ({
   onProcessSelected: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
     processSelectedHandler = handler;
@@ -59,6 +70,10 @@ function createRepository(overrides: Partial<AnalysisRepository> = {}): Analysis
     getSceneWorkspaceState: vi.fn().mockResolvedValue(EMPTY_SCENE_WORKSPACE_STATE),
     getSceneObjectChildren: vi.fn(),
     getSceneObjectInspector: vi.fn(),
+    createSceneChild: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    duplicateSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    deleteSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneObjectActive: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     ...overrides,
   } as AnalysisRepository;
 }
