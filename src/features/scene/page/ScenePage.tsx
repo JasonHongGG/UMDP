@@ -26,9 +26,11 @@ export function ScenePage() {
     selectedObjectAddress,
     setSelectedObjectAddress,
     childrenByParent,
+    childTaskByParent,
     loadingChildrenByParent,
     childErrorByParent,
     ensureSceneObjectChildrenLoaded,
+    stopSceneObjectChildrenObservation,
     sceneInspector,
     sceneInspectorTaskState,
     sceneInspectorLoading,
@@ -65,17 +67,18 @@ export function ScenePage() {
       return;
     }
 
-    setExpandedNodes((previous) => {
-      const nextExpanded = !previous[node.objectAddress];
-      if (nextExpanded && node.hasChildren) {
-        ensureSceneObjectChildrenLoaded(node.objectAddress).catch(() => undefined);
-      }
+    const nextExpanded = !(expandedNodes[node.objectAddress] ?? false);
+    setExpandedNodes((previous) => ({
+      ...previous,
+      [node.objectAddress]: nextExpanded,
+    }));
 
-      return {
-        ...previous,
-        [node.objectAddress]: nextExpanded,
-      };
-    });
+    if (nextExpanded && node.hasChildren) {
+      ensureSceneObjectChildrenLoaded(node.objectAddress).catch(() => undefined);
+      return;
+    }
+
+    stopSceneObjectChildrenObservation(node.objectAddress);
   };
 
   const summary = useMemo(() => {
@@ -152,6 +155,7 @@ export function ScenePage() {
                         expandedNodes={expandedNodes}
                         onToggle={toggleNode}
                         childrenByParent={childrenByParent}
+                        childTaskByParent={childTaskByParent}
                         loadingChildrenByParent={loadingChildrenByParent}
                         childErrorByParent={childErrorByParent}
                       />
@@ -441,6 +445,7 @@ function SceneNodeRow({
   expandedNodes,
   onToggle,
   childrenByParent,
+  childTaskByParent,
   loadingChildrenByParent,
   childErrorByParent,
 }: {
@@ -451,10 +456,12 @@ function SceneNodeRow({
   expandedNodes: Record<string, boolean>;
   onToggle: (node: RuntimeSceneNodeSummary) => void;
   childrenByParent: Record<string, RuntimeSceneNodeSummary[]>;
+  childTaskByParent: Record<string, { loadedCount: number; totalCount: number; status: string }>;
   loadingChildrenByParent: Record<string, boolean>;
   childErrorByParent: Record<string, string | null>;
 }) {
   const children = childrenByParent[node.objectAddress] ?? [];
+  const taskState = childTaskByParent[node.objectAddress] ?? null;
   const loading = loadingChildrenByParent[node.objectAddress];
   const childError = childErrorByParent[node.objectAddress];
   const hasLoadedChildren = Object.prototype.hasOwnProperty.call(childrenByParent, node.objectAddress);
@@ -481,7 +488,11 @@ function SceneNodeRow({
 
       {expanded ? (
         <div>
-          {loading ? <div className="ml-10 px-4 py-1 text-xs text-cyan-300">Loading children...</div> : null}
+          {loading ? (
+            <div className="ml-10 px-4 py-1 text-xs text-cyan-300">
+              Loading children {taskState?.loadedCount ?? 0}/{taskState?.totalCount ?? node.childCount}...
+            </div>
+          ) : null}
           {childError ? <div className="ml-10 px-4 py-1 text-xs text-rose-300">{childError}</div> : null}
           {children.map((child) => (
             <SceneNodeRow
@@ -493,6 +504,7 @@ function SceneNodeRow({
               expandedNodes={expandedNodes}
               onToggle={onToggle}
               childrenByParent={childrenByParent}
+              childTaskByParent={childTaskByParent}
               loadingChildrenByParent={loadingChildrenByParent}
               childErrorByParent={childErrorByParent}
             />

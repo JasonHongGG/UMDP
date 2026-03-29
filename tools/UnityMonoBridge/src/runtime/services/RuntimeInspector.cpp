@@ -124,6 +124,14 @@ SceneChildrenResponse RuntimeInspector::LoadSceneChildren(const BridgeRequest& r
     return scene_service_.LoadSceneChildren(*request.object_address);
 }
 
+SceneChildrenPageResponse RuntimeInspector::LoadSceneChildrenPage(const BridgeRequest& request) const
+{
+    return scene_service_.LoadSceneChildrenPage(
+        *request.object_address,
+        request.offset.value_or(0),
+        request.limit.value_or(24));
+}
+
 SceneObjectInspectorHeaderResponse RuntimeInspector::InspectSceneObjectHeader(const BridgeRequest& request) const
 {
     return scene_service_.InspectSceneObjectHeader(*request.object_address);

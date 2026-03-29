@@ -21,6 +21,7 @@ public:
     RuntimeFieldSetResponse SetFieldValue(const BridgeRequest& request) const;
     SceneCatalogResponse LoadSceneCatalog(const BridgeRequest& request) const;
     SceneChildrenResponse LoadSceneChildren(const BridgeRequest& request) const;
+    SceneChildrenPageResponse LoadSceneChildrenPage(const BridgeRequest& request) const;
     SceneObjectInspectorHeaderResponse InspectSceneObjectHeader(const BridgeRequest& request) const;
     SceneChildrenPageResponse InspectSceneObjectChildrenPage(const BridgeRequest& request) const;
     SceneComponentsPageResponse InspectSceneObjectComponentsPage(const BridgeRequest& request) const;

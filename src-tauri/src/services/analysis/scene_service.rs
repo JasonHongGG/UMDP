@@ -3,6 +3,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneChildrenPageSnapshot,
     RuntimeSceneComponentSummary, RuntimeSceneDescriptor, RuntimeSceneNodeSummary,
     RuntimeSceneComponentsPageSnapshot, RuntimeSceneObjectInspectorHeaderSnapshot,
+    RuntimeSceneObjectChildrenTaskState,
     RuntimeSceneObjectInspectorTaskState,
     RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneTransformSnapshot,
@@ -27,6 +28,7 @@ fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
     );
 }
 
+const TREE_CHILDREN_PAGE_SIZE: usize = 24;
 const INSPECTOR_CHILDREN_PAGE_SIZE: usize = 64;
 const INSPECTOR_COMPONENTS_PAGE_SIZE: usize = 64;
 
@@ -175,6 +177,7 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
     let scene_count = snapshot.scenes.len();
     let root_count = snapshot.scenes.iter().map(|scene| scene.roots.len()).sum::<usize>();
     let workspace = state.scene.set_snapshot(snapshot);
+    state.scene_children.reset();
     state.scene_inspector.reset();
     log_scene_duration(
         "start_scene_refresh",
@@ -182,6 +185,54 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
         &format!("scene_count={scene_count} root_count={root_count}"),
     );
     Ok(workspace)
+}
+
+pub fn start_scene_object_children_analysis(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
+    let started_at = Instant::now();
+    ensure_attached_session(state)?;
+    ensure_scene_bridge_session_started(app, state)?;
+
+    let task_start = state.scene_children.start_task(object_address.to_string());
+    if task_start.should_spawn {
+        let app_handle = app.clone();
+        let object_address = object_address.to_string();
+        let task_id = task_start.state.task_id;
+        let mutation_epoch = task_start.state.mutation_epoch;
+        tauri::async_runtime::spawn_blocking(move || {
+            let state = app_handle.state::<AppState>();
+            run_scene_object_children_task(&app_handle, &state, &object_address, task_id, mutation_epoch);
+        });
+    }
+
+    log_scene_duration(
+        "start_scene_object_children_analysis",
+        started_at,
+        &format!(
+            "object_address={object_address} task_id={} spawn={}",
+            task_start.state.task_id,
+            task_start.should_spawn
+        ),
+    );
+    Ok(task_start.state)
+}
+
+pub fn get_scene_object_children_state(
+    state: &AppState,
+    object_address: &str,
+) -> Option<RuntimeSceneObjectChildrenTaskState> {
+    state.scene_children.current(object_address)
+}
+
+pub fn cancel_scene_object_children_analysis(
+    state: &AppState,
+    object_address: &str,
+    task_id: Option<u64>,
+) -> Option<RuntimeSceneObjectChildrenTaskState> {
+    state.scene_children.cancel(object_address, task_id)
 }
 
 pub fn start_scene_object_inspector_analysis(
@@ -279,6 +330,7 @@ pub fn create_scene_child(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_child_creation(app, state, parent_object_address, name))?;
+    invalidate_scene_children_after_mutation(state, &snapshot);
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "create_scene_child",
@@ -301,6 +353,7 @@ pub fn duplicate_scene_object(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_object_duplicate(app, state, object_address))?;
+    invalidate_scene_children_after_mutation(state, &snapshot);
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "duplicate_scene_object",
@@ -323,6 +376,7 @@ pub fn delete_scene_object(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_object_delete(app, state, object_address))?;
+    invalidate_scene_children_after_mutation(state, &snapshot);
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "delete_scene_object",
@@ -415,6 +469,59 @@ fn load_scene_children(
         "load_scene_children",
         started_at,
         &format!("pid={} object_address={} child_count={}", attached.pid, object_address, snapshot.children.len()),
+    );
+    Ok(snapshot)
+}
+
+fn load_scene_children_page(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<RuntimeSceneChildrenPageSnapshot, String> {
+    let started_at = Instant::now();
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneChildrenPageResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneObjectChildrenPageLoad,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-children-page".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--object-address".into(),
+                object_address.to_string(),
+                "--offset".into(),
+                offset.to_string(),
+                "--limit".into(),
+                limit.to_string(),
+            ],
+        },
+    )?;
+
+    let snapshot = RuntimeSceneChildrenPageSnapshot {
+        generated_at: helper.generated_at,
+        parent_object_address: helper.parent_object_address,
+        offset: helper.offset,
+        total_count: helper.total_count,
+        next_offset: helper.next_offset,
+        children: helper.children.into_iter().map(map_scene_node_summary).collect(),
+    };
+    log_scene_duration(
+        "load_scene_children_page",
+        started_at,
+        &format!(
+            "pid={} object_address={} offset={} loaded={} total={}",
+            attached.pid,
+            object_address,
+            snapshot.offset,
+            snapshot.children.len(),
+            snapshot.total_count
+        ),
     );
     Ok(snapshot)
 }
@@ -801,6 +908,20 @@ fn map_scene_mutation(value: HelperSceneMutationResponse) -> RuntimeSceneMutatio
 }
 
 fn invalidate_scene_inspector_after_mutation(state: &AppState, result: &RuntimeSceneMutationResult) {
+    let impacted = collect_impacted_object_addresses(result);
+    state.scene_inspector.invalidate_related(&impacted);
+}
+
+fn invalidate_scene_children_after_mutation(state: &AppState, result: &RuntimeSceneMutationResult) {
+    if matches!(result.operation, RuntimeSceneMutationOperation::SetActive) {
+        return;
+    }
+
+    let impacted = collect_impacted_object_addresses(result);
+    state.scene_children.invalidate_related(&impacted);
+}
+
+fn collect_impacted_object_addresses(result: &RuntimeSceneMutationResult) -> Vec<String> {
     let mut impacted = Vec::new();
     if let Some(target) = result.target_object_address.as_ref() {
         impacted.push(target.clone());
@@ -816,7 +937,44 @@ fn invalidate_scene_inspector_after_mutation(state: &AppState, result: &RuntimeS
     }
     impacted.sort();
     impacted.dedup();
-    state.scene_inspector.invalidate_related(&impacted);
+    impacted
+}
+
+fn run_scene_object_children_task(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    task_id: u64,
+    mutation_epoch: u64,
+) {
+    let mut child_offset = 0usize;
+    loop {
+        let page = match execute_runtime_operation(state, || {
+            load_scene_children_page(app, state, object_address, child_offset, TREE_CHILDREN_PAGE_SIZE)
+        }) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                state.scene_children.fail(object_address, task_id, mutation_epoch, error);
+                return;
+            }
+        };
+
+        let next_offset = page.next_offset;
+        if state
+            .scene_children
+            .apply_children(object_address, task_id, mutation_epoch, page.children, page.total_count, next_offset)
+            .is_none()
+        {
+            return;
+        }
+
+        match next_offset {
+            Some(next) => child_offset = next,
+            None => break,
+        }
+    }
+
+    state.scene_children.complete(object_address, task_id, mutation_epoch);
 }
 
 fn run_scene_object_inspector_task(

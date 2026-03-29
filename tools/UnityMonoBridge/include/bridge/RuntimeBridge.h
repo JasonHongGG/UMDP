@@ -23,6 +23,7 @@ public:
     RuntimeFieldSetResponse ExecuteSetField(const BridgeRequest& request);
     SceneCatalogResponse ExecuteSceneCatalog(const BridgeRequest& request);
     SceneChildrenResponse ExecuteSceneChildren(const BridgeRequest& request);
+    SceneChildrenPageResponse ExecuteSceneChildrenPage(const BridgeRequest& request);
     SceneObjectInspectorHeaderResponse ExecuteSceneInspectHeader(const BridgeRequest& request);
     SceneChildrenPageResponse ExecuteSceneInspectChildrenPage(const BridgeRequest& request);
     SceneComponentsPageResponse ExecuteSceneInspectComponentsPage(const BridgeRequest& request);

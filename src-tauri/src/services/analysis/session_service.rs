@@ -14,6 +14,7 @@ fn same_metadata_source(left: &ProcessSession, right: &ProcessSession) -> bool {
 pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
     state.bridge.reset();
     state.scene.reset();
+    state.scene_children.reset();
     state.scene_inspector.reset();
 
     let mut sys = System::new_all();

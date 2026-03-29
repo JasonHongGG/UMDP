@@ -16,6 +16,7 @@ enum class BridgeOperation {
     SetField,
     LoadSceneCatalog,
     LoadSceneChildren,
+    LoadSceneChildrenPage,
     InspectSceneObject,
     InspectSceneObjectHeader,
     InspectSceneObjectChildrenPage,

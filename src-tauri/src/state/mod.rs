@@ -1,5 +1,6 @@
 use crate::domain::analysis_models::{
     AnalysisSnapshot, ProcessSession, RuntimeFlavor, RuntimeSceneCatalogSnapshot,
+    RuntimeSceneChildrenTaskStatus, RuntimeSceneObjectChildrenTaskState,
     RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus,
     RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
     RuntimeSceneObjectInspectorTaskState, SceneRefreshStatus, SceneWorkspaceState,
@@ -83,6 +84,31 @@ impl SceneState {
 }
 
 #[derive(Clone)]
+struct SceneChildrenCacheEntry {
+    mutation_epoch: u64,
+    children: Vec<RuntimeSceneNodeSummary>,
+    total_count: usize,
+}
+
+#[derive(Default)]
+struct SceneChildrenStore {
+    tasks_by_parent: HashMap<String, RuntimeSceneObjectChildrenTaskState>,
+    cache: HashMap<String, SceneChildrenCacheEntry>,
+    next_task_id: u64,
+    mutation_epoch: u64,
+}
+
+pub struct SceneChildrenTaskStart {
+    pub state: RuntimeSceneObjectChildrenTaskState,
+    pub should_spawn: bool,
+}
+
+#[derive(Default)]
+pub struct SceneChildrenState {
+    store: Mutex<SceneChildrenStore>,
+}
+
+#[derive(Clone)]
 struct SceneInspectorCacheEntry {
     mutation_epoch: u64,
     header: RuntimeSceneObjectInspectorHeaderSnapshot,
@@ -112,6 +138,20 @@ fn summary_matches_object(summary: &RuntimeSceneNodeSummary, object_address: &st
     summary.object_address == object_address
 }
 
+fn scene_children_cache_entry_impacted(
+    parent_object_address: &str,
+    entry: &SceneChildrenCacheEntry,
+    impacted: &[&str],
+) -> bool {
+    impacted.contains(&parent_object_address)
+        || entry.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+}
+
+fn scene_children_task_impacted(task: &RuntimeSceneObjectChildrenTaskState, impacted: &[&str]) -> bool {
+    impacted.contains(&task.parent_object_address.as_str())
+        || task.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+}
+
 fn cache_entry_impacted(entry: &SceneInspectorCacheEntry, impacted: &[&str]) -> bool {
     if impacted.iter().any(|address| summary_matches_object(&entry.header.object, address)) {
         return true;
@@ -127,6 +167,188 @@ fn cache_entry_impacted(entry: &SceneInspectorCacheEntry, impacted: &[&str]) -> 
     }
 
     entry.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+}
+
+impl SceneChildrenState {
+    pub fn current(&self, parent_object_address: &str) -> Option<RuntimeSceneObjectChildrenTaskState> {
+        self.store.lock().tasks_by_parent.get(parent_object_address).cloned()
+    }
+
+    pub fn start_task(&self, parent_object_address: String) -> SceneChildrenTaskStart {
+        let mut store = self.store.lock();
+
+        if let Some(current) = store.tasks_by_parent.get(&parent_object_address) {
+            if current.mutation_epoch == store.mutation_epoch
+                && !current.is_stale
+                && !matches!(current.status, RuntimeSceneChildrenTaskStatus::Error | RuntimeSceneChildrenTaskStatus::Cancelled)
+            {
+                return SceneChildrenTaskStart {
+                    state: current.clone(),
+                    should_spawn: false,
+                };
+            }
+        }
+
+        let now = crate::services::analysis::bridge_gateway::current_timestamp();
+        let mut state = RuntimeSceneObjectChildrenTaskState {
+            parent_object_address: parent_object_address.clone(),
+            status: RuntimeSceneChildrenTaskStatus::Loading,
+            mutation_epoch: store.mutation_epoch,
+            started_at: now.clone(),
+            updated_at: now,
+            ..RuntimeSceneObjectChildrenTaskState::default()
+        };
+
+        if let Some(cached) = store.cache.get(&parent_object_address).cloned() {
+            if cached.mutation_epoch == store.mutation_epoch {
+                store.next_task_id += 1;
+                state.task_id = store.next_task_id;
+                state.status = RuntimeSceneChildrenTaskStatus::Ready;
+                state.children = cached.children.clone();
+                state.total_count = cached.total_count;
+                state.loaded_count = state.children.len();
+                store.tasks_by_parent.insert(parent_object_address, state.clone());
+                return SceneChildrenTaskStart {
+                    state,
+                    should_spawn: false,
+                };
+            }
+        }
+
+        store.next_task_id += 1;
+        state.task_id = store.next_task_id;
+        store.tasks_by_parent.insert(parent_object_address, state.clone());
+        SceneChildrenTaskStart {
+            state,
+            should_spawn: true,
+        }
+    }
+
+    pub fn cancel(
+        &self,
+        parent_object_address: &str,
+        task_id: Option<u64>,
+    ) -> Option<RuntimeSceneObjectChildrenTaskState> {
+        let mut store = self.store.lock();
+        let current = store.tasks_by_parent.get_mut(parent_object_address)?;
+        if task_id.is_some_and(|value| value != current.task_id) {
+            return Some(current.clone());
+        }
+
+        current.status = RuntimeSceneChildrenTaskStatus::Cancelled;
+        current.is_stale = true;
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn apply_children(
+        &self,
+        parent_object_address: &str,
+        task_id: u64,
+        mutation_epoch: u64,
+        children: Vec<RuntimeSceneNodeSummary>,
+        total_count: usize,
+        next_offset: Option<usize>,
+    ) -> Option<RuntimeSceneObjectChildrenTaskState> {
+        let mut store = self.store.lock();
+        let current = store.tasks_by_parent.get_mut(parent_object_address)?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.children.extend(children);
+        current.total_count = total_count;
+        current.loaded_count = current.children.len();
+        current.next_offset = next_offset;
+        current.status = if next_offset.is_some() {
+            RuntimeSceneChildrenTaskStatus::Loading
+        } else {
+            RuntimeSceneChildrenTaskStatus::Ready
+        };
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn complete(
+        &self,
+        parent_object_address: &str,
+        task_id: u64,
+        mutation_epoch: u64,
+    ) -> Option<RuntimeSceneObjectChildrenTaskState> {
+        let mut store = self.store.lock();
+        let current = store.tasks_by_parent.get_mut(parent_object_address)?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.status = RuntimeSceneChildrenTaskStatus::Ready;
+        current.next_offset = None;
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+
+        let ready_state = current.clone();
+        store.cache.insert(
+            parent_object_address.to_string(),
+            SceneChildrenCacheEntry {
+                mutation_epoch,
+                children: ready_state.children.clone(),
+                total_count: ready_state.total_count.max(ready_state.children.len()),
+            },
+        );
+        Some(ready_state)
+    }
+
+    pub fn fail(
+        &self,
+        parent_object_address: &str,
+        task_id: u64,
+        mutation_epoch: u64,
+        error_message: String,
+    ) -> Option<RuntimeSceneObjectChildrenTaskState> {
+        let mut store = self.store.lock();
+        let current = store.tasks_by_parent.get_mut(parent_object_address)?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.status = RuntimeSceneChildrenTaskStatus::Error;
+        current.error_message = Some(error_message);
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn invalidate_related(&self, impacted_addresses: &[String]) {
+        let mut store = self.store.lock();
+        store.mutation_epoch += 1;
+
+        if impacted_addresses.is_empty() {
+            store.cache.clear();
+        } else {
+            let impacted_refs = impacted_addresses.iter().map(String::as_str).collect::<Vec<_>>();
+            store.cache.retain(|parent_object_address, entry| {
+                !scene_children_cache_entry_impacted(parent_object_address, entry, &impacted_refs)
+            });
+        }
+
+        let impacted_refs = impacted_addresses.iter().map(String::as_str).collect::<Vec<_>>();
+        for task in store.tasks_by_parent.values_mut() {
+            if impacted_addresses.is_empty() || scene_children_task_impacted(task, &impacted_refs) {
+                task.is_stale = true;
+                if !matches!(
+                    task.status,
+                    RuntimeSceneChildrenTaskStatus::Ready
+                        | RuntimeSceneChildrenTaskStatus::Error
+                        | RuntimeSceneChildrenTaskStatus::Cancelled
+                ) {
+                    task.status = RuntimeSceneChildrenTaskStatus::Cancelled;
+                }
+                task.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+            }
+        }
+    }
+
+    pub fn reset(&self) {
+        *self.store.lock() = SceneChildrenStore::default();
+    }
 }
 
 impl SceneInspectorState {
@@ -717,6 +939,7 @@ pub struct AppState {
     pub analysis: AnalysisState,
     pub bridge: BridgeClientState,
     pub scene: SceneState,
+    pub scene_children: SceneChildrenState,
     pub scene_inspector: SceneInspectorState,
     pub workspace: WorkspaceState,
 }
@@ -731,7 +954,8 @@ impl AppState {
 mod tests {
     use super::*;
     use crate::domain::analysis_models::{
-        ProcessSession, RuntimeFlavor, RuntimeSceneComponentSummary,
+        ProcessSession, RuntimeFlavor, RuntimeSceneChildrenTaskStatus,
+        RuntimeSceneComponentSummary,
         RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
     };
 
@@ -841,5 +1065,41 @@ mod tests {
         assert_eq!(current.task_id, started.state.task_id);
         assert!(current.is_stale);
         assert_eq!(current.status, RuntimeSceneInspectorTaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn scene_children_cache_completed_results() {
+        let children_state = SceneChildrenState::default();
+        let started = children_state.start_task("0x10".to_string());
+        assert!(started.should_spawn);
+
+        children_state.apply_children(
+            "0x10",
+            started.state.task_id,
+            started.state.mutation_epoch,
+            vec![sample_node("0x11")],
+            1,
+            None,
+        );
+        children_state.complete("0x10", started.state.task_id, started.state.mutation_epoch);
+
+        let cached = children_state.start_task("0x10".to_string());
+        assert!(!cached.should_spawn);
+        assert_eq!(cached.state.status, RuntimeSceneChildrenTaskStatus::Ready);
+        assert_eq!(cached.state.loaded_count, 1);
+        assert_eq!(cached.state.total_count, 1);
+    }
+
+    #[test]
+    fn scene_children_invalidation_marks_running_tasks_stale() {
+        let children_state = SceneChildrenState::default();
+        let started = children_state.start_task("0x10".to_string());
+
+        children_state.invalidate_related(&["0x10".to_string()]);
+
+        let current = children_state.current("0x10").expect("expected current children task");
+        assert_eq!(current.task_id, started.state.task_id);
+        assert!(current.is_stale);
+        assert_eq!(current.status, RuntimeSceneChildrenTaskStatus::Cancelled);
     }
 }

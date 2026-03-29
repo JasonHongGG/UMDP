@@ -7,6 +7,7 @@ import type {
   RuntimeOverlaySnapshot,
   RuntimeSceneChildrenSnapshot,
   RuntimeSceneMutationResult,
+  RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneObjectInspectorSnapshot,
   SceneWorkspaceState,
@@ -17,12 +18,20 @@ function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-async function timedInvoke<T>(label: string, command: string, args?: Record<string, unknown>): Promise<T> {
+async function timedInvoke<T>(
+  label: string,
+  command: string,
+  args?: Record<string, unknown>,
+  options?: { logSuccess?: boolean },
+): Promise<T> {
   const startedAt = nowMs();
+  const logSuccess = options?.logSuccess ?? true;
 
   try {
     const result = await invoke<T>(command, args);
-    console.log(`[perf][tauri] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`);
+    if (logSuccess) {
+      console.log(`[perf][tauri] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`);
+    }
     return result;
   } catch (error) {
     console.log(`[perf][tauri] ${label} failed in ${(nowMs() - startedAt).toFixed(1)}ms`, error);
@@ -53,6 +62,24 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     getSceneObjectChildren(objectAddress: string) {
       return timedInvoke<RuntimeSceneChildrenSnapshot>('get_scene_object_children', 'get_scene_object_children', { objectAddress });
     },
+    startSceneObjectChildrenAnalysis(objectAddress: string) {
+      return timedInvoke<RuntimeSceneObjectChildrenTaskState | null>('start_scene_object_children_analysis', 'start_scene_object_children_analysis', { objectAddress });
+    },
+    getSceneObjectChildrenState(objectAddress: string) {
+      return timedInvoke<RuntimeSceneObjectChildrenTaskState | null>(
+        'get_scene_object_children_state',
+        'get_scene_object_children_state',
+        { objectAddress },
+        { logSuccess: false },
+      );
+    },
+    cancelSceneObjectChildrenAnalysis(objectAddress: string, taskId?: number) {
+      return timedInvoke<RuntimeSceneObjectChildrenTaskState | null>(
+        'cancel_scene_object_children_analysis',
+        'cancel_scene_object_children_analysis',
+        taskId == null ? { objectAddress } : { objectAddress, taskId },
+      );
+    },
     getSceneObjectInspector(objectAddress: string) {
       return timedInvoke<RuntimeSceneObjectInspectorSnapshot>('get_scene_object_inspector', 'get_scene_object_inspector', { objectAddress });
     },
@@ -60,7 +87,12 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
       return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('start_scene_object_inspector_analysis', 'start_scene_object_inspector_analysis', { objectAddress });
     },
     getSceneObjectInspectorState() {
-      return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('get_scene_object_inspector_state', 'get_scene_object_inspector_state');
+      return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>(
+        'get_scene_object_inspector_state',
+        'get_scene_object_inspector_state',
+        undefined,
+        { logSuccess: false },
+      );
     },
     cancelSceneObjectInspectorAnalysis(taskId?: number) {
       return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('cancel_scene_object_inspector_analysis', 'cancel_scene_object_inspector_analysis', taskId == null ? undefined : { taskId });

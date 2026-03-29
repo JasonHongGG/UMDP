@@ -27,6 +27,7 @@ public:
 
     SceneCatalogResponse LoadSceneCatalog() const;
     SceneChildrenResponse LoadSceneChildren(Address object_address) const;
+    SceneChildrenPageResponse LoadSceneChildrenPage(Address object_address, std::size_t offset, std::size_t limit) const;
     SceneObjectInspectorHeaderResponse InspectSceneObjectHeader(Address object_address) const;
     SceneChildrenPageResponse LoadSceneInspectorChildrenPage(Address object_address, std::size_t offset, std::size_t limit) const;
     SceneComponentsPageResponse LoadSceneInspectorComponentsPage(Address object_address, std::size_t offset, std::size_t limit) const;

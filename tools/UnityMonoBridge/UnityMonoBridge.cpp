@@ -28,6 +28,8 @@ const char* ProtocolOperationName(bridge::BridgeOperation operation)
         return "scene-catalog-load";
     case bridge::BridgeOperation::LoadSceneChildren:
         return "scene-object-children-load";
+    case bridge::BridgeOperation::LoadSceneChildrenPage:
+        return "scene-object-children-page-load";
     case bridge::BridgeOperation::InspectSceneObject:
         return "scene-object-inspect";
     case bridge::BridgeOperation::InspectSceneObjectHeader:
@@ -74,6 +76,9 @@ std::string ExecuteRequest(bridge::RuntimeBridge& runtime_bridge, const bridge::
     }
     if (request.operation == bridge::BridgeOperation::LoadSceneChildren) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneChildren(request));
+    }
+    if (request.operation == bridge::BridgeOperation::LoadSceneChildrenPage) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneChildrenPage(request));
     }
     if (request.operation == bridge::BridgeOperation::InspectSceneObjectHeader) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspectHeader(request));

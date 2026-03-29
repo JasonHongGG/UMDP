@@ -259,6 +259,29 @@ export interface RuntimeSceneChildrenPageSnapshot {
   children: RuntimeSceneNodeSummary[];
 }
 
+export type RuntimeSceneChildrenTaskStatus =
+  | 'idle'
+  | 'queued'
+  | 'loading'
+  | 'ready'
+  | 'error'
+  | 'cancelled';
+
+export interface RuntimeSceneObjectChildrenTaskState {
+  taskId: number;
+  parentObjectAddress: string;
+  status: RuntimeSceneChildrenTaskStatus;
+  mutationEpoch: number;
+  startedAt: string;
+  updatedAt: string;
+  children: RuntimeSceneNodeSummary[];
+  totalCount: number;
+  loadedCount: number;
+  nextOffset: number | null;
+  errorMessage: string | null;
+  isStale: boolean;
+}
+
 export interface RuntimeSceneComponentsPageSnapshot {
   generatedAt: string;
   objectAddress: string;

@@ -220,6 +220,30 @@ SceneChildrenResponse SceneService::LoadSceneChildren(Address object_address) co
     return response;
 }
 
+SceneChildrenPageResponse SceneService::LoadSceneChildrenPage(Address object_address, std::size_t offset, std::size_t limit) const
+{
+    const auto started_at = PerfClock::now();
+    SceneChildrenPageResponse response;
+    response.generated_at = CurrentTimestamp();
+    response.parent_object_address = FormatAddress(object_address);
+    response.offset = offset;
+    response.children = LoadChildrenForObject(
+        object_address,
+        NodeSummaryFlavor::Catalog,
+        offset,
+        limit,
+        &response.total_count,
+        &response.next_offset);
+    LogScenePerf(
+        "load_scene_children_page",
+        started_at,
+        "parent_object=" + response.parent_object_address
+            + " offset=" + std::to_string(response.offset)
+            + " loaded=" + std::to_string(response.children.size())
+            + " total=" + std::to_string(response.total_count));
+    return response;
+}
+
 SceneObjectInspectorHeaderResponse SceneService::InspectSceneObjectHeader(Address object_address) const
 {
     const auto started_at = PerfClock::now();

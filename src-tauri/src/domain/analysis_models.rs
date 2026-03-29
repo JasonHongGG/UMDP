@@ -369,6 +369,40 @@ pub struct RuntimeSceneChildrenPageSnapshot {
     pub children: Vec<RuntimeSceneNodeSummary>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneChildrenTaskStatus {
+    Idle,
+    Queued,
+    Loading,
+    Ready,
+    Error,
+    Cancelled,
+}
+
+impl Default for RuntimeSceneChildrenTaskStatus {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneObjectChildrenTaskState {
+    pub task_id: u64,
+    pub parent_object_address: String,
+    pub status: RuntimeSceneChildrenTaskStatus,
+    pub mutation_epoch: u64,
+    pub started_at: String,
+    pub updated_at: String,
+    pub children: Vec<RuntimeSceneNodeSummary>,
+    pub total_count: usize,
+    pub loaded_count: usize,
+    pub next_offset: Option<usize>,
+    pub error_message: Option<String>,
+    pub is_stale: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneComponentsPageSnapshot {
