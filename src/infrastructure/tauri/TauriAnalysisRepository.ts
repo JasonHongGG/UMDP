@@ -7,6 +7,7 @@ import type {
   RuntimeOverlaySnapshot,
   RuntimeSceneChildrenSnapshot,
   RuntimeSceneMutationResult,
+  RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneObjectInspectorSnapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -54,6 +55,15 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     },
     getSceneObjectInspector(objectAddress: string) {
       return timedInvoke<RuntimeSceneObjectInspectorSnapshot>('get_scene_object_inspector', 'get_scene_object_inspector', { objectAddress });
+    },
+    startSceneObjectInspectorAnalysis(objectAddress: string) {
+      return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('start_scene_object_inspector_analysis', 'start_scene_object_inspector_analysis', { objectAddress });
+    },
+    getSceneObjectInspectorState() {
+      return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('get_scene_object_inspector_state', 'get_scene_object_inspector_state');
+    },
+    cancelSceneObjectInspectorAnalysis(taskId?: number) {
+      return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('cancel_scene_object_inspector_analysis', 'cancel_scene_object_inspector_analysis', taskId == null ? undefined : { taskId });
     },
     createSceneChild(parentObjectAddress: string, name: string) {
       return timedInvoke<RuntimeSceneMutationResult>('create_scene_child', 'create_scene_child', { parentObjectAddress, name });

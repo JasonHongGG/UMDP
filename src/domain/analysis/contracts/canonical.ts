@@ -250,6 +250,63 @@ export interface RuntimeSceneChildrenSnapshot {
   children: RuntimeSceneNodeSummary[];
 }
 
+export interface RuntimeSceneChildrenPageSnapshot {
+  generatedAt: string;
+  parentObjectAddress: string;
+  offset: number;
+  totalCount: number;
+  nextOffset: number | null;
+  children: RuntimeSceneNodeSummary[];
+}
+
+export interface RuntimeSceneComponentsPageSnapshot {
+  generatedAt: string;
+  objectAddress: string;
+  offset: number;
+  totalCount: number;
+  nextOffset: number | null;
+  components: RuntimeSceneComponentSummary[];
+}
+
+export interface RuntimeSceneObjectInspectorHeaderSnapshot {
+  generatedAt: string;
+  sceneHandle: number | null;
+  sceneName: string | null;
+  object: RuntimeSceneNodeSummary;
+  parent: RuntimeSceneNodeSummary | null;
+  transform: RuntimeSceneTransformSnapshot | null;
+}
+
+export type RuntimeSceneInspectorTaskStatus =
+  | 'idle'
+  | 'queued'
+  | 'header-loading'
+  | 'children-loading'
+  | 'components-loading'
+  | 'ready'
+  | 'error'
+  | 'cancelled';
+
+export interface RuntimeSceneObjectInspectorTaskState {
+  taskId: number;
+  objectAddress: string;
+  status: RuntimeSceneInspectorTaskStatus;
+  mutationEpoch: number;
+  startedAt: string;
+  updatedAt: string;
+  header: RuntimeSceneObjectInspectorHeaderSnapshot | null;
+  children: RuntimeSceneNodeSummary[];
+  childrenTotalCount: number;
+  childrenLoadedCount: number;
+  childrenNextOffset: number | null;
+  components: RuntimeSceneComponentSummary[];
+  componentsTotalCount: number;
+  componentsLoadedCount: number;
+  componentsNextOffset: number | null;
+  errorMessage: string | null;
+  isStale: boolean;
+}
+
 export interface RuntimeSceneObjectInspectorSnapshot {
   generatedAt: string;
   sceneHandle: number | null;

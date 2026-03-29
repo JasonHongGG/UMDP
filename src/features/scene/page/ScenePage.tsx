@@ -30,7 +30,10 @@ export function ScenePage() {
     childErrorByParent,
     ensureSceneObjectChildrenLoaded,
     sceneInspector,
+    sceneInspectorTaskState,
     sceneInspectorLoading,
+    sceneInspectorChildrenLoading,
+    sceneInspectorComponentsLoading,
     sceneInspectorError,
     createSceneChild,
     duplicateSceneObject,
@@ -179,7 +182,12 @@ export function ScenePage() {
                 <div className="mt-2 text-sm text-slate-500">{sceneInspector?.sceneName ?? 'Unknown Scene'}</div>
               </div>
               <div className="text-right text-xs text-slate-500">
-                {sceneInspectorLoading ? <div className="text-cyan-300">Loading...</div> : null}
+                {sceneInspectorLoading ? <div className="text-cyan-300">Analyzing...</div> : null}
+                {sceneInspectorTaskState ? (
+                  <div className="mt-1 text-slate-400">
+                    {sceneInspectorTaskState.childrenLoadedCount}/{sceneInspectorTaskState.childrenTotalCount} children, {sceneInspectorTaskState.componentsLoadedCount}/{sceneInspectorTaskState.componentsTotalCount} components
+                  </div>
+                ) : null}
                 {sceneMutationState.loading ? <div className="text-cyan-300 mt-1">Applying {sceneMutationState.operation}...</div> : null}
               </div>
             </div>
@@ -282,7 +290,12 @@ export function ScenePage() {
 
                   <div className="space-y-6">
                     <SceneCard title="Children" icon={<Layers3 size={15} />}>
-                      {sceneInspector.children.length === 0 ? (
+                      {sceneInspectorChildrenLoading ? (
+                        <div className="text-sm text-cyan-300">
+                          Loading children {sceneInspectorTaskState?.childrenLoadedCount ?? 0}/{sceneInspectorTaskState?.childrenTotalCount ?? 0}...
+                        </div>
+                      ) : null}
+                      {!sceneInspectorChildrenLoading && sceneInspector.children.length === 0 ? (
                         <div className="text-sm text-slate-500">No immediate children.</div>
                       ) : sceneInspector.children.map((child) => (
                         <ObjectLinkCard
@@ -296,7 +309,12 @@ export function ScenePage() {
                     </SceneCard>
 
                     <SceneCard title="Components" icon={<Layers3 size={15} />}>
-                      {sceneInspector.components.length === 0 ? (
+                      {sceneInspectorComponentsLoading ? (
+                        <div className="text-sm text-cyan-300">
+                          Loading components {sceneInspectorTaskState?.componentsLoadedCount ?? 0}/{sceneInspectorTaskState?.componentsTotalCount ?? 0}...
+                        </div>
+                      ) : null}
+                      {!sceneInspectorComponentsLoading && sceneInspector.components.length === 0 ? (
                         <div className="text-sm text-slate-500">No components returned by runtime.</div>
                       ) : sceneInspector.components.map((component) => (
                         <div

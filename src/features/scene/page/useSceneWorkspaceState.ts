@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   RuntimeSceneChildrenSnapshot,
+  RuntimeSceneComponentSummary,
   RuntimeSceneMutationOperation,
   RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
+  RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneObjectInspectorSnapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -44,6 +46,43 @@ function nowMs() {
 
 function logScenePerf(label: string, startedAt: number, details?: Record<string, unknown>) {
   console.log(`[perf][scene] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`, details ?? {});
+}
+
+function isTerminalInspectorTaskStatus(status: RuntimeSceneObjectInspectorTaskState['status']) {
+  return status === 'ready' || status === 'error' || status === 'cancelled';
+}
+
+function sameNodeOrder(left: RuntimeSceneNodeSummary[], right: RuntimeSceneNodeSummary[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((node, index) => node.objectAddress === right[index]?.objectAddress);
+}
+
+function sameComponentOrder(left: RuntimeSceneComponentSummary[], right: RuntimeSceneComponentSummary[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((component, index) => component.componentAddress === right[index]?.componentAddress);
+}
+
+function buildInspectorSnapshot(taskState: RuntimeSceneObjectInspectorTaskState): RuntimeSceneObjectInspectorSnapshot | null {
+  if (!taskState.header) {
+    return null;
+  }
+
+  return {
+    generatedAt: taskState.header.generatedAt,
+    sceneHandle: taskState.header.sceneHandle,
+    sceneName: taskState.header.sceneName,
+    object: taskState.header.object,
+    parent: taskState.header.parent,
+    transform: taskState.header.transform,
+    children: taskState.children,
+    components: taskState.components,
+  };
 }
 
 function updateNodeInList(nodes: RuntimeSceneNodeSummary[], summary: RuntimeSceneNodeSummary) {
@@ -435,6 +474,7 @@ export function useSceneWorkspaceState({
   const [loadingChildrenByParent, setLoadingChildrenByParent] = useState<Record<string, boolean>>({});
   const [childErrorByParent, setChildErrorByParent] = useState<Record<string, string | null>>({});
   const [inspectorsByAddress, setInspectorsByAddress] = useState<Record<string, RuntimeSceneObjectInspectorSnapshot>>({});
+  const [inspectorTaskByAddress, setInspectorTaskByAddress] = useState<Record<string, RuntimeSceneObjectInspectorTaskState>>({});
   const [inspectorLoadingByAddress, setInspectorLoadingByAddress] = useState<Record<string, boolean>>({});
   const [inspectorErrorByAddress, setInspectorErrorByAddress] = useState<Record<string, string | null>>({});
   const [sceneMutationState, setSceneMutationState] = useState<SceneMutationState>(EMPTY_MUTATION_STATE);
@@ -442,7 +482,10 @@ export function useSceneWorkspaceState({
   const childrenByParentRef = useRef(childrenByParent);
   const loadingChildrenByParentRef = useRef(loadingChildrenByParent);
   const inspectorsByAddressRef = useRef(inspectorsByAddress);
+  const inspectorTaskByAddressRef = useRef(inspectorTaskByAddress);
   const inspectorLoadingByAddressRef = useRef(inspectorLoadingByAddress);
+  const activeInspectorTaskIdRef = useRef<number | null>(null);
+  const inspectorPollTokenRef = useRef(0);
 
   useEffect(() => {
     childrenByParentRef.current = childrenByParent;
@@ -457,6 +500,10 @@ export function useSceneWorkspaceState({
   }, [inspectorsByAddress]);
 
   useEffect(() => {
+    inspectorTaskByAddressRef.current = inspectorTaskByAddress;
+  }, [inspectorTaskByAddress]);
+
+  useEffect(() => {
     inspectorLoadingByAddressRef.current = inspectorLoadingByAddress;
   }, [inspectorLoadingByAddress]);
 
@@ -467,9 +514,12 @@ export function useSceneWorkspaceState({
     setLoadingChildrenByParent({});
     setChildErrorByParent({});
     setInspectorsByAddress({});
+    setInspectorTaskByAddress({});
     setInspectorLoadingByAddress({});
     setInspectorErrorByAddress({});
     setSceneMutationState(EMPTY_MUTATION_STATE);
+    activeInspectorTaskIdRef.current = null;
+    inspectorPollTokenRef.current += 1;
   }, []);
 
   const applySummaryPatch = useCallback((summary: RuntimeSceneNodeSummary) => {
@@ -477,6 +527,46 @@ export function useSceneWorkspaceState({
     setChildrenByParent((previous) => patchChildrenWithSummary(previous, summary));
     setInspectorsByAddress((previous) => patchInspectorsWithSummary(previous, summary));
   }, []);
+
+  const applyInspectorTaskState = useCallback((taskState: RuntimeSceneObjectInspectorTaskState) => {
+    setInspectorTaskByAddress((previous) => ({
+      ...previous,
+      [taskState.objectAddress]: taskState,
+    }));
+    setInspectorLoadingByAddress((previous) => ({
+      ...previous,
+      [taskState.objectAddress]: !isTerminalInspectorTaskStatus(taskState.status),
+    }));
+    setInspectorErrorByAddress((previous) => ({
+      ...previous,
+      [taskState.objectAddress]: taskState.errorMessage,
+    }));
+
+    const nextSnapshot = buildInspectorSnapshot(taskState);
+    if (!nextSnapshot) {
+      return;
+    }
+
+    if (nextSnapshot.parent) {
+      applySummaryPatch(nextSnapshot.parent);
+    }
+    applySummaryPatch(nextSnapshot.object);
+
+    startTransition(() => {
+      setInspectorsByAddress((previous) => mergeInspectorCaches(previous, nextSnapshot));
+      setChildrenByParent((previous) => {
+        const existing = previous[taskState.objectAddress] ?? [];
+        if (sameNodeOrder(existing, taskState.children)) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [taskState.objectAddress]: taskState.children,
+        };
+      });
+    });
+  }, [applySummaryPatch]);
 
   const bumpParentChildCount = useCallback((objectAddress: string, delta: number) => {
     setSceneWorkspace((previous) => {
@@ -511,11 +601,15 @@ export function useSceneWorkspaceState({
   }, []);
 
   const loadSceneObjectInspector = useCallback(async (objectAddress: string, force = false) => {
-    if (!force && (inspectorsByAddressRef.current[objectAddress] || inspectorLoadingByAddressRef.current[objectAddress])) {
+    const currentTask = inspectorTaskByAddressRef.current[objectAddress];
+    if (!force && (currentTask && !isTerminalInspectorTaskStatus(currentTask.status))) {
       return;
     }
 
     const startedAt = nowMs();
+    const pollToken = inspectorPollTokenRef.current + 1;
+    inspectorPollTokenRef.current = pollToken;
+    activeInspectorTaskIdRef.current = null;
     setInspectorLoadingByAddress((previous) => ({
       ...previous,
       [objectAddress]: true,
@@ -526,21 +620,37 @@ export function useSceneWorkspaceState({
     }));
 
     try {
-      const snapshot = await repository.getSceneObjectInspector(objectAddress);
-      setInspectorsByAddress((previous) => mergeInspectorCaches(previous, snapshot));
-      setChildrenByParent((previous) => ({
-        ...previous,
-        [objectAddress]: snapshot.children,
-      }));
-      if (snapshot.parent) {
-        applySummaryPatch(snapshot.parent);
+      let taskState = await repository.startSceneObjectInspectorAnalysis(objectAddress);
+      if (inspectorPollTokenRef.current !== pollToken || !taskState) {
+        return;
       }
-      applySummaryPatch(snapshot.object);
-      snapshot.children.forEach(applySummaryPatch);
-      logScenePerf(`getSceneObjectInspector:${objectAddress}`, startedAt, {
-        childCount: snapshot.children.length,
-        componentCount: snapshot.components.length,
-      });
+
+      activeInspectorTaskIdRef.current = taskState.taskId;
+      applyInspectorTaskState(taskState);
+
+      while (!isTerminalInspectorTaskStatus(taskState.status) && inspectorPollTokenRef.current === pollToken) {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        const nextTaskState = await repository.getSceneObjectInspectorState();
+        if (!nextTaskState || inspectorPollTokenRef.current !== pollToken) {
+          continue;
+        }
+        if (nextTaskState.taskId !== activeInspectorTaskIdRef.current || nextTaskState.objectAddress !== objectAddress) {
+          continue;
+        }
+
+        taskState = nextTaskState;
+        applyInspectorTaskState(taskState);
+      }
+
+      if (taskState.header) {
+        logScenePerf(`getSceneObjectInspector:${objectAddress}`, startedAt, {
+          status: taskState.status,
+          childCount: taskState.childrenLoadedCount,
+          childTotal: taskState.childrenTotalCount,
+          componentCount: taskState.componentsLoadedCount,
+          componentTotal: taskState.componentsTotalCount,
+        });
+      }
     } catch (error) {
       const message = logSceneError(`getSceneObjectInspector failed for ${objectAddress}`, error);
       setInspectorErrorByAddress((previous) => ({
@@ -548,12 +658,14 @@ export function useSceneWorkspaceState({
         [objectAddress]: message,
       }));
     } finally {
-      setInspectorLoadingByAddress((previous) => ({
-        ...previous,
-        [objectAddress]: false,
-      }));
+      if (inspectorPollTokenRef.current === pollToken) {
+        setInspectorLoadingByAddress((previous) => ({
+          ...previous,
+          [objectAddress]: false,
+        }));
+      }
     }
-  }, [applySummaryPatch, repository]);
+  }, [applyInspectorTaskState, repository]);
 
   const ensureSceneObjectChildrenLoaded = useCallback(async (objectAddress: string) => {
     if (childrenByParentRef.current[objectAddress] || loadingChildrenByParentRef.current[objectAddress]) {
@@ -654,6 +766,29 @@ export function useSceneWorkspaceState({
     if (result.object) {
       applySummaryPatch(result.object);
     }
+
+    setInspectorTaskByAddress((previous) => {
+      const impacted = [
+        result.targetObjectAddress,
+        result.parentObjectAddress,
+        result.deletedObjectAddress,
+        result.object?.objectAddress,
+      ].filter((value): value is string => Boolean(value));
+
+      if (impacted.length === 0) {
+        return previous;
+      }
+
+      let touched = false;
+      const next = { ...previous };
+      impacted.forEach((address) => {
+        if (Object.prototype.hasOwnProperty.call(next, address)) {
+          delete next[address];
+          touched = true;
+        }
+      });
+      return touched ? next : previous;
+    });
 
     switch (result.operation) {
       case 'create-child': {
@@ -820,14 +955,33 @@ export function useSceneWorkspaceState({
     }
 
     loadSceneObjectInspector(selectedObjectAddress).catch(() => undefined);
-  }, [active, loadSceneObjectInspector, selectedObjectAddress]);
+    return () => {
+      inspectorPollTokenRef.current += 1;
+      const activeTaskId = activeInspectorTaskIdRef.current;
+      activeInspectorTaskIdRef.current = null;
+      if (activeTaskId != null) {
+        repository.cancelSceneObjectInspectorAnalysis(activeTaskId).catch(() => undefined);
+      }
+    };
+  }, [active, loadSceneObjectInspector, repository, selectedObjectAddress]);
 
   const sceneInspector = useMemo(() => {
     return selectedObjectAddress ? inspectorsByAddress[selectedObjectAddress] ?? null : null;
   }, [inspectorsByAddress, selectedObjectAddress]);
 
+  const sceneInspectorTaskState = useMemo(() => {
+    return selectedObjectAddress ? inspectorTaskByAddress[selectedObjectAddress] ?? null : null;
+  }, [inspectorTaskByAddress, selectedObjectAddress]);
+
   const sceneInspectorLoading = selectedObjectAddress ? inspectorLoadingByAddress[selectedObjectAddress] ?? false : false;
   const sceneInspectorError = selectedObjectAddress ? inspectorErrorByAddress[selectedObjectAddress] ?? null : null;
+  const sceneInspectorChildrenLoading = sceneInspectorTaskState != null
+    && (sceneInspectorTaskState.status === 'children-loading'
+      || (sceneInspectorTaskState.status === 'components-loading'
+        && sceneInspectorTaskState.childrenLoadedCount < sceneInspectorTaskState.childrenTotalCount));
+  const sceneInspectorComponentsLoading = sceneInspectorTaskState != null
+    && (sceneInspectorTaskState.status === 'components-loading'
+      || (sceneInspectorTaskState.status === 'children-loading' && sceneInspectorTaskState.componentsTotalCount > 0));
 
   const sceneRootsByHandle = useMemo(() => {
     return Object.fromEntries((sceneWorkspace.snapshot?.scenes ?? []).map((scene) => [scene.sceneHandle, scene.roots]));
@@ -843,7 +997,10 @@ export function useSceneWorkspaceState({
     childErrorByParent,
     ensureSceneObjectChildrenLoaded,
     sceneInspector,
+    sceneInspectorTaskState,
     sceneInspectorLoading,
+    sceneInspectorChildrenLoading,
+    sceneInspectorComponentsLoading,
     sceneInspectorError,
     createSceneChild,
     duplicateSceneObject,

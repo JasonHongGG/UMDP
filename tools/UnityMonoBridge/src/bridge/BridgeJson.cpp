@@ -342,6 +342,67 @@ std::string SerializeResponse(const SceneChildrenResponse& response)
     return output.str();
 }
 
+std::string SerializeResponse(const SceneChildrenPageResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"generated_at\":\"" << JsonEscape(response.generated_at) << "\",";
+    output << "\"parent_object_address\":\"" << JsonEscape(response.parent_object_address) << "\",";
+    output << "\"offset\":" << response.offset << ',';
+    output << "\"total_count\":" << response.total_count << ',';
+    output << "\"next_offset\":";
+    WriteOptionalSize(output, response.next_offset);
+    output << ",\"children\":[";
+    WriteSceneNodes(output, response.children);
+    output << "]}";
+    return output.str();
+}
+
+std::string SerializeResponse(const SceneComponentsPageResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"generated_at\":\"" << JsonEscape(response.generated_at) << "\",";
+    output << "\"object_address\":\"" << JsonEscape(response.object_address) << "\",";
+    output << "\"offset\":" << response.offset << ',';
+    output << "\"total_count\":" << response.total_count << ',';
+    output << "\"next_offset\":";
+    WriteOptionalSize(output, response.next_offset);
+    output << ",\"components\":[";
+    WriteSceneComponents(output, response.components);
+    output << "]}";
+    return output.str();
+}
+
+std::string SerializeResponse(const SceneObjectInspectorHeaderResponse& response)
+{
+    std::ostringstream output;
+    output << '{'
+           << "\"generated_at\":\"" << JsonEscape(response.generated_at) << "\",";
+    output << "\"scene_handle\":";
+    WriteOptionalInt(output, response.scene_handle);
+    output << ",\"scene_name\":";
+    WriteOptionalString(output, response.scene_name);
+    output << ",\"object\":";
+    WriteSceneNode(output, response.object);
+    output << ",\"parent\":";
+    if (response.parent.has_value()) {
+        WriteSceneNode(output, *response.parent);
+    }
+    else {
+        output << "null";
+    }
+    output << ",\"transform\":";
+    if (response.transform.has_value()) {
+        WriteTransformSnapshot(output, *response.transform);
+    }
+    else {
+        output << "null";
+    }
+    output << '}';
+    return output.str();
+}
+
 std::string SerializeResponse(const SceneObjectInspectorResponse& response)
 {
     std::ostringstream output;

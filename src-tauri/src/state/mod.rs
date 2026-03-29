@@ -1,6 +1,8 @@
 use crate::domain::analysis_models::{
     AnalysisSnapshot, ProcessSession, RuntimeFlavor, RuntimeSceneCatalogSnapshot,
-    SceneRefreshStatus, SceneWorkspaceState,
+    RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus,
+    RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
+    RuntimeSceneObjectInspectorTaskState, SceneRefreshStatus, SceneWorkspaceState,
 };
 use crate::domain::bridge_protocol::BridgeOperation;
 use crate::domain::workspace::{
@@ -8,6 +10,7 @@ use crate::domain::workspace::{
     WorkspaceLifecycleStatus,
 };
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -76,6 +79,256 @@ impl SceneState {
 
     pub fn reset(&self) {
         *self.workspace.lock() = SceneWorkspaceState::default();
+    }
+}
+
+#[derive(Clone)]
+struct SceneInspectorCacheEntry {
+    mutation_epoch: u64,
+    header: RuntimeSceneObjectInspectorHeaderSnapshot,
+    children: Vec<RuntimeSceneNodeSummary>,
+    components: Vec<RuntimeSceneComponentSummary>,
+}
+
+#[derive(Default)]
+struct SceneInspectorStore {
+    current: Option<RuntimeSceneObjectInspectorTaskState>,
+    cache: HashMap<String, SceneInspectorCacheEntry>,
+    next_task_id: u64,
+    mutation_epoch: u64,
+}
+
+pub struct SceneInspectorTaskStart {
+    pub state: RuntimeSceneObjectInspectorTaskState,
+    pub use_cached: bool,
+}
+
+#[derive(Default)]
+pub struct SceneInspectorState {
+    store: Mutex<SceneInspectorStore>,
+}
+
+fn summary_matches_object(summary: &RuntimeSceneNodeSummary, object_address: &str) -> bool {
+    summary.object_address == object_address
+}
+
+fn cache_entry_impacted(entry: &SceneInspectorCacheEntry, impacted: &[&str]) -> bool {
+    if impacted.iter().any(|address| summary_matches_object(&entry.header.object, address)) {
+        return true;
+    }
+
+    if entry
+        .header
+        .parent
+        .as_ref()
+        .is_some_and(|parent| impacted.iter().any(|address| summary_matches_object(parent, address)))
+    {
+        return true;
+    }
+
+    entry.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+}
+
+impl SceneInspectorState {
+    pub fn current(&self) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        self.store.lock().current.clone()
+    }
+
+    pub fn start_task(&self, object_address: String) -> SceneInspectorTaskStart {
+        let mut store = self.store.lock();
+        store.next_task_id += 1;
+        let task_id = store.next_task_id;
+        let now = crate::services::analysis::bridge_gateway::current_timestamp();
+
+        let mut state = RuntimeSceneObjectInspectorTaskState {
+            task_id,
+            object_address: object_address.clone(),
+            status: RuntimeSceneInspectorTaskStatus::HeaderLoading,
+            mutation_epoch: store.mutation_epoch,
+            started_at: now.clone(),
+            updated_at: now,
+            ..RuntimeSceneObjectInspectorTaskState::default()
+        };
+
+        let use_cached = if let Some(cached) = store.cache.get(&object_address) {
+            if cached.mutation_epoch == store.mutation_epoch {
+                state.status = RuntimeSceneInspectorTaskStatus::Ready;
+                state.header = Some(cached.header.clone());
+                state.children = cached.children.clone();
+                state.children_total_count = state.children.len();
+                state.children_loaded_count = state.children.len();
+                state.components = cached.components.clone();
+                state.components_total_count = state.components.len();
+                state.components_loaded_count = state.components.len();
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        store.current = Some(state.clone());
+        SceneInspectorTaskStart { state, use_cached }
+    }
+
+    pub fn cancel(&self, task_id: Option<u64>) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        let mut store = self.store.lock();
+        let current = store.current.as_mut()?;
+        if task_id.is_some_and(|value| value != current.task_id) {
+            return Some(current.clone());
+        }
+
+        current.status = RuntimeSceneInspectorTaskStatus::Cancelled;
+        current.is_stale = true;
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn apply_header(
+        &self,
+        task_id: u64,
+        mutation_epoch: u64,
+        header: RuntimeSceneObjectInspectorHeaderSnapshot,
+    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        let mut store = self.store.lock();
+        let current = store.current.as_mut()?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.header = Some(header);
+        current.status = RuntimeSceneInspectorTaskStatus::ChildrenLoading;
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn apply_children(
+        &self,
+        task_id: u64,
+        mutation_epoch: u64,
+        children: Vec<RuntimeSceneNodeSummary>,
+        total_count: usize,
+        next_offset: Option<usize>,
+    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        let mut store = self.store.lock();
+        let current = store.current.as_mut()?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.children.extend(children);
+        current.children_total_count = total_count;
+        current.children_loaded_count = current.children.len();
+        current.children_next_offset = next_offset;
+        current.status = if next_offset.is_some() {
+            RuntimeSceneInspectorTaskStatus::ChildrenLoading
+        } else {
+            RuntimeSceneInspectorTaskStatus::ComponentsLoading
+        };
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn apply_components(
+        &self,
+        task_id: u64,
+        mutation_epoch: u64,
+        components: Vec<RuntimeSceneComponentSummary>,
+        total_count: usize,
+        next_offset: Option<usize>,
+    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        let mut store = self.store.lock();
+        let current = store.current.as_mut()?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.components.extend(components);
+        current.components_total_count = total_count;
+        current.components_loaded_count = current.components.len();
+        current.components_next_offset = next_offset;
+        current.status = if next_offset.is_some() {
+            RuntimeSceneInspectorTaskStatus::ComponentsLoading
+        } else {
+            RuntimeSceneInspectorTaskStatus::Ready
+        };
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn complete(&self, task_id: u64, mutation_epoch: u64) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        let mut store = self.store.lock();
+        let current = store.current.as_mut()?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.status = RuntimeSceneInspectorTaskStatus::Ready;
+        current.children_next_offset = None;
+        current.components_next_offset = None;
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+
+        let ready_state = current.clone();
+        let cache_entry = ready_state.header.clone().map(|header| {
+            (
+                ready_state.object_address.clone(),
+                SceneInspectorCacheEntry {
+                    mutation_epoch,
+                    header,
+                    children: ready_state.children.clone(),
+                    components: ready_state.components.clone(),
+                },
+            )
+        });
+
+        if let Some((object_address, entry)) = cache_entry {
+            store.cache.insert(object_address, entry);
+        }
+
+        Some(ready_state)
+    }
+
+    pub fn fail(&self, task_id: u64, mutation_epoch: u64, error_message: String) -> Option<RuntimeSceneObjectInspectorTaskState> {
+        let mut store = self.store.lock();
+        let current = store.current.as_mut()?;
+        if current.task_id != task_id || current.mutation_epoch != mutation_epoch {
+            return None;
+        }
+
+        current.status = RuntimeSceneInspectorTaskStatus::Error;
+        current.error_message = Some(error_message);
+        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        Some(current.clone())
+    }
+
+    pub fn invalidate_related(&self, impacted_addresses: &[String]) {
+        let mut store = self.store.lock();
+        store.mutation_epoch += 1;
+
+        if impacted_addresses.is_empty() {
+            store.cache.clear();
+        } else {
+            let impacted_refs = impacted_addresses.iter().map(String::as_str).collect::<Vec<_>>();
+            store.cache.retain(|object_address, entry| {
+                !impacted_refs.contains(&object_address.as_str()) && !cache_entry_impacted(entry, &impacted_refs)
+            });
+        }
+
+        if let Some(current) = store.current.as_mut() {
+            current.is_stale = true;
+            if !matches!(
+                current.status,
+                RuntimeSceneInspectorTaskStatus::Ready | RuntimeSceneInspectorTaskStatus::Error | RuntimeSceneInspectorTaskStatus::Cancelled
+            ) {
+                current.status = RuntimeSceneInspectorTaskStatus::Cancelled;
+            }
+            current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        }
+    }
+
+    pub fn reset(&self) {
+        *self.store.lock() = SceneInspectorStore::default();
     }
 }
 
@@ -464,6 +717,7 @@ pub struct AppState {
     pub analysis: AnalysisState,
     pub bridge: BridgeClientState,
     pub scene: SceneState,
+    pub scene_inspector: SceneInspectorState,
     pub workspace: WorkspaceState,
 }
 
@@ -476,7 +730,10 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
+    use crate::domain::analysis_models::{
+        ProcessSession, RuntimeFlavor, RuntimeSceneComponentSummary,
+        RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
+    };
 
     fn sample_session() -> ProcessSession {
         ProcessSession {
@@ -486,6 +743,31 @@ mod tests {
             data_dir: Some("C:/Game/Unity_Data".to_string()),
             managed_dir: Some("C:/Game/Unity_Data/Managed".to_string()),
             runtime: RuntimeFlavor::Mono,
+        }
+    }
+
+    fn sample_node(object_address: &str) -> RuntimeSceneNodeSummary {
+        RuntimeSceneNodeSummary {
+            object_address: object_address.to_string(),
+            transform_address: None,
+            name: "Player".to_string(),
+            active_self: true,
+            child_count: 0,
+            has_children: false,
+            component_count: Some(1),
+            layer: Some(0),
+            tag: Some("Player".to_string()),
+        }
+    }
+
+    fn sample_header(object_address: &str) -> RuntimeSceneObjectInspectorHeaderSnapshot {
+        RuntimeSceneObjectInspectorHeaderSnapshot {
+            generated_at: "1".to_string(),
+            scene_handle: Some(1),
+            scene_name: Some("SampleScene".to_string()),
+            object: sample_node(object_address),
+            parent: None,
+            transform: None,
         }
     }
 
@@ -519,5 +801,45 @@ mod tests {
         assert!(should_retry_runtime_request("Persistent bridge session closed unexpectedly"));
         assert!(!should_retry_runtime_request("runtime exception"));
         assert!(!should_retry_runtime_request("method invocation failed"));
+    }
+
+    #[test]
+    fn scene_inspector_caches_completed_results() {
+        let inspector = SceneInspectorState::default();
+        let started = inspector.start_task("0x10".to_string());
+        assert!(!started.use_cached);
+
+        inspector.apply_header(started.state.task_id, started.state.mutation_epoch, sample_header("0x10"));
+        inspector.apply_children(started.state.task_id, started.state.mutation_epoch, vec![sample_node("0x11")], 1, None);
+        inspector.apply_components(
+            started.state.task_id,
+            started.state.mutation_epoch,
+            vec![RuntimeSceneComponentSummary {
+                component_address: "0x20".to_string(),
+                type_name: "UnityEngine.Transform".to_string(),
+            }],
+            1,
+            None,
+        );
+        inspector.complete(started.state.task_id, started.state.mutation_epoch);
+
+        let cached = inspector.start_task("0x10".to_string());
+        assert!(cached.use_cached);
+        assert_eq!(cached.state.status, RuntimeSceneInspectorTaskStatus::Ready);
+        assert_eq!(cached.state.children_loaded_count, 1);
+        assert_eq!(cached.state.components_loaded_count, 1);
+    }
+
+    #[test]
+    fn scene_inspector_invalidation_marks_current_task_stale() {
+        let inspector = SceneInspectorState::default();
+        let started = inspector.start_task("0x10".to_string());
+
+        inspector.invalidate_related(&["0x10".to_string()]);
+
+        let current = inspector.current().expect("expected current inspector task");
+        assert_eq!(current.task_id, started.state.task_id);
+        assert!(current.is_stale);
+        assert_eq!(current.status, RuntimeSceneInspectorTaskStatus::Cancelled);
     }
 }

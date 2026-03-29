@@ -17,6 +17,9 @@ enum class BridgeOperation {
     LoadSceneCatalog,
     LoadSceneChildren,
     InspectSceneObject,
+    InspectSceneObjectHeader,
+    InspectSceneObjectChildrenPage,
+    InspectSceneObjectComponentsPage,
     CreateSceneChild,
     DuplicateSceneObject,
     DeleteSceneObject,
@@ -81,6 +84,8 @@ struct BridgeRequest {
     std::optional<Address> object_address;
     std::optional<std::string> object_name;
     std::optional<bool> active_self;
+    std::optional<std::size_t> offset;
+    std::optional<std::size_t> limit;
 };
 
 struct FieldRow {
@@ -160,9 +165,27 @@ struct SceneChildrenResponse {
     std::vector<SceneNodeSummary> children;
 };
 
+struct SceneChildrenPageResponse {
+    std::string generated_at;
+    std::string parent_object_address;
+    std::size_t offset = 0;
+    std::size_t total_count = 0;
+    std::optional<std::size_t> next_offset;
+    std::vector<SceneNodeSummary> children;
+};
+
 struct SceneComponentSummary {
     std::string component_address;
     std::string type_name;
+};
+
+struct SceneComponentsPageResponse {
+    std::string generated_at;
+    std::string object_address;
+    std::size_t offset = 0;
+    std::size_t total_count = 0;
+    std::optional<std::size_t> next_offset;
+    std::vector<SceneComponentSummary> components;
 };
 
 struct SceneTransformSnapshotResponse {
@@ -183,6 +206,15 @@ struct SceneObjectInspectorResponse {
     std::optional<SceneNodeSummary> parent;
     std::vector<SceneNodeSummary> children;
     std::vector<SceneComponentSummary> components;
+    std::optional<SceneTransformSnapshotResponse> transform;
+};
+
+struct SceneObjectInspectorHeaderResponse {
+    std::string generated_at;
+    std::optional<int> scene_handle;
+    std::optional<std::string> scene_name;
+    SceneNodeSummary object;
+    std::optional<SceneNodeSummary> parent;
     std::optional<SceneTransformSnapshotResponse> transform;
 };
 

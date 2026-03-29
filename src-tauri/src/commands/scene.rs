@@ -1,6 +1,7 @@
 use crate::domain::analysis_models::{
     RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult,
-    RuntimeSceneObjectInspectorSnapshot, SceneWorkspaceState,
+    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
+    SceneWorkspaceState,
 };
 use crate::services::analysis::scene_service;
 use crate::state::AppState;
@@ -43,6 +44,45 @@ pub async fn start_scene_refresh(
 #[tauri::command]
 pub fn get_scene_workspace_state(state: State<'_, AppState>) -> SceneWorkspaceState {
     state.scene.current()
+}
+
+#[tauri::command]
+pub fn start_scene_object_inspector_analysis(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    object_address: String,
+) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
+    let started_at = Instant::now();
+    let result = scene_service::start_scene_object_inspector_analysis(&app, &state, &object_address);
+    match &result {
+        Ok(task) => eprintln!(
+            "[perf][tauri] start_scene_object_inspector_analysis completed in {}ms object_address={} task_id={} status={:?}",
+            started_at.elapsed().as_millis(),
+            object_address,
+            task.task_id,
+            task.status
+        ),
+        Err(error) => eprintln!(
+            "[perf][tauri] start_scene_object_inspector_analysis failed in {}ms object_address={} error={}",
+            started_at.elapsed().as_millis(),
+            object_address,
+            error
+        ),
+    }
+    result
+}
+
+#[tauri::command]
+pub fn get_scene_object_inspector_state(state: State<'_, AppState>) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    scene_service::get_scene_object_inspector_state(&state)
+}
+
+#[tauri::command]
+pub fn cancel_scene_object_inspector_analysis(
+    state: State<'_, AppState>,
+    task_id: Option<u64>,
+) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    scene_service::cancel_scene_object_inspector_analysis(&state, task_id)
 }
 
 #[tauri::command]

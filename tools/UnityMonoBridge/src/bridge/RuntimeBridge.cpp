@@ -92,6 +92,15 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
             else if (value == "scene-inspect") {
                 request.operation = BridgeOperation::InspectSceneObject;
             }
+            else if (value == "scene-inspect-header") {
+                request.operation = BridgeOperation::InspectSceneObjectHeader;
+            }
+            else if (value == "scene-inspect-children-page") {
+                request.operation = BridgeOperation::InspectSceneObjectChildrenPage;
+            }
+            else if (value == "scene-inspect-components-page") {
+                request.operation = BridgeOperation::InspectSceneObjectComponentsPage;
+            }
             else if (value == "scene-create-child") {
                 request.operation = BridgeOperation::CreateSceneChild;
             }
@@ -147,6 +156,12 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         else if (key == "--active-self") {
             request.active_self = value == "true";
         }
+        else if (key == "--offset") {
+            request.offset = ParseUnsignedValue<std::size_t>(value);
+        }
+        else if (key == "--limit") {
+            request.limit = ParseUnsignedValue<std::size_t>(value);
+        }
         else if (key == "--value-kind") {
             request.field_value_kind = ParseFieldValueKind(value);
         }
@@ -183,9 +198,19 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         throw std::runtime_error("Missing field write arguments");
     }
 
-    if ((request.operation == BridgeOperation::LoadSceneChildren || request.operation == BridgeOperation::InspectSceneObject)
+    if ((request.operation == BridgeOperation::LoadSceneChildren
+            || request.operation == BridgeOperation::InspectSceneObject
+            || request.operation == BridgeOperation::InspectSceneObjectHeader
+            || request.operation == BridgeOperation::InspectSceneObjectChildrenPage
+            || request.operation == BridgeOperation::InspectSceneObjectComponentsPage)
         && !request.object_address.has_value()) {
         throw std::runtime_error("Missing scene object address");
+    }
+
+    if ((request.operation == BridgeOperation::InspectSceneObjectChildrenPage
+            || request.operation == BridgeOperation::InspectSceneObjectComponentsPage)
+        && !request.limit.has_value()) {
+        throw std::runtime_error("Missing paged inspector limit");
     }
 
     if ((request.operation == BridgeOperation::DuplicateSceneObject
@@ -268,6 +293,45 @@ SceneChildrenResponse RuntimeBridge::ExecuteSceneChildren(const BridgeRequest& r
     const auto started_at = PerfClock::now();
     auto response = ResolveInspector(request.pid).LoadSceneChildren(request);
     LogScenePerf("scene_children", started_at, "parent_object=" + response.parent_object_address + " child_count=" + std::to_string(response.children.size()));
+    return response;
+}
+
+SceneObjectInspectorHeaderResponse RuntimeBridge::ExecuteSceneInspectHeader(const BridgeRequest& request)
+{
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).InspectSceneObjectHeader(request);
+    LogScenePerf(
+        "scene_inspect_header",
+        started_at,
+        "object=" + response.object.object_address + " scene=" + response.scene_name.value_or(std::string("null")));
+    return response;
+}
+
+SceneChildrenPageResponse RuntimeBridge::ExecuteSceneInspectChildrenPage(const BridgeRequest& request)
+{
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).InspectSceneObjectChildrenPage(request);
+    LogScenePerf(
+        "scene_inspect_children_page",
+        started_at,
+        "parent_object=" + response.parent_object_address
+            + " offset=" + std::to_string(response.offset)
+            + " loaded=" + std::to_string(response.children.size())
+            + " total=" + std::to_string(response.total_count));
+    return response;
+}
+
+SceneComponentsPageResponse RuntimeBridge::ExecuteSceneInspectComponentsPage(const BridgeRequest& request)
+{
+    const auto started_at = PerfClock::now();
+    auto response = ResolveInspector(request.pid).InspectSceneObjectComponentsPage(request);
+    LogScenePerf(
+        "scene_inspect_components_page",
+        started_at,
+        "object=" + response.object_address
+            + " offset=" + std::to_string(response.offset)
+            + " loaded=" + std::to_string(response.components.size())
+            + " total=" + std::to_string(response.total_count));
     return response;
 }
 

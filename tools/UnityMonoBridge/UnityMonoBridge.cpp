@@ -30,6 +30,12 @@ const char* ProtocolOperationName(bridge::BridgeOperation operation)
         return "scene-object-children-load";
     case bridge::BridgeOperation::InspectSceneObject:
         return "scene-object-inspect";
+    case bridge::BridgeOperation::InspectSceneObjectHeader:
+        return "scene-object-inspect-header";
+    case bridge::BridgeOperation::InspectSceneObjectChildrenPage:
+        return "scene-object-inspect-children-page";
+    case bridge::BridgeOperation::InspectSceneObjectComponentsPage:
+        return "scene-object-inspect-components-page";
     case bridge::BridgeOperation::CreateSceneChild:
         return "scene-object-create-child";
     case bridge::BridgeOperation::DuplicateSceneObject:
@@ -68,6 +74,15 @@ std::string ExecuteRequest(bridge::RuntimeBridge& runtime_bridge, const bridge::
     }
     if (request.operation == bridge::BridgeOperation::LoadSceneChildren) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneChildren(request));
+    }
+    if (request.operation == bridge::BridgeOperation::InspectSceneObjectHeader) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspectHeader(request));
+    }
+    if (request.operation == bridge::BridgeOperation::InspectSceneObjectChildrenPage) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspectChildrenPage(request));
+    }
+    if (request.operation == bridge::BridgeOperation::InspectSceneObjectComponentsPage) {
+        return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspectComponentsPage(request));
     }
     if (request.operation == bridge::BridgeOperation::InspectSceneObject) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspect(request));

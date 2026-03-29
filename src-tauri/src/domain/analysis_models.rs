@@ -360,6 +360,80 @@ pub struct RuntimeSceneChildrenSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneChildrenPageSnapshot {
+    pub generated_at: String,
+    pub parent_object_address: String,
+    pub offset: usize,
+    pub total_count: usize,
+    pub next_offset: Option<usize>,
+    pub children: Vec<RuntimeSceneNodeSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneComponentsPageSnapshot {
+    pub generated_at: String,
+    pub object_address: String,
+    pub offset: usize,
+    pub total_count: usize,
+    pub next_offset: Option<usize>,
+    pub components: Vec<RuntimeSceneComponentSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneObjectInspectorHeaderSnapshot {
+    pub generated_at: String,
+    pub scene_handle: Option<i32>,
+    pub scene_name: Option<String>,
+    pub object: RuntimeSceneNodeSummary,
+    pub parent: Option<RuntimeSceneNodeSummary>,
+    pub transform: Option<RuntimeSceneTransformSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneInspectorTaskStatus {
+    Idle,
+    Queued,
+    HeaderLoading,
+    ChildrenLoading,
+    ComponentsLoading,
+    Ready,
+    Error,
+    Cancelled,
+}
+
+impl Default for RuntimeSceneInspectorTaskStatus {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneObjectInspectorTaskState {
+    pub task_id: u64,
+    pub object_address: String,
+    pub status: RuntimeSceneInspectorTaskStatus,
+    pub mutation_epoch: u64,
+    pub started_at: String,
+    pub updated_at: String,
+    pub header: Option<RuntimeSceneObjectInspectorHeaderSnapshot>,
+    pub children: Vec<RuntimeSceneNodeSummary>,
+    pub children_total_count: usize,
+    pub children_loaded_count: usize,
+    pub children_next_offset: Option<usize>,
+    pub components: Vec<RuntimeSceneComponentSummary>,
+    pub components_total_count: usize,
+    pub components_loaded_count: usize,
+    pub components_next_offset: Option<usize>,
+    pub error_message: Option<String>,
+    pub is_stale: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneObjectInspectorSnapshot {
     pub generated_at: String,
     pub scene_handle: Option<i32>,

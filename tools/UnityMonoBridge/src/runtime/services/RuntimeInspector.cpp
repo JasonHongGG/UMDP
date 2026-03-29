@@ -124,6 +124,27 @@ SceneChildrenResponse RuntimeInspector::LoadSceneChildren(const BridgeRequest& r
     return scene_service_.LoadSceneChildren(*request.object_address);
 }
 
+SceneObjectInspectorHeaderResponse RuntimeInspector::InspectSceneObjectHeader(const BridgeRequest& request) const
+{
+    return scene_service_.InspectSceneObjectHeader(*request.object_address);
+}
+
+SceneChildrenPageResponse RuntimeInspector::InspectSceneObjectChildrenPage(const BridgeRequest& request) const
+{
+    return scene_service_.LoadSceneInspectorChildrenPage(
+        *request.object_address,
+        request.offset.value_or(0),
+        request.limit.value_or(64));
+}
+
+SceneComponentsPageResponse RuntimeInspector::InspectSceneObjectComponentsPage(const BridgeRequest& request) const
+{
+    return scene_service_.LoadSceneInspectorComponentsPage(
+        *request.object_address,
+        request.offset.value_or(0),
+        request.limit.value_or(64));
+}
+
 SceneObjectInspectorResponse RuntimeInspector::InspectSceneObject(const BridgeRequest& request) const
 {
     return scene_service_.InspectSceneObject(*request.object_address);

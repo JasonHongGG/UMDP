@@ -27,6 +27,9 @@ public:
 
     SceneCatalogResponse LoadSceneCatalog() const;
     SceneChildrenResponse LoadSceneChildren(Address object_address) const;
+    SceneObjectInspectorHeaderResponse InspectSceneObjectHeader(Address object_address) const;
+    SceneChildrenPageResponse LoadSceneInspectorChildrenPage(Address object_address, std::size_t offset, std::size_t limit) const;
+    SceneComponentsPageResponse LoadSceneInspectorComponentsPage(Address object_address, std::size_t offset, std::size_t limit) const;
     SceneObjectInspectorResponse InspectSceneObject(Address object_address) const;
     SceneMutationResponse CreateSceneChild(Address parent_object_address, const std::string& name) const;
     SceneMutationResponse DuplicateSceneObject(Address object_address) const;
@@ -37,6 +40,7 @@ private:
     enum class NodeSummaryFlavor {
         Catalog,
         Inspector,
+        InspectorChild,
     };
 
     Address ResolveUnityClass(const std::string& class_namespace, const std::string& class_name) const;
@@ -91,9 +95,23 @@ private:
     Address CreateManagedObject(Address class_handle, const std::string& context) const;
     std::string DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const;
 
-    SceneNodeSummary BuildNodeSummary(Address game_object_address, NodeSummaryFlavor flavor) const;
-    std::vector<SceneNodeSummary> LoadChildrenForObject(Address game_object_address, NodeSummaryFlavor flavor) const;
-    std::vector<SceneComponentSummary> LoadComponentsForObject(Address game_object_address) const;
+    SceneNodeSummary BuildNodeSummary(
+        Address game_object_address,
+        NodeSummaryFlavor flavor,
+        std::optional<Address> known_transform_address = std::nullopt) const;
+    std::vector<SceneNodeSummary> LoadChildrenForObject(
+        Address game_object_address,
+        NodeSummaryFlavor flavor,
+        std::size_t offset = 0,
+        std::optional<std::size_t> limit = std::nullopt,
+        std::size_t* total_count = nullptr,
+        std::optional<std::size_t>* next_offset = nullptr) const;
+    std::vector<SceneComponentSummary> LoadComponentsForObject(
+        Address game_object_address,
+        std::size_t offset = 0,
+        std::optional<std::size_t> limit = std::nullopt,
+        std::size_t* total_count = nullptr,
+        std::optional<std::size_t>* next_offset = nullptr) const;
     std::optional<SceneTransformSnapshotResponse> BuildTransformSnapshot(Address transform_address) const;
     std::pair<std::optional<int>, std::optional<std::string>> ReadSceneIdentity(Address scene_boxed_address) const;
 

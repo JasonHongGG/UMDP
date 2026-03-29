@@ -1,6 +1,9 @@
 use crate::domain::analysis_models::{
     RuntimeQuaternionSnapshot, RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenSnapshot,
+    RuntimeSceneChildrenPageSnapshot,
     RuntimeSceneComponentSummary, RuntimeSceneDescriptor, RuntimeSceneNodeSummary,
+    RuntimeSceneComponentsPageSnapshot, RuntimeSceneObjectInspectorHeaderSnapshot,
+    RuntimeSceneObjectInspectorTaskState,
     RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneTransformSnapshot,
     RuntimeVector3Snapshot, SceneWorkspaceState,
@@ -15,7 +18,7 @@ use crate::services::analysis::runtime_session_service::{
 use crate::state::AppState;
 use serde::Deserialize;
 use std::time::Instant;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
     eprintln!(
@@ -23,6 +26,9 @@ fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
         started_at.elapsed().as_millis()
     );
 }
+
+const INSPECTOR_CHILDREN_PAGE_SIZE: usize = 64;
+const INSPECTOR_COMPONENTS_PAGE_SIZE: usize = 64;
 
 #[derive(Debug, Deserialize)]
 struct HelperSceneNodeSummary {
@@ -102,6 +108,36 @@ struct HelperSceneInspectorResponse {
 }
 
 #[derive(Debug, Deserialize)]
+struct HelperSceneInspectorHeaderResponse {
+    generated_at: String,
+    scene_handle: Option<i32>,
+    scene_name: Option<String>,
+    object: HelperSceneNodeSummary,
+    parent: Option<HelperSceneNodeSummary>,
+    transform: Option<HelperSceneTransformSnapshot>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HelperSceneChildrenPageResponse {
+    generated_at: String,
+    parent_object_address: String,
+    offset: usize,
+    total_count: usize,
+    next_offset: Option<usize>,
+    children: Vec<HelperSceneNodeSummary>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HelperSceneComponentsPageResponse {
+    generated_at: String,
+    object_address: String,
+    offset: usize,
+    total_count: usize,
+    next_offset: Option<usize>,
+    components: Vec<HelperSceneComponentSummary>,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum HelperSceneMutationOperation {
     CreateChild,
@@ -139,12 +175,57 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
     let scene_count = snapshot.scenes.len();
     let root_count = snapshot.scenes.iter().map(|scene| scene.roots.len()).sum::<usize>();
     let workspace = state.scene.set_snapshot(snapshot);
+    state.scene_inspector.reset();
     log_scene_duration(
         "start_scene_refresh",
         started_at,
         &format!("scene_count={scene_count} root_count={root_count}"),
     );
     Ok(workspace)
+}
+
+pub fn start_scene_object_inspector_analysis(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
+    let started_at = Instant::now();
+    ensure_attached_session(state)?;
+    ensure_scene_bridge_session_started(app, state)?;
+
+    let task_start = state.scene_inspector.start_task(object_address.to_string());
+    if !task_start.use_cached {
+        let app_handle = app.clone();
+        let object_address = object_address.to_string();
+        let task_id = task_start.state.task_id;
+        let mutation_epoch = task_start.state.mutation_epoch;
+        tauri::async_runtime::spawn_blocking(move || {
+            let state = app_handle.state::<AppState>();
+            run_scene_object_inspector_task(&app_handle, &state, &object_address, task_id, mutation_epoch);
+        });
+    }
+
+    log_scene_duration(
+        "start_scene_object_inspector_analysis",
+        started_at,
+        &format!(
+            "object_address={object_address} task_id={} cached={}",
+            task_start.state.task_id,
+            task_start.use_cached
+        ),
+    );
+    Ok(task_start.state)
+}
+
+pub fn get_scene_object_inspector_state(state: &AppState) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    state.scene_inspector.current()
+}
+
+pub fn cancel_scene_object_inspector_analysis(
+    state: &AppState,
+    task_id: Option<u64>,
+) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    state.scene_inspector.cancel(task_id)
 }
 
 pub fn get_scene_object_children(
@@ -198,6 +279,7 @@ pub fn create_scene_child(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_child_creation(app, state, parent_object_address, name))?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "create_scene_child",
         started_at,
@@ -219,6 +301,7 @@ pub fn duplicate_scene_object(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_object_duplicate(app, state, object_address))?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "duplicate_scene_object",
         started_at,
@@ -240,6 +323,7 @@ pub fn delete_scene_object(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_object_delete(app, state, object_address))?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "delete_scene_object",
         started_at,
@@ -262,6 +346,7 @@ pub fn set_scene_object_active(
     ensure_scene_bridge_session_started(app, state)?;
 
     let snapshot = execute_runtime_operation(state, || load_scene_object_set_active(app, state, object_address, active_self))?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
     log_scene_duration(
         "set_scene_object_active",
         started_at,
@@ -377,6 +462,152 @@ fn load_scene_inspector(
             object_address,
             snapshot.children.len(),
             snapshot.components.len()
+        ),
+    );
+    Ok(snapshot)
+}
+
+fn load_scene_inspector_header(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+) -> Result<RuntimeSceneObjectInspectorHeaderSnapshot, String> {
+    let started_at = Instant::now();
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneInspectorHeaderResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneObjectInspectHeader,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-inspect-header".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--object-address".into(),
+                object_address.to_string(),
+            ],
+        },
+    )?;
+
+    let snapshot = RuntimeSceneObjectInspectorHeaderSnapshot {
+        generated_at: helper.generated_at,
+        scene_handle: helper.scene_handle,
+        scene_name: helper.scene_name,
+        object: map_scene_node_summary(helper.object),
+        parent: helper.parent.map(map_scene_node_summary),
+        transform: helper.transform.map(map_transform_snapshot),
+    };
+    log_scene_duration(
+        "load_scene_inspector_header",
+        started_at,
+        &format!("pid={} object_address={object_address}", attached.pid),
+    );
+    Ok(snapshot)
+}
+
+fn load_scene_inspector_children_page(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<RuntimeSceneChildrenPageSnapshot, String> {
+    let started_at = Instant::now();
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneChildrenPageResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneObjectInspectChildrenPage,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-inspect-children-page".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--object-address".into(),
+                object_address.to_string(),
+                "--offset".into(),
+                offset.to_string(),
+                "--limit".into(),
+                limit.to_string(),
+            ],
+        },
+    )?;
+
+    let snapshot = RuntimeSceneChildrenPageSnapshot {
+        generated_at: helper.generated_at,
+        parent_object_address: helper.parent_object_address,
+        offset: helper.offset,
+        total_count: helper.total_count,
+        next_offset: helper.next_offset,
+        children: helper.children.into_iter().map(map_scene_node_summary).collect(),
+    };
+    log_scene_duration(
+        "load_scene_inspector_children_page",
+        started_at,
+        &format!(
+            "pid={} object_address={} offset={} loaded={} total={}",
+            attached.pid,
+            object_address,
+            snapshot.offset,
+            snapshot.children.len(),
+            snapshot.total_count
+        ),
+    );
+    Ok(snapshot)
+}
+
+fn load_scene_inspector_components_page(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<RuntimeSceneComponentsPageSnapshot, String> {
+    let started_at = Instant::now();
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneComponentsPageResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneObjectInspectComponentsPage,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-inspect-components-page".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--object-address".into(),
+                object_address.to_string(),
+                "--offset".into(),
+                offset.to_string(),
+                "--limit".into(),
+                limit.to_string(),
+            ],
+        },
+    )?;
+
+    let snapshot = RuntimeSceneComponentsPageSnapshot {
+        generated_at: helper.generated_at,
+        object_address: helper.object_address,
+        offset: helper.offset,
+        total_count: helper.total_count,
+        next_offset: helper.next_offset,
+        components: helper.components.into_iter().map(map_scene_component).collect(),
+    };
+    log_scene_duration(
+        "load_scene_inspector_components_page",
+        started_at,
+        &format!(
+            "pid={} object_address={} offset={} loaded={} total={}",
+            attached.pid,
+            object_address,
+            snapshot.offset,
+            snapshot.components.len(),
+            snapshot.total_count
         ),
     );
     Ok(snapshot)
@@ -567,6 +798,100 @@ fn map_scene_mutation(value: HelperSceneMutationResponse) -> RuntimeSceneMutatio
         preferred_selection_address: value.preferred_selection_address,
         active_self: value.active_self,
     }
+}
+
+fn invalidate_scene_inspector_after_mutation(state: &AppState, result: &RuntimeSceneMutationResult) {
+    let mut impacted = Vec::new();
+    if let Some(target) = result.target_object_address.as_ref() {
+        impacted.push(target.clone());
+    }
+    if let Some(parent) = result.parent_object_address.as_ref() {
+        impacted.push(parent.clone());
+    }
+    if let Some(deleted) = result.deleted_object_address.as_ref() {
+        impacted.push(deleted.clone());
+    }
+    if let Some(object) = result.object.as_ref() {
+        impacted.push(object.object_address.clone());
+    }
+    impacted.sort();
+    impacted.dedup();
+    state.scene_inspector.invalidate_related(&impacted);
+}
+
+fn run_scene_object_inspector_task(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    task_id: u64,
+    mutation_epoch: u64,
+) {
+    let header = match execute_runtime_operation(state, || load_scene_inspector_header(app, state, object_address)) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            state.scene_inspector.fail(task_id, mutation_epoch, error);
+            return;
+        }
+    };
+    if state.scene_inspector.apply_header(task_id, mutation_epoch, header).is_none() {
+        return;
+    }
+
+    let mut child_offset = 0usize;
+    loop {
+        let page = match execute_runtime_operation(state, || {
+            load_scene_inspector_children_page(app, state, object_address, child_offset, INSPECTOR_CHILDREN_PAGE_SIZE)
+        }) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                state.scene_inspector.fail(task_id, mutation_epoch, error);
+                return;
+            }
+        };
+
+        let next_offset = page.next_offset;
+        if state
+            .scene_inspector
+            .apply_children(task_id, mutation_epoch, page.children, page.total_count, next_offset)
+            .is_none()
+        {
+            return;
+        }
+
+        match next_offset {
+            Some(next) => child_offset = next,
+            None => break,
+        }
+    }
+
+    let mut component_offset = 0usize;
+    loop {
+        let page = match execute_runtime_operation(state, || {
+            load_scene_inspector_components_page(app, state, object_address, component_offset, INSPECTOR_COMPONENTS_PAGE_SIZE)
+        }) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                state.scene_inspector.fail(task_id, mutation_epoch, error);
+                return;
+            }
+        };
+
+        let next_offset = page.next_offset;
+        if state
+            .scene_inspector
+            .apply_components(task_id, mutation_epoch, page.components, page.total_count, next_offset)
+            .is_none()
+        {
+            return;
+        }
+
+        match next_offset {
+            Some(next) => component_offset = next,
+            None => break,
+        }
+    }
+
+    state.scene_inspector.complete(task_id, mutation_epoch);
 }
 
 #[cfg(test)]
