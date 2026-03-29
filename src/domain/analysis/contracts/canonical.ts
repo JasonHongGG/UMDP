@@ -245,6 +245,12 @@ export interface RuntimeSceneTransformSnapshot {
   childCount: number;
 }
 
+export interface RuntimeSceneTransformUpdate {
+  localPosition: RuntimeVector3Snapshot;
+  localRotation: RuntimeQuaternionSnapshot;
+  localScale: RuntimeVector3Snapshot;
+}
+
 export interface RuntimeSceneChildrenSnapshot {
   parentObjectAddress: string;
   children: RuntimeSceneNodeSummary[];
@@ -341,7 +347,14 @@ export interface RuntimeSceneObjectInspectorSnapshot {
   transform: RuntimeSceneTransformSnapshot | null;
 }
 
-export type RuntimeSceneMutationOperation = 'create-child' | 'duplicate' | 'delete' | 'set-active';
+export type RuntimeSceneMutationOperation =
+  | 'create-child'
+  | 'duplicate'
+  | 'delete'
+  | 'set-active'
+  | 'set-transform'
+  | 'add-component'
+  | 'remove-component';
 
 export interface RuntimeSceneMutationResult {
   operation: RuntimeSceneMutationOperation;
@@ -352,6 +365,7 @@ export interface RuntimeSceneMutationResult {
   deletedObjectAddress: string | null;
   preferredSelectionAddress: string | null;
   activeSelf: boolean | null;
+  transform: RuntimeSceneTransformSnapshot | null;
 }
 
 export interface SceneWorkspaceState {

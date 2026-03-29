@@ -27,6 +27,11 @@ TValue ParseUnsignedValue(const std::string& value)
     return static_cast<TValue>(std::stoull(value, nullptr, 0));
 }
 
+float ParseFloatValue(const std::string& value)
+{
+    return std::stof(value);
+}
+
 InvokeValueKind ParseInvokeValueKind(const std::string& value)
 {
     if (value == "boolean") {
@@ -116,6 +121,15 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
             else if (value == "scene-set-active") {
                 request.operation = BridgeOperation::SetSceneObjectActive;
             }
+            else if (value == "scene-set-transform") {
+                request.operation = BridgeOperation::SetSceneObjectTransform;
+            }
+            else if (value == "scene-component-create") {
+                request.operation = BridgeOperation::CreateSceneComponent;
+            }
+            else if (value == "scene-component-delete") {
+                request.operation = BridgeOperation::DeleteSceneComponent;
+            }
             else {
                 request.operation = BridgeOperation::InspectClass;
             }
@@ -153,8 +167,14 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         else if (key == "--object-address") {
             request.object_address = ParseUnsignedValue<std::size_t>(value);
         }
+        else if (key == "--component-address") {
+            request.component_address = ParseUnsignedValue<std::size_t>(value);
+        }
         else if (key == "--name") {
             request.object_name = value;
+        }
+        else if (key == "--component-type") {
+            request.component_type_name = value;
         }
         else if (key == "--active-self") {
             request.active_self = value == "true";
@@ -164,6 +184,66 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         }
         else if (key == "--limit") {
             request.limit = ParseUnsignedValue<std::size_t>(value);
+        }
+        else if (key == "--position-x") {
+            if (!request.local_position.has_value()) {
+                request.local_position = Vector3Snapshot{};
+            }
+            request.local_position->x = ParseFloatValue(value);
+        }
+        else if (key == "--position-y") {
+            if (!request.local_position.has_value()) {
+                request.local_position = Vector3Snapshot{};
+            }
+            request.local_position->y = ParseFloatValue(value);
+        }
+        else if (key == "--position-z") {
+            if (!request.local_position.has_value()) {
+                request.local_position = Vector3Snapshot{};
+            }
+            request.local_position->z = ParseFloatValue(value);
+        }
+        else if (key == "--rotation-x") {
+            if (!request.local_rotation.has_value()) {
+                request.local_rotation = QuaternionSnapshot{};
+            }
+            request.local_rotation->x = ParseFloatValue(value);
+        }
+        else if (key == "--rotation-y") {
+            if (!request.local_rotation.has_value()) {
+                request.local_rotation = QuaternionSnapshot{};
+            }
+            request.local_rotation->y = ParseFloatValue(value);
+        }
+        else if (key == "--rotation-z") {
+            if (!request.local_rotation.has_value()) {
+                request.local_rotation = QuaternionSnapshot{};
+            }
+            request.local_rotation->z = ParseFloatValue(value);
+        }
+        else if (key == "--rotation-w") {
+            if (!request.local_rotation.has_value()) {
+                request.local_rotation = QuaternionSnapshot{};
+            }
+            request.local_rotation->w = ParseFloatValue(value);
+        }
+        else if (key == "--scale-x") {
+            if (!request.local_scale.has_value()) {
+                request.local_scale = Vector3Snapshot{};
+            }
+            request.local_scale->x = ParseFloatValue(value);
+        }
+        else if (key == "--scale-y") {
+            if (!request.local_scale.has_value()) {
+                request.local_scale = Vector3Snapshot{};
+            }
+            request.local_scale->y = ParseFloatValue(value);
+        }
+        else if (key == "--scale-z") {
+            if (!request.local_scale.has_value()) {
+                request.local_scale = Vector3Snapshot{};
+            }
+            request.local_scale->z = ParseFloatValue(value);
         }
         else if (key == "--value-kind") {
             request.field_value_kind = ParseFieldValueKind(value);
@@ -220,9 +300,15 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
 
     if ((request.operation == BridgeOperation::DuplicateSceneObject
             || request.operation == BridgeOperation::DeleteSceneObject
-            || request.operation == BridgeOperation::SetSceneObjectActive)
+            || request.operation == BridgeOperation::SetSceneObjectActive
+            || request.operation == BridgeOperation::SetSceneObjectTransform
+            || request.operation == BridgeOperation::CreateSceneComponent)
         && !request.object_address.has_value()) {
         throw std::runtime_error("Missing scene object address");
+    }
+
+    if (request.operation == BridgeOperation::DeleteSceneComponent && !request.component_address.has_value()) {
+        throw std::runtime_error("Missing scene component address");
     }
 
     if (request.operation == BridgeOperation::CreateSceneChild
@@ -233,6 +319,16 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
     if (request.operation == BridgeOperation::SetSceneObjectActive
         && (!request.object_address.has_value() || !request.active_self.has_value())) {
         throw std::runtime_error("Missing scene active-state arguments");
+    }
+
+    if (request.operation == BridgeOperation::SetSceneObjectTransform
+        && (!request.local_position.has_value() || !request.local_rotation.has_value() || !request.local_scale.has_value())) {
+        throw std::runtime_error("Missing scene transform arguments");
+    }
+
+    if (request.operation == BridgeOperation::CreateSceneComponent
+        && (!request.object_address.has_value() || !request.component_type_name.has_value())) {
+        throw std::runtime_error("Missing scene component creation arguments");
     }
 
     return request;

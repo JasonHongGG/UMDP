@@ -27,6 +27,9 @@ pub fn get_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool {
         scene::duplicate_scene_object,
         scene::delete_scene_object,
         scene::set_scene_object_active,
+        scene::set_scene_object_transform,
+        scene::create_scene_component,
+        scene::delete_scene_component,
         invocation::invoke_runtime_method,
         field_setting::set_runtime_field_value,
     ]

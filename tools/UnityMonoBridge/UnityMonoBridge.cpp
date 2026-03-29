@@ -46,6 +46,12 @@ const char* ProtocolOperationName(bridge::BridgeOperation operation)
         return "scene-object-delete";
     case bridge::BridgeOperation::SetSceneObjectActive:
         return "scene-object-set-active";
+    case bridge::BridgeOperation::SetSceneObjectTransform:
+        return "scene-object-set-transform";
+    case bridge::BridgeOperation::CreateSceneComponent:
+        return "scene-component-create";
+    case bridge::BridgeOperation::DeleteSceneComponent:
+        return "scene-component-delete";
     case bridge::BridgeOperation::InvokeMethod:
         return "runtime-method-invoke";
     case bridge::BridgeOperation::SetField:
@@ -95,7 +101,10 @@ std::string ExecuteRequest(bridge::RuntimeBridge& runtime_bridge, const bridge::
     if (request.operation == bridge::BridgeOperation::CreateSceneChild
         || request.operation == bridge::BridgeOperation::DuplicateSceneObject
         || request.operation == bridge::BridgeOperation::DeleteSceneObject
-        || request.operation == bridge::BridgeOperation::SetSceneObjectActive) {
+        || request.operation == bridge::BridgeOperation::SetSceneObjectActive
+        || request.operation == bridge::BridgeOperation::SetSceneObjectTransform
+        || request.operation == bridge::BridgeOperation::CreateSceneComponent
+        || request.operation == bridge::BridgeOperation::DeleteSceneComponent) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneMutation(request));
     }
     if (request.operation == bridge::BridgeOperation::InvokeMethod) {

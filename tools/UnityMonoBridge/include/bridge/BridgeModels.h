@@ -25,6 +25,9 @@ enum class BridgeOperation {
     DuplicateSceneObject,
     DeleteSceneObject,
     SetSceneObjectActive,
+    SetSceneObjectTransform,
+    CreateSceneComponent,
+    DeleteSceneComponent,
 };
 
 enum class InvokeValueKind {
@@ -66,6 +69,19 @@ enum class RuntimeFieldSetFailureKind {
     Unknown,
 };
 
+struct Vector3Snapshot {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+struct QuaternionSnapshot {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 0.0f;
+};
+
 struct BridgeRequest {
     BridgeOperation operation = BridgeOperation::InspectClass;
     std::size_t pid = 0;
@@ -83,10 +99,15 @@ struct BridgeRequest {
     FieldValueKind field_value_kind = FieldValueKind::Null;
     std::optional<std::string> field_value;
     std::optional<Address> object_address;
+    std::optional<Address> component_address;
     std::optional<std::string> object_name;
+    std::optional<std::string> component_type_name;
     std::optional<bool> active_self;
     std::optional<std::size_t> offset;
     std::optional<std::size_t> limit;
+    std::optional<Vector3Snapshot> local_position;
+    std::optional<QuaternionSnapshot> local_rotation;
+    std::optional<Vector3Snapshot> local_scale;
 };
 
 struct FieldRow {
@@ -122,19 +143,6 @@ struct RuntimeFieldSetResponse {
     std::optional<std::string> error;
     std::optional<std::string> previous_value;
     std::optional<std::string> applied_value;
-};
-
-struct Vector3Snapshot {
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-};
-
-struct QuaternionSnapshot {
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-    float w = 0.0f;
 };
 
 struct SceneNodeSummary {
@@ -224,6 +232,9 @@ enum class SceneMutationOperation {
     Duplicate,
     Delete,
     SetActive,
+    SetTransform,
+    AddComponent,
+    RemoveComponent,
 };
 
 struct SceneMutationResponse {
@@ -235,6 +246,7 @@ struct SceneMutationResponse {
     std::optional<std::string> deleted_object_address;
     std::optional<std::string> preferred_selection_address;
     std::optional<bool> active_self;
+    std::optional<SceneTransformSnapshotResponse> transform;
 };
 
 } // namespace bridge

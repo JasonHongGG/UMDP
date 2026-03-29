@@ -8,6 +8,7 @@ import type {
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneObjectInspectorSnapshot,
+  RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '../contracts';
 import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
@@ -43,4 +44,7 @@ export interface AnalysisRepository {
   duplicateSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;
   deleteSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;
   setSceneObjectActive(objectAddress: string, activeSelf: boolean): Promise<RuntimeSceneMutationResult>;
+  setSceneObjectTransform(objectAddress: string, transformUpdate: RuntimeSceneTransformUpdate): Promise<RuntimeSceneMutationResult>;
+  createSceneComponent(objectAddress: string, componentTypeName: string): Promise<RuntimeSceneMutationResult>;
+  deleteSceneComponent(componentAddress: string): Promise<RuntimeSceneMutationResult>;
 }

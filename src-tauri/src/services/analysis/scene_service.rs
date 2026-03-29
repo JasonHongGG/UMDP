@@ -7,6 +7,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorTaskState,
     RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneTransformSnapshot,
+    RuntimeSceneTransformUpdate,
     RuntimeVector3Snapshot, SceneWorkspaceState,
 };
 use crate::domain::bridge_protocol::BridgeOperation;
@@ -146,6 +147,9 @@ enum HelperSceneMutationOperation {
     Duplicate,
     Delete,
     SetActive,
+    SetTransform,
+    AddComponent,
+    RemoveComponent,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,6 +162,7 @@ struct HelperSceneMutationResponse {
     deleted_object_address: Option<String>,
     preferred_selection_address: Option<String>,
     active_self: Option<bool>,
+    transform: Option<HelperSceneTransformSnapshot>,
 }
 
 pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWorkspaceState, String> {
@@ -406,6 +411,81 @@ pub fn set_scene_object_active(
         started_at,
         &format!(
             "object_address={object_address} active_self={active_self} target_object_address={}",
+            snapshot.target_object_address.as_deref().unwrap_or("null")
+        ),
+    );
+    Ok(snapshot)
+}
+
+pub fn set_scene_object_transform(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    transform_update: &RuntimeSceneTransformUpdate,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let started_at = Instant::now();
+    ensure_attached_session(state)?;
+    ensure_scene_bridge_session_started(app, state)?;
+
+    let snapshot = execute_runtime_operation(state, || {
+        load_scene_object_set_transform(app, state, object_address, transform_update)
+    })?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
+    log_scene_duration(
+        "set_scene_object_transform",
+        started_at,
+        &format!(
+            "object_address={object_address} target_object_address={}",
+            snapshot.target_object_address.as_deref().unwrap_or("null")
+        ),
+    );
+    Ok(snapshot)
+}
+
+pub fn create_scene_component(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    component_type_name: &str,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let started_at = Instant::now();
+    ensure_attached_session(state)?;
+    ensure_scene_bridge_session_started(app, state)?;
+
+    let snapshot = execute_runtime_operation(state, || {
+        load_scene_component_create(app, state, object_address, component_type_name)
+    })?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
+    log_scene_duration(
+        "create_scene_component",
+        started_at,
+        &format!(
+            "object_address={object_address} component_type_name={} target_object_address={}",
+            component_type_name,
+            snapshot.target_object_address.as_deref().unwrap_or("null")
+        ),
+    );
+    Ok(snapshot)
+}
+
+pub fn delete_scene_component(
+    app: &AppHandle,
+    state: &AppState,
+    component_address: &str,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let started_at = Instant::now();
+    ensure_attached_session(state)?;
+    ensure_scene_bridge_session_started(app, state)?;
+
+    let snapshot = execute_runtime_operation(state, || {
+        load_scene_component_delete(app, state, component_address)
+    })?;
+    invalidate_scene_inspector_after_mutation(state, &snapshot);
+    log_scene_duration(
+        "delete_scene_component",
+        started_at,
+        &format!(
+            "component_address={component_address} target_object_address={}",
             snapshot.target_object_address.as_deref().unwrap_or("null")
         ),
     );
@@ -830,6 +910,108 @@ fn load_scene_object_set_active(
     Ok(map_scene_mutation(helper))
 }
 
+fn load_scene_object_set_transform(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    transform_update: &RuntimeSceneTransformUpdate,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneMutationResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneObjectSetTransform,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-set-transform".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--object-address".into(),
+                object_address.to_string(),
+                "--position-x".into(),
+                transform_update.local_position.x.to_string(),
+                "--position-y".into(),
+                transform_update.local_position.y.to_string(),
+                "--position-z".into(),
+                transform_update.local_position.z.to_string(),
+                "--rotation-x".into(),
+                transform_update.local_rotation.x.to_string(),
+                "--rotation-y".into(),
+                transform_update.local_rotation.y.to_string(),
+                "--rotation-z".into(),
+                transform_update.local_rotation.z.to_string(),
+                "--rotation-w".into(),
+                transform_update.local_rotation.w.to_string(),
+                "--scale-x".into(),
+                transform_update.local_scale.x.to_string(),
+                "--scale-y".into(),
+                transform_update.local_scale.y.to_string(),
+                "--scale-z".into(),
+                transform_update.local_scale.z.to_string(),
+            ],
+        },
+    )?;
+
+    Ok(map_scene_mutation(helper))
+}
+
+fn load_scene_component_create(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+    component_type_name: &str,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneMutationResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneComponentCreate,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-component-create".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--object-address".into(),
+                object_address.to_string(),
+                "--component-type".into(),
+                component_type_name.to_string(),
+            ],
+        },
+    )?;
+
+    Ok(map_scene_mutation(helper))
+}
+
+fn load_scene_component_delete(
+    app: &AppHandle,
+    state: &AppState,
+    component_address: &str,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let attached = ensure_attached_session(state)?;
+    let helper: HelperSceneMutationResponse = execute_json_with(
+        &AppBridgeTransport::new(state),
+        app,
+        BridgeRequest {
+            operation: BridgeOperation::SceneComponentDelete,
+            executable_name: "UnityMonoBridge.exe",
+            args: vec![
+                "--operation".into(),
+                "scene-component-delete".into(),
+                "--pid".into(),
+                attached.pid.to_string(),
+                "--component-address".into(),
+                component_address.to_string(),
+            ],
+        },
+    )?;
+
+    Ok(map_scene_mutation(helper))
+}
+
 fn map_scene_descriptor(value: HelperSceneDescriptor) -> RuntimeSceneDescriptor {
     RuntimeSceneDescriptor {
         scene_handle: value.scene_handle,
@@ -896,6 +1078,9 @@ fn map_scene_mutation(value: HelperSceneMutationResponse) -> RuntimeSceneMutatio
             HelperSceneMutationOperation::Duplicate => RuntimeSceneMutationOperation::Duplicate,
             HelperSceneMutationOperation::Delete => RuntimeSceneMutationOperation::Delete,
             HelperSceneMutationOperation::SetActive => RuntimeSceneMutationOperation::SetActive,
+            HelperSceneMutationOperation::SetTransform => RuntimeSceneMutationOperation::SetTransform,
+            HelperSceneMutationOperation::AddComponent => RuntimeSceneMutationOperation::AddComponent,
+            HelperSceneMutationOperation::RemoveComponent => RuntimeSceneMutationOperation::RemoveComponent,
         },
         scene_handle: value.scene_handle,
         target_object_address: value.target_object_address,
@@ -904,6 +1089,7 @@ fn map_scene_mutation(value: HelperSceneMutationResponse) -> RuntimeSceneMutatio
         deleted_object_address: value.deleted_object_address,
         preferred_selection_address: value.preferred_selection_address,
         active_self: value.active_self,
+        transform: value.transform.map(map_transform_snapshot),
     }
 }
 
@@ -913,7 +1099,13 @@ fn invalidate_scene_inspector_after_mutation(state: &AppState, result: &RuntimeS
 }
 
 fn invalidate_scene_children_after_mutation(state: &AppState, result: &RuntimeSceneMutationResult) {
-    if matches!(result.operation, RuntimeSceneMutationOperation::SetActive) {
+    if matches!(
+        result.operation,
+        RuntimeSceneMutationOperation::SetActive
+            | RuntimeSceneMutationOperation::SetTransform
+            | RuntimeSceneMutationOperation::AddComponent
+            | RuntimeSceneMutationOperation::RemoveComponent
+    ) {
         return;
     }
 

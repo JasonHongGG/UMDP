@@ -225,6 +225,12 @@ std::string SceneMutationOperationToString(bridge::SceneMutationOperation operat
         return "delete";
     case bridge::SceneMutationOperation::SetActive:
         return "set-active";
+    case bridge::SceneMutationOperation::SetTransform:
+        return "set-transform";
+    case bridge::SceneMutationOperation::AddComponent:
+        return "add-component";
+    case bridge::SceneMutationOperation::RemoveComponent:
+        return "remove-component";
     default:
         return "set-active";
     }
@@ -460,6 +466,13 @@ std::string SerializeResponse(const SceneMutationResponse& response)
     WriteOptionalString(output, response.preferred_selection_address);
     output << ",\"active_self\":";
     WriteOptionalBool(output, response.active_self);
+    output << ",\"transform\":";
+    if (response.transform.has_value()) {
+        WriteTransformSnapshot(output, *response.transform);
+    }
+    else {
+        output << "null";
+    }
     output << '}';
     return output.str();
 }

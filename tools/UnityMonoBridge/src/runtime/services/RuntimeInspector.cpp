@@ -16,6 +16,7 @@ RuntimeInspector::RuntimeInspector(std::size_t pid)
             method_invocation_service_(context_.api(), context_.memory()),
             scene_service_(
                     context_.api(),
+                    context_.memory(),
                     assembly_service_,
                     class_service_,
                     field_enumeration_service_,
@@ -169,6 +170,19 @@ SceneMutationResponse RuntimeInspector::MutateSceneObject(const BridgeRequest& r
         return scene_service_.DeleteSceneObject(*request.object_address);
     case BridgeOperation::SetSceneObjectActive:
         return scene_service_.SetSceneObjectActive(*request.object_address, request.active_self.value_or(false));
+    case BridgeOperation::SetSceneObjectTransform:
+        if (!request.local_position.has_value() || !request.local_rotation.has_value() || !request.local_scale.has_value()) {
+            throw std::runtime_error("missing scene transform payload");
+        }
+        return scene_service_.SetSceneObjectTransform(
+            *request.object_address,
+            *request.local_position,
+            *request.local_rotation,
+            *request.local_scale);
+    case BridgeOperation::CreateSceneComponent:
+        return scene_service_.CreateSceneComponent(*request.object_address, request.component_type_name.value_or(std::string()));
+    case BridgeOperation::DeleteSceneComponent:
+        return scene_service_.DeleteSceneComponent(*request.component_address);
     default:
         throw std::runtime_error("unsupported scene mutation operation");
     }

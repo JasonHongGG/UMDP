@@ -353,6 +353,14 @@ pub struct RuntimeSceneTransformSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneTransformUpdate {
+    pub local_position: RuntimeVector3Snapshot,
+    pub local_rotation: RuntimeQuaternionSnapshot,
+    pub local_scale: RuntimeVector3Snapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneChildrenSnapshot {
     pub parent_object_address: String,
     pub children: Vec<RuntimeSceneNodeSummary>,
@@ -486,6 +494,9 @@ pub enum RuntimeSceneMutationOperation {
     Duplicate,
     Delete,
     SetActive,
+    SetTransform,
+    AddComponent,
+    RemoveComponent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -499,6 +510,7 @@ pub struct RuntimeSceneMutationResult {
     pub deleted_object_address: Option<String>,
     pub preferred_selection_address: Option<String>,
     pub active_self: Option<bool>,
+    pub transform: Option<RuntimeSceneTransformSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

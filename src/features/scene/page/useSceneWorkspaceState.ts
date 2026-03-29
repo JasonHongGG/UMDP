@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  RuntimeQuaternionSnapshot,
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneComponentSummary,
   RuntimeSceneMutationOperation,
@@ -7,6 +8,9 @@ import type {
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneObjectInspectorSnapshot,
+  RuntimeSceneTransformSnapshot,
+  RuntimeSceneTransformUpdate,
+  RuntimeVector3Snapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
@@ -30,6 +34,34 @@ const EMPTY_MUTATION_STATE: SceneMutationState = {
   loading: false,
   errorMessage: null,
 };
+
+export interface SceneWorkspaceStateResult {
+  sceneWorkspace: SceneWorkspaceState;
+  refreshSceneWorkspace: () => Promise<void>;
+  selectedObjectAddress: string | null;
+  setSelectedObjectAddress: (value: string | null) => void;
+  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>;
+  childTaskByParent: Record<string, RuntimeSceneObjectChildrenTaskState>;
+  loadingChildrenByParent: Record<string, boolean>;
+  childErrorByParent: Record<string, string | null>;
+  ensureSceneObjectChildrenLoaded: (objectAddress: string, force?: boolean) => Promise<void>;
+  stopSceneObjectChildrenObservation: (objectAddress: string) => void;
+  sceneInspector: RuntimeSceneObjectInspectorSnapshot | null;
+  sceneInspectorTaskState: RuntimeSceneObjectInspectorTaskState | null;
+  sceneInspectorLoading: boolean;
+  sceneInspectorChildrenLoading: boolean;
+  sceneInspectorComponentsLoading: boolean;
+  sceneInspectorError: string | null;
+  createSceneChild: (name: string) => Promise<RuntimeSceneMutationResult | null>;
+  duplicateSceneObject: () => Promise<RuntimeSceneMutationResult | null>;
+  deleteSceneObject: () => Promise<RuntimeSceneMutationResult | null>;
+  setSceneObjectActive: (activeSelf: boolean) => Promise<RuntimeSceneMutationResult | null>;
+  setSceneObjectTransform: (transformUpdate: RuntimeSceneTransformUpdate) => Promise<RuntimeSceneMutationResult | null>;
+  createSceneComponent: (componentTypeName: string) => Promise<RuntimeSceneMutationResult | null>;
+  deleteSceneComponent: (componentAddress: string) => Promise<RuntimeSceneMutationResult | null>;
+  sceneMutationState: SceneMutationState;
+  sceneRootsByHandle: Record<number, RuntimeSceneNodeSummary[]>;
+}
 
 function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -584,6 +616,25 @@ function mergeInspectorCaches(
   };
 }
 
+function patchInspectorTransform(
+  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
+  objectAddress: string,
+  transform: RuntimeSceneTransformSnapshot,
+) {
+  const current = inspectors[objectAddress];
+  if (!current) {
+    return inspectors;
+  }
+
+  return {
+    ...inspectors,
+    [objectAddress]: {
+      ...current,
+      transform,
+    },
+  };
+}
+
 export function useSceneWorkspaceState({
   repository,
   workspaceLifecycle,
@@ -592,7 +643,7 @@ export function useSceneWorkspaceState({
   repository: AnalysisRepository;
   workspaceLifecycle: WorkspaceLifecycleState;
   active: boolean;
-}) {
+}): SceneWorkspaceStateResult {
   const [sceneWorkspace, setSceneWorkspace] = useState<SceneWorkspaceState>(EMPTY_SCENE_WORKSPACE_STATE);
   const [selectedObjectAddress, setSelectedObjectAddress] = useState<string | null>(null);
   const [childrenByParent, setChildrenByParent] = useState<Record<string, RuntimeSceneNodeSummary[]>>({});
@@ -994,51 +1045,44 @@ export function useSceneWorkspaceState({
       applySummaryPatch(result.object);
     }
 
-    setInspectorTaskByAddress((previous) => {
-      const impacted = [
-        result.targetObjectAddress,
-        result.parentObjectAddress,
-        result.deletedObjectAddress,
-        result.object?.objectAddress,
-      ].filter((value): value is string => Boolean(value));
+    const impacted = [
+      result.targetObjectAddress,
+      result.parentObjectAddress,
+      result.deletedObjectAddress,
+      result.object?.objectAddress,
+    ].filter((value): value is string => Boolean(value));
 
-      if (impacted.length === 0) {
-        return previous;
-      }
-
-      let touched = false;
-      const next = { ...previous };
-      impacted.forEach((address) => {
-        if (Object.prototype.hasOwnProperty.call(next, address)) {
-          delete next[address];
-          touched = true;
-        }
+    if (impacted.length > 0) {
+      setInspectorTaskByAddress((previous) => {
+        let touched = false;
+        const next = { ...previous };
+        impacted.forEach((address) => {
+          if (Object.prototype.hasOwnProperty.call(next, address)) {
+            delete next[address];
+            touched = true;
+          }
+        });
+        return touched ? next : previous;
       });
-      return touched ? next : previous;
-    });
+    }
 
-    setChildTaskByParent((previous) => {
-      const impacted = [
-        result.targetObjectAddress,
-        result.parentObjectAddress,
-        result.deletedObjectAddress,
-        result.object?.objectAddress,
-      ].filter((value): value is string => Boolean(value));
+    const hierarchyMutation = result.operation === 'create-child'
+      || result.operation === 'duplicate'
+      || result.operation === 'delete';
 
-      if (impacted.length === 0) {
-        return previous;
-      }
-
-      let touched = false;
-      const next = { ...previous };
-      impacted.forEach((address) => {
-        if (Object.prototype.hasOwnProperty.call(next, address)) {
-          delete next[address];
-          touched = true;
-        }
+    if (hierarchyMutation && impacted.length > 0) {
+      setChildTaskByParent((previous) => {
+        let touched = false;
+        const next = { ...previous };
+        impacted.forEach((address) => {
+          if (Object.prototype.hasOwnProperty.call(next, address)) {
+            delete next[address];
+            touched = true;
+          }
+        });
+        return touched ? next : previous;
       });
-      return touched ? next : previous;
-    });
+    }
 
     switch (result.operation) {
       case 'create-child': {
@@ -1093,6 +1137,16 @@ export function useSceneWorkspaceState({
         if (result.object) {
           applySummaryPatch(result.object);
         }
+        break;
+      }
+      case 'set-transform': {
+        if (result.targetObjectAddress && result.transform) {
+          setInspectorsByAddress((previous) => patchInspectorTransform(previous, result.targetObjectAddress!, result.transform!));
+        }
+        break;
+      }
+      case 'add-component':
+      case 'remove-component': {
         break;
       }
       default:
@@ -1170,6 +1224,38 @@ export function useSceneWorkspaceState({
 
     return runMutation('set-active', () => repository.setSceneObjectActive(selectedObjectAddress, activeSelf));
   }, [repository, runMutation, selectedObjectAddress]);
+
+  const setSceneObjectTransform = useCallback(async (transformUpdate: RuntimeSceneTransformUpdate) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('set-transform', () => repository.setSceneObjectTransform(selectedObjectAddress, transformUpdate));
+    if (selectedObjectAddress) {
+      loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    }
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const createSceneComponent = useCallback(async (componentTypeName: string) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('add-component', () => repository.createSceneComponent(selectedObjectAddress, componentTypeName));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const deleteSceneComponent = useCallback(async (componentAddress: string) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('remove-component', () => repository.deleteSceneComponent(componentAddress));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
 
   useEffect(() => {
     const processKey = workspaceLifecycle.processSession
@@ -1258,6 +1344,9 @@ export function useSceneWorkspaceState({
     duplicateSceneObject,
     deleteSceneObject,
     setSceneObjectActive,
+    setSceneObjectTransform,
+    createSceneComponent,
+    deleteSceneComponent,
     sceneMutationState,
     sceneRootsByHandle,
   };

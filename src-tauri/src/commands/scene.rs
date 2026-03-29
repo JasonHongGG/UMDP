@@ -2,6 +2,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult,
     RuntimeSceneObjectChildrenTaskState,
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
+    RuntimeSceneTransformUpdate,
     SceneWorkspaceState,
 };
 use crate::services::analysis::scene_service;
@@ -310,6 +311,101 @@ pub async fn set_scene_object_active(
                 "[perf][tauri] set_scene_object_active command failed in {}ms object_address={} error={}",
                 started_at.elapsed().as_millis(),
                 object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn set_scene_object_transform(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    transform_update: RuntimeSceneTransformUpdate,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::set_scene_object_transform(&app_handle, &state, &object_address, &transform_update);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] set_scene_object_transform command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] set_scene_object_transform command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn create_scene_component(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    component_type_name: String,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::create_scene_component(&app_handle, &state, &object_address, &component_type_name);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] create_scene_component command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] create_scene_component command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn delete_scene_component(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    component_address: String,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::delete_scene_component(&app_handle, &state, &component_address);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] delete_scene_component command completed in {}ms component_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                component_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] delete_scene_component command failed in {}ms component_address={} error={}",
+                started_at.elapsed().as_millis(),
+                component_address,
                 error
             ),
         }

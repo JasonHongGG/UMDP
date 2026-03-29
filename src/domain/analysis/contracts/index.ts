@@ -35,6 +35,7 @@ export type {
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectInspectorSnapshot,
   RuntimeSceneTransformSnapshot,
+  RuntimeSceneTransformUpdate,
   RuntimeOverlaySnapshot,
   RuntimeResolvedFieldDescriptor,
   RuntimeVector3Snapshot,

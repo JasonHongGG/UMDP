@@ -28,6 +28,7 @@ const EMPTY_SCENE_MUTATION_RESULT = {
   deletedObjectAddress: null,
   preferredSelectionAddress: null,
   activeSelf: null,
+  transform: null,
 };
 
 vi.mock('@/infrastructure/tauri/TauriWorkspaceGateway', () => ({
@@ -80,6 +81,9 @@ function createRepository(overrides: Partial<AnalysisRepository> = {}): Analysis
     duplicateSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     deleteSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     setSceneObjectActive: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneObjectTransform: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    createSceneComponent: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    deleteSceneComponent: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     ...overrides,
   } as AnalysisRepository;
 }

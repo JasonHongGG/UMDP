@@ -10,6 +10,7 @@ import type {
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneObjectInspectorSnapshot,
+  RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SystemContractVersions, WorkspaceLifecycleState } from '@/shared/contracts';
@@ -108,6 +109,15 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     },
     setSceneObjectActive(objectAddress: string, activeSelf: boolean) {
       return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_active', 'set_scene_object_active', { objectAddress, activeSelf });
+    },
+    setSceneObjectTransform(objectAddress: string, transformUpdate: RuntimeSceneTransformUpdate) {
+      return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_transform', 'set_scene_object_transform', { objectAddress, transformUpdate });
+    },
+    createSceneComponent(objectAddress: string, componentTypeName: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('create_scene_component', 'create_scene_component', { objectAddress, componentTypeName });
+    },
+    deleteSceneComponent(componentAddress: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('delete_scene_component', 'delete_scene_component', { componentAddress });
     },
     getRuntimeStaticFields(classStableId: string) {
       return timedInvoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', 'get_runtime_static_fields', { classStableId });
