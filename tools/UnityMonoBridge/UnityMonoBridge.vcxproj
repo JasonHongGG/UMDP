@@ -93,6 +93,8 @@
     <ClCompile Include="src\runtime\services\FieldValueWriter.cpp" />
     <ClCompile Include="src\runtime\services\MethodInvocationService.cpp" />
     <ClCompile Include="src\runtime\services\RuntimeInspector.cpp" />
+    <ClCompile Include="src\runtime\services\SceneServiceMutations.cpp" />
+    <ClCompile Include="src\runtime\services\SceneServiceQueries.cpp" />
     <ClCompile Include="src\runtime\services\SceneService.cpp" />
     <ClCompile Include="src\runtime\services\FieldValueReader.cpp" />
     <ClCompile Include="src\shared\Formatting.cpp" />

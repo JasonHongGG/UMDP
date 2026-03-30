@@ -1,18 +1,25 @@
-import React, { createContext, useContext } from 'react';
-import { useAnalysisRepository } from '@/domain/analysis/hooks/useAnalysisRepository';
+import React, { createContext, useContext, useEffect } from 'react';
+import { useSceneGateway } from '@/domain/scene/hooks/useSceneGateway';
 import { useWorkspaceShellState } from '@/domain/analysis/AnalysisWorkspaceContext';
 import { useSceneWorkspaceState, type SceneWorkspaceStateResult } from './useSceneWorkspaceState';
 
 const SceneWorkspaceContext = createContext<SceneWorkspaceStateResult | null>(null);
 
 export function SceneWorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const repository = useAnalysisRepository();
-  const { workspaceLifecycle, activePage } = useWorkspaceShellState();
+  const repository = useSceneGateway();
+  const { workspaceLifecycle, activePage, setWorkspaceTasks } = useWorkspaceShellState();
   const state = useSceneWorkspaceState({
     repository,
     workspaceLifecycle,
     active: activePage === 'scene',
   });
+
+  useEffect(() => {
+    setWorkspaceTasks('scene', state.sceneTasks);
+    return () => {
+      setWorkspaceTasks('scene', []);
+    };
+  }, [setWorkspaceTasks, state.sceneTasks]);
 
   return (
     <SceneWorkspaceContext.Provider value={state}>
@@ -100,6 +107,7 @@ export function useSceneMutationState() {
     deleteSceneComponent,
     loadSceneByBuildIndex,
     sceneMutationState,
+    activeSceneTask,
   } = useSceneWorkspace();
 
   return {
@@ -119,5 +127,6 @@ export function useSceneMutationState() {
     deleteSceneComponent,
     loadSceneByBuildIndex,
     sceneMutationState,
+    activeSceneTask,
   };
 }

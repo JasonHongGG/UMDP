@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   BRIDGE_PROTOCOL_VERSION,
   BRIDGE_SCHEMA_VERSION,
+  BRIDGE_OPERATIONS,
+  BRIDGE_OPERATION_GROUPS,
   createBridgeCommandEnvelope,
   createBridgeResponseEnvelope,
   type BridgeCommandEnvelope,
@@ -12,6 +14,13 @@ import {
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from './analysis';
 import type { GraphDocumentEnvelope } from '@/domain/studio/contracts';
 import type { SystemContractVersions } from './workspace';
+
+interface BridgeOperationRegistryFixture {
+  schemaVersion: number;
+  protocolVersion: number;
+  groups: Record<string, string[]>;
+  operations: string[];
+}
 
 function readFixture<T>(name: string): T {
   const raw = readFileSync(join(process.cwd(), 'contract-fixtures', name), 'utf8');
@@ -40,6 +49,21 @@ describe('shared contract fixtures', () => {
     expect(fixture.commandVersion).toBe(BRIDGE_PROTOCOL_VERSION);
     expect(fixture.schemaVersion).toBe(BRIDGE_SCHEMA_VERSION);
     expect(createBridgeResponseEnvelope(fixture.requestId, fixture.ok, fixture.result, fixture.error)).toEqual(fixture);
+  });
+
+  it('keeps the bridge operation registry aligned across the shared contract surface', () => {
+    const fixture = readFixture<BridgeOperationRegistryFixture>('bridge-operation-registry.json');
+
+    expect(fixture.schemaVersion).toBe(BRIDGE_SCHEMA_VERSION);
+    expect(fixture.protocolVersion).toBe(BRIDGE_PROTOCOL_VERSION);
+    expect(fixture.operations).toEqual([...BRIDGE_OPERATIONS]);
+    expect(fixture.groups).toEqual({
+      workspace: [...BRIDGE_OPERATION_GROUPS.workspace],
+      metadataQuery: [...BRIDGE_OPERATION_GROUPS.metadataQuery],
+      sceneQuery: [...BRIDGE_OPERATION_GROUPS.sceneQuery],
+      sceneMutation: [...BRIDGE_OPERATION_GROUPS.sceneMutation],
+      runtime: [...BRIDGE_OPERATION_GROUPS.runtime],
+    });
   });
 
   it('keeps the workflow envelope fixture aligned with the studio persistence contract', () => {

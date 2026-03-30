@@ -32,6 +32,7 @@ function AppContent() {
     workspaceLifecycle,
     activePage,
     setActivePage,
+    workspaceTasks,
   } = useWorkspaceShellState();
 
   return (
@@ -53,7 +54,7 @@ function AppContent() {
         )}
       </Suspense>
 
-      <StatusBar workspace={workspaceLifecycle} />
+      <StatusBar workspace={workspaceLifecycle} tasks={workspaceTasks} />
     </MainLayout>
   );
 }

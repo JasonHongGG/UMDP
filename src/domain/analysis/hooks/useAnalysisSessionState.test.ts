@@ -222,12 +222,12 @@ describe('useAnalysisSessionState', () => {
       processSession: null,
       analysisSnapshot: null,
       loadingImages: false,
-      attachError: 'Error: bridge failed to attach',
+      attachError: 'bridge failed to attach',
       workspaceLifecycle: {
         status: 'bridge-error',
         runtime: 'unknown',
         hasSnapshot: false,
-        errorMessage: 'Error: bridge failed to attach',
+        errorMessage: 'bridge failed to attach',
       },
     });
   });
@@ -271,12 +271,50 @@ describe('useAnalysisSessionState', () => {
     });
   });
 
-  it('polls workspace lifecycle updates on the refresh interval', async () => {
-    vi.useFakeTimers();
+  it('refreshes workspace lifecycle when the window regains focus', async () => {
+    const session: ProcessSession = {
+      pid: 9001,
+      processName: 'FocusUnity.exe',
+      exePath: 'C:/Games/FocusUnity.exe',
+      dataDir: 'C:/Games/FocusUnity_Data',
+      managedDir: 'C:/Games/FocusUnity_Data/Managed',
+      runtime: 'mono',
+    };
     const repository = createRepository({
+      attachToProcess: vi.fn().mockResolvedValue(session),
+      loadAllMetadata: vi.fn().mockResolvedValue({ process: null, generatedAt: '2026-03-22T12:00:00.000Z', images: [], classes: {} }),
       getWorkspaceLifecycle: vi.fn()
         .mockResolvedValueOnce(createLifecycle())
         .mockResolvedValueOnce(createLifecycle({
+          status: 'ready',
+          processSession: session,
+          runtime: 'mono',
+          hasSnapshot: true,
+          runtimeSession: {
+            status: 'ready',
+            runtime: 'mono',
+            capabilities: ['metadata', 'execution'],
+            bridgeConnected: true,
+            sessionKey: 'session-focus',
+            lastError: null,
+            lastHeartbeatAt: '2026-03-22T12:04:00.000Z',
+          },
+        }))
+        .mockResolvedValueOnce(createLifecycle({
+          status: 'recovering',
+          runtime: 'mono',
+          errorMessage: 'bridge heartbeat missed',
+          runtimeSession: {
+            status: 'recovering',
+            runtime: 'mono',
+            capabilities: ['metadata', 'execution'],
+            bridgeConnected: false,
+            sessionKey: 'session-2',
+            lastError: 'bridge heartbeat missed',
+            lastHeartbeatAt: '2026-03-22T12:05:00.000Z',
+          },
+        }))
+        .mockResolvedValue(createLifecycle({
           status: 'recovering',
           runtime: 'mono',
           errorMessage: 'bridge heartbeat missed',
@@ -298,12 +336,17 @@ describe('useAnalysisSessionState', () => {
     await flushEffects();
 
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      await processSelectedHandler?.({ pid: 9001, name: 'FocusUnity.exe' });
+    });
+    await flushEffects();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
       await Promise.resolve();
     });
     await flushEffects();
 
-    expect(repository.getWorkspaceLifecycle).toHaveBeenCalledTimes(2);
+    expect(repository.getWorkspaceLifecycle).toHaveBeenCalledTimes(4);
     expect(latestState?.workspaceLifecycle).toMatchObject({
       status: 'recovering',
       errorMessage: 'bridge heartbeat missed',

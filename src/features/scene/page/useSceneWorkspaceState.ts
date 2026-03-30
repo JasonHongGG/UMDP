@@ -13,31 +13,55 @@ import type {
   RuntimeVector3Snapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
-import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
+import type { SceneGateway } from '@/domain/scene/gateway';
 import {
   onSceneObjectChildrenTaskUpdated,
   onSceneObjectInspectorTaskUpdated,
   onSceneWorkspaceStateUpdated,
 } from '@/infrastructure/tauri/TauriSceneEvents';
-import type { WorkspaceLifecycleState } from '@/shared/contracts';
-
-const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
-  refreshStatus: 'idle',
-  errorMessage: null,
-  snapshot: null,
-  lastUpdatedAt: null,
-};
+import type { WorkspaceLifecycleState, WorkspaceTaskScope, WorkspaceTaskSnapshot } from '@/shared/contracts';
+import {
+  adjustChildrenCounts,
+  adjustNodeChildCountInList,
+  adjustInspectorCounts,
+  buildInspectorSnapshot,
+  EMPTY_SCENE_WORKSPACE_STATE,
+  insertChildIntoInspectors,
+  insertChildNode,
+  insertRootNode,
+  isTerminalChildrenTaskStatus,
+  isTerminalInspectorTaskStatus,
+  logSceneError,
+  logScenePerf,
+  mergeInspectorCaches,
+  patchChildrenWithSummaries,
+  patchChildrenWithSummary,
+  patchInspectorTransform,
+  patchInspectorsWithSummaries,
+  patchInspectorsWithSummary,
+  patchRootsWithSummaries,
+  patchRootsWithSummary,
+  removeChildNode,
+  removeNodeEverywhere,
+  removeNodeFromInspectors,
+  removeRootNode,
+  sameNodeOrder,
+  waitForNextPaint,
+} from './sceneWorkspaceStatePatches';
+import { collectSceneWorkspaceTasks } from './sceneWorkspaceTasks';
 
 type SceneMutationState = {
   operation: RuntimeSceneMutationOperation | null;
   loading: boolean;
   errorMessage: string | null;
+  task: WorkspaceTaskSnapshot | null;
 };
 
 const EMPTY_MUTATION_STATE: SceneMutationState = {
   operation: null,
   loading: false,
   errorMessage: null,
+  task: null,
 };
 
 export interface SceneWorkspaceStateResult {
@@ -73,581 +97,17 @@ export interface SceneWorkspaceStateResult {
   deleteSceneComponent: (componentAddress: string) => Promise<RuntimeSceneMutationResult | null>;
   loadSceneByBuildIndex: (buildIndex: number) => Promise<RuntimeSceneMutationResult | null>;
   sceneMutationState: SceneMutationState;
+  activeSceneTask: WorkspaceTaskSnapshot | null;
+  sceneTasks: WorkspaceTaskSnapshot[];
   sceneRootsByHandle: Record<number, RuntimeSceneNodeSummary[]>;
-}
-
-function toErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function logSceneError(context: string, error: unknown) {
-  console.log(`[scene] ${context}`, error);
-  return toErrorMessage(error);
 }
 
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-function logScenePerf(label: string, startedAt: number, details?: Record<string, unknown>) {
-  console.log(`[perf][scene] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`, details ?? {});
-}
-
-function waitForNextPaint() {
-  return new Promise<void>((resolve) => {
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => resolve());
-      return;
-    }
-
-    window.setTimeout(resolve, 0);
-  });
-}
-
-function isTerminalChildrenTaskStatus(status: RuntimeSceneObjectChildrenTaskState['status']) {
-  return status === 'ready' || status === 'error' || status === 'cancelled';
-}
-
-function isTerminalInspectorTaskStatus(status: RuntimeSceneObjectInspectorTaskState['status']) {
-  return status === 'ready' || status === 'error' || status === 'cancelled';
-}
-
-function buildSummaryLookup(summaries: RuntimeSceneNodeSummary[]) {
-  return new Map(summaries.map((summary) => [summary.objectAddress, summary]));
-}
-
-function patchNodeListWithLookup(nodes: RuntimeSceneNodeSummary[], lookup: Map<string, RuntimeSceneNodeSummary>) {
-  let touched = false;
-  const next = nodes.map((node) => {
-    const replacement = lookup.get(node.objectAddress);
-    if (!replacement) {
-      return node;
-    }
-
-    touched = true;
-    return replacement;
-  });
-
-  return touched ? next : nodes;
-}
-
-function sameNodeOrder(left: RuntimeSceneNodeSummary[], right: RuntimeSceneNodeSummary[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((node, index) => node.objectAddress === right[index]?.objectAddress);
-}
-
-function sameComponentOrder(left: RuntimeSceneComponentSummary[], right: RuntimeSceneComponentSummary[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((component, index) => component.componentAddress === right[index]?.componentAddress);
-}
-
-function buildInspectorSnapshot(taskState: RuntimeSceneObjectInspectorTaskState): RuntimeSceneObjectInspectorSnapshot | null {
-  if (!taskState.header) {
-    return null;
-  }
-
-  return {
-    generatedAt: taskState.header.generatedAt,
-    sceneHandle: taskState.header.sceneHandle,
-    sceneName: taskState.header.sceneName,
-    sceneKind: taskState.header.sceneKind,
-    object: taskState.header.object,
-    parent: taskState.header.parent,
-    hierarchyPath: taskState.header.hierarchyPath,
-    transform: taskState.header.transform,
-    children: taskState.children,
-    components: taskState.components,
-  };
-}
-
-function updateNodeInList(nodes: RuntimeSceneNodeSummary[], summary: RuntimeSceneNodeSummary) {
-  let touched = false;
-  const next = nodes.map((node) => {
-    if (node.objectAddress !== summary.objectAddress) {
-      return node;
-    }
-
-    touched = true;
-    return summary;
-  });
-
-  return touched ? next : nodes;
-}
-
-function insertNodeIntoList(nodes: RuntimeSceneNodeSummary[], summary: RuntimeSceneNodeSummary) {
-  const existingIndex = nodes.findIndex((node) => node.objectAddress === summary.objectAddress);
-  if (existingIndex >= 0) {
-    return updateNodeInList(nodes, summary);
-  }
-
-  return [...nodes, summary];
-}
-
-function removeNodeFromList(nodes: RuntimeSceneNodeSummary[], objectAddress: string) {
-  const next = nodes.filter((node) => node.objectAddress !== objectAddress);
-  return next.length === nodes.length ? nodes : next;
-}
-
-function adjustNodeChildCount(summary: RuntimeSceneNodeSummary, delta: number) {
-  const childCount = Math.max(0, summary.childCount + delta);
-  return {
-    ...summary,
-    childCount,
-    hasChildren: childCount > 0,
-  };
-}
-
-function adjustNodeChildCountInList(nodes: RuntimeSceneNodeSummary[], objectAddress: string, delta: number) {
-  let touched = false;
-  const next = nodes.map((node) => {
-    if (node.objectAddress !== objectAddress) {
-      return node;
-    }
-
-    touched = true;
-    return adjustNodeChildCount(node, delta);
-  });
-
-  return touched ? next : nodes;
-}
-
-function patchRootsWithSummary(sceneWorkspace: SceneWorkspaceState, summary: RuntimeSceneNodeSummary) {
-  if (!sceneWorkspace.snapshot) {
-    return sceneWorkspace;
-  }
-
-  let touched = false;
-  const scenes = sceneWorkspace.snapshot.scenes.map((scene) => {
-    const roots = updateNodeInList(scene.roots, summary);
-    if (roots === scene.roots) {
-      return scene;
-    }
-
-    touched = true;
-    return { ...scene, roots };
-  });
-
-  if (!touched) {
-    return sceneWorkspace;
-  }
-
-  return {
-    ...sceneWorkspace,
-    snapshot: {
-      ...sceneWorkspace.snapshot,
-      scenes,
-    },
-  };
-}
-
-function patchRootsWithSummaries(sceneWorkspace: SceneWorkspaceState, summaries: RuntimeSceneNodeSummary[]) {
-  if (!sceneWorkspace.snapshot || summaries.length === 0) {
-    return sceneWorkspace;
-  }
-
-  const summaryLookup = buildSummaryLookup(summaries);
-  let touched = false;
-  const scenes = sceneWorkspace.snapshot.scenes.map((scene) => {
-    const roots = patchNodeListWithLookup(scene.roots, summaryLookup);
-    if (roots === scene.roots) {
-      return scene;
-    }
-
-    touched = true;
-    return { ...scene, roots };
-  });
-
-  if (!touched) {
-    return sceneWorkspace;
-  }
-
-  return {
-    ...sceneWorkspace,
-    snapshot: {
-      ...sceneWorkspace.snapshot,
-      scenes,
-    },
-  };
-}
-
-function insertRootNode(sceneWorkspace: SceneWorkspaceState, sceneHandle: number | null, summary: RuntimeSceneNodeSummary | null) {
-  if (!sceneWorkspace.snapshot || sceneHandle == null || !summary) {
-    return sceneWorkspace;
-  }
-
-  let touched = false;
-  const scenes = sceneWorkspace.snapshot.scenes.map((scene) => {
-    if (scene.sceneHandle !== sceneHandle) {
-      return scene;
-    }
-
-    const roots = insertNodeIntoList(scene.roots, summary);
-    if (roots === scene.roots) {
-      return scene;
-    }
-
-    touched = true;
-    return { ...scene, roots };
-  });
-
-  if (!touched) {
-    return sceneWorkspace;
-  }
-
-  return {
-    ...sceneWorkspace,
-    snapshot: {
-      ...sceneWorkspace.snapshot,
-      scenes,
-    },
-  };
-}
-
-function removeRootNode(sceneWorkspace: SceneWorkspaceState, sceneHandle: number | null, objectAddress: string | null) {
-  if (!sceneWorkspace.snapshot || sceneHandle == null || !objectAddress) {
-    return sceneWorkspace;
-  }
-
-  let touched = false;
-  const scenes = sceneWorkspace.snapshot.scenes.map((scene) => {
-    if (scene.sceneHandle !== sceneHandle) {
-      return scene;
-    }
-
-    const roots = removeNodeFromList(scene.roots, objectAddress);
-    if (roots === scene.roots) {
-      return scene;
-    }
-
-    touched = true;
-    return { ...scene, roots };
-  });
-
-  if (!touched) {
-    return sceneWorkspace;
-  }
-
-  return {
-    ...sceneWorkspace,
-    snapshot: {
-      ...sceneWorkspace.snapshot,
-      scenes,
-    },
-  };
-}
-
-function patchChildrenWithSummary(
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  summary: RuntimeSceneNodeSummary,
-) {
-  let touched = false;
-  const nextEntries = Object.entries(childrenByParent).map(([parent, children]) => {
-    const updated = updateNodeInList(children, summary);
-    if (updated !== children) {
-      touched = true;
-    }
-    return [parent, updated] as const;
-  });
-
-  return touched ? Object.fromEntries(nextEntries) : childrenByParent;
-}
-
-function patchChildrenWithSummaries(
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  summaries: RuntimeSceneNodeSummary[],
-) {
-  if (summaries.length === 0) {
-    return childrenByParent;
-  }
-
-  const summaryLookup = buildSummaryLookup(summaries);
-  let touched = false;
-  const nextEntries = Object.entries(childrenByParent).map(([parent, children]) => {
-    const updated = patchNodeListWithLookup(children, summaryLookup);
-    if (updated !== children) {
-      touched = true;
-    }
-    return [parent, updated] as const;
-  });
-
-  return touched ? Object.fromEntries(nextEntries) : childrenByParent;
-}
-
-function adjustChildrenCounts(
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  objectAddress: string,
-  delta: number,
-) {
-  let touched = false;
-  const nextEntries = Object.entries(childrenByParent).map(([parent, children]) => {
-    const updated = adjustNodeChildCountInList(children, objectAddress, delta);
-    if (updated !== children) {
-      touched = true;
-    }
-    return [parent, updated] as const;
-  });
-
-  return touched ? Object.fromEntries(nextEntries) : childrenByParent;
-}
-
-function insertChildNode(
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  parentObjectAddress: string,
-  summary: RuntimeSceneNodeSummary | null,
-) {
-  if (!summary || !Object.prototype.hasOwnProperty.call(childrenByParent, parentObjectAddress)) {
-    return childrenByParent;
-  }
-
-  return {
-    ...childrenByParent,
-    [parentObjectAddress]: insertNodeIntoList(childrenByParent[parentObjectAddress] ?? [], summary),
-  };
-}
-
-function removeChildNode(
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  parentObjectAddress: string,
-  objectAddress: string | null,
-) {
-  if (!objectAddress || !Object.prototype.hasOwnProperty.call(childrenByParent, parentObjectAddress)) {
-    return childrenByParent;
-  }
-
-  const updated = removeNodeFromList(childrenByParent[parentObjectAddress] ?? [], objectAddress);
-  if (updated === childrenByParent[parentObjectAddress]) {
-    return childrenByParent;
-  }
-
-  return {
-    ...childrenByParent,
-    [parentObjectAddress]: updated,
-  };
-}
-
-function removeNodeEverywhere(
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  objectAddress: string | null,
-) {
-  if (!objectAddress) {
-    return childrenByParent;
-  }
-
-  let touched = false;
-  const nextEntries: Array<[string, RuntimeSceneNodeSummary[]]> = [];
-  for (const [parent, children] of Object.entries(childrenByParent)) {
-    if (parent === objectAddress) {
-      touched = true;
-      continue;
-    }
-
-    const updated = removeNodeFromList(children, objectAddress);
-    if (updated !== children) {
-      touched = true;
-    }
-    nextEntries.push([parent, updated]);
-  }
-
-  return touched ? Object.fromEntries(nextEntries) : childrenByParent;
-}
-
-function patchInspectorsWithSummary(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  summary: RuntimeSceneNodeSummary,
-) {
-  let touched = false;
-  const nextEntries = Object.entries(inspectors).map(([address, inspector]) => {
-    let nextInspector = inspector;
-
-    if (inspector.object.objectAddress === summary.objectAddress) {
-      nextInspector = { ...nextInspector, object: summary };
-    }
-    if (nextInspector.parent?.objectAddress === summary.objectAddress) {
-      nextInspector = { ...nextInspector, parent: summary };
-    }
-
-    const nextChildren = updateNodeInList(nextInspector.children, summary);
-    if (nextChildren !== nextInspector.children) {
-      nextInspector = { ...nextInspector, children: nextChildren };
-    }
-
-    if (nextInspector !== inspector) {
-      touched = true;
-    }
-
-    return [address, nextInspector] as const;
-  });
-
-  return touched ? Object.fromEntries(nextEntries) : inspectors;
-}
-
-function patchInspectorsWithSummaries(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  summaries: RuntimeSceneNodeSummary[],
-) {
-  if (summaries.length === 0) {
-    return inspectors;
-  }
-
-  const summaryLookup = buildSummaryLookup(summaries);
-  let touched = false;
-  const nextEntries = Object.entries(inspectors).map(([address, inspector]) => {
-    let nextInspector = inspector;
-
-    const objectSummary = summaryLookup.get(inspector.object.objectAddress);
-    if (objectSummary) {
-      nextInspector = { ...nextInspector, object: objectSummary };
-    }
-
-    if (nextInspector.parent) {
-      const parentSummary = summaryLookup.get(nextInspector.parent.objectAddress);
-      if (parentSummary) {
-        nextInspector = { ...nextInspector, parent: parentSummary };
-      }
-    }
-
-    const nextChildren = patchNodeListWithLookup(nextInspector.children, summaryLookup);
-    if (nextChildren !== nextInspector.children) {
-      nextInspector = { ...nextInspector, children: nextChildren };
-    }
-
-    if (nextInspector !== inspector) {
-      touched = true;
-    }
-
-    return [address, nextInspector] as const;
-  });
-
-  return touched ? Object.fromEntries(nextEntries) : inspectors;
-}
-
-function adjustInspectorCounts(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  objectAddress: string,
-  delta: number,
-) {
-  let touched = false;
-  const nextEntries = Object.entries(inspectors).map(([address, inspector]) => {
-    let nextInspector = inspector;
-
-    if (inspector.object.objectAddress === objectAddress) {
-      nextInspector = {
-        ...nextInspector,
-        object: adjustNodeChildCount(inspector.object, delta),
-      };
-    }
-    if (nextInspector.parent?.objectAddress === objectAddress) {
-      nextInspector = {
-        ...nextInspector,
-        parent: adjustNodeChildCount(nextInspector.parent, delta),
-      };
-    }
-
-    const nextChildren = adjustNodeChildCountInList(nextInspector.children, objectAddress, delta);
-    if (nextChildren !== nextInspector.children) {
-      nextInspector = { ...nextInspector, children: nextChildren };
-    }
-
-    if (nextInspector !== inspector) {
-      touched = true;
-    }
-
-    return [address, nextInspector] as const;
-  });
-
-  return touched ? Object.fromEntries(nextEntries) : inspectors;
-}
-
-function insertChildIntoInspectors(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  parentObjectAddress: string,
-  summary: RuntimeSceneNodeSummary | null,
-) {
-  if (!summary || !inspectors[parentObjectAddress]) {
-    return inspectors;
-  }
-
-  return {
-    ...inspectors,
-    [parentObjectAddress]: {
-      ...inspectors[parentObjectAddress],
-      children: insertNodeIntoList(inspectors[parentObjectAddress].children, summary),
-    },
-  };
-}
-
-function removeNodeFromInspectors(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  objectAddress: string | null,
-) {
-  if (!objectAddress) {
-    return inspectors;
-  }
-
-  let touched = false;
-  const nextEntries: Array<[string, RuntimeSceneObjectInspectorSnapshot]> = [];
-  for (const [address, inspector] of Object.entries(inspectors)) {
-    if (address === objectAddress) {
-      touched = true;
-      continue;
-    }
-
-    let nextInspector = inspector;
-    if (inspector.parent?.objectAddress === objectAddress) {
-      nextInspector = { ...nextInspector, parent: null };
-    }
-
-    const nextChildren = removeNodeFromList(nextInspector.children, objectAddress);
-    if (nextChildren !== nextInspector.children) {
-      nextInspector = { ...nextInspector, children: nextChildren };
-    }
-
-    if (nextInspector !== inspector) {
-      touched = true;
-    }
-    nextEntries.push([address, nextInspector]);
-  }
-
-  return touched ? Object.fromEntries(nextEntries) : inspectors;
-}
-
-function mergeInspectorCaches(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  snapshot: RuntimeSceneObjectInspectorSnapshot,
-) {
-  if (inspectors[snapshot.object.objectAddress] === snapshot) {
-    return inspectors;
-  }
-
-  return {
-    ...inspectors,
-    [snapshot.object.objectAddress]: snapshot,
-  };
-}
-
-function patchInspectorTransform(
-  inspectors: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  objectAddress: string,
-  transform: RuntimeSceneTransformSnapshot,
-) {
-  const current = inspectors[objectAddress];
-  if (!current) {
-    return inspectors;
-  }
-
-  return {
-    ...inspectors,
-    [objectAddress]: {
-      ...current,
-      transform,
-    },
-  };
+function sceneMutationTaskScope(operation: RuntimeSceneMutationOperation): WorkspaceTaskScope {
+  return operation === 'load-scene' || operation === 'create-root' ? 'resource' : 'selection';
 }
 
 export function useSceneWorkspaceState({
@@ -655,7 +115,7 @@ export function useSceneWorkspaceState({
   workspaceLifecycle,
   active,
 }: {
-  repository: AnalysisRepository;
+  repository: SceneGateway;
   workspaceLifecycle: WorkspaceLifecycleState;
   active: boolean;
 }): SceneWorkspaceStateResult {
@@ -680,6 +140,7 @@ export function useSceneWorkspaceState({
   const activeChildTaskIdByParentRef = useRef<Record<string, number | null>>({});
   const activeInspectorTaskIdRef = useRef<number | null>(null);
   const inspectorPollTokenRef = useRef(0);
+  const sceneMutationTaskCounterRef = useRef(0);
 
   useEffect(() => {
     childrenByParentRef.current = childrenByParent;
@@ -1227,15 +688,56 @@ export function useSceneWorkspaceState({
     runner: () => Promise<RuntimeSceneMutationResult>,
   ) => {
     const startedAt = nowMs();
+    const taskStartedAt = new Date().toISOString();
+    sceneMutationTaskCounterRef.current += 1;
+    const taskId = `scene-${operation}-${sceneMutationTaskCounterRef.current}`;
     setSceneMutationState({
       operation,
       loading: true,
       errorMessage: null,
+      task: {
+        taskId,
+        resourceKind: 'scene',
+        operationKey: `scene.${operation}`,
+        scope: sceneMutationTaskScope(operation),
+        status: 'running',
+        progress: {
+          completed: 0,
+          total: 1,
+          message: `Applying ${operation}`,
+        },
+        targetId: selectedObjectAddress,
+        startedAt: taskStartedAt,
+        updatedAt: taskStartedAt,
+        errorMessage: null,
+      },
     });
 
     try {
       const result = await runner();
       applySceneMutation(result);
+      const updatedAt = new Date().toISOString();
+      setSceneMutationState({
+        operation,
+        loading: false,
+        errorMessage: null,
+        task: {
+          taskId,
+          resourceKind: 'scene',
+          operationKey: `scene.${operation}`,
+          scope: sceneMutationTaskScope(operation),
+          status: 'success',
+          progress: {
+            completed: 1,
+            total: 1,
+            message: `Completed ${operation}`,
+          },
+          targetId: result.preferredSelectionAddress ?? result.targetObjectAddress ?? selectedObjectAddress,
+          startedAt: taskStartedAt,
+          updatedAt,
+          errorMessage: null,
+        },
+      });
       logScenePerf(`sceneMutation:${operation}`, startedAt, {
         targetObjectAddress: result.targetObjectAddress,
         parentObjectAddress: result.parentObjectAddress,
@@ -1243,19 +745,31 @@ export function useSceneWorkspaceState({
       return result;
     } catch (error) {
       const message = logSceneError(`scene mutation failed: ${operation}`, error);
+      const updatedAt = new Date().toISOString();
       setSceneMutationState({
         operation,
         loading: false,
         errorMessage: message,
+        task: {
+          taskId,
+          resourceKind: 'scene',
+          operationKey: `scene.${operation}`,
+          scope: sceneMutationTaskScope(operation),
+          status: 'error',
+          progress: {
+            completed: 0,
+            total: 1,
+            message: `Failed ${operation}`,
+          },
+          targetId: selectedObjectAddress,
+          startedAt: taskStartedAt,
+          updatedAt,
+          errorMessage: message,
+        },
       });
       throw error;
-    } finally {
-      setSceneMutationState((previous) => ({
-        ...previous,
-        loading: false,
-      }));
     }
-  }, [applySceneMutation]);
+  }, [applySceneMutation, selectedObjectAddress]);
 
   const createSceneChild = useCallback(async (name: string) => {
     if (!selectedObjectAddress) {
@@ -1470,6 +984,15 @@ export function useSceneWorkspaceState({
     return Object.fromEntries((sceneWorkspace.snapshot?.scenes ?? []).map((scene) => [scene.sceneHandle, scene.roots]));
   }, [sceneWorkspace.snapshot]);
 
+  const sceneTasks = useMemo(() => {
+    return collectSceneWorkspaceTasks({
+      sceneWorkspace,
+      childTaskByParent,
+      inspectorTaskByAddress,
+      mutationTask: sceneMutationState.task,
+    });
+  }, [childTaskByParent, inspectorTaskByAddress, sceneMutationState.task, sceneWorkspace]);
+
   return {
     sceneWorkspace,
     refreshSceneWorkspace,
@@ -1503,6 +1026,8 @@ export function useSceneWorkspaceState({
     deleteSceneComponent,
     loadSceneByBuildIndex,
     sceneMutationState,
+    activeSceneTask: sceneMutationState.task,
+    sceneTasks,
     sceneRootsByHandle,
   };
 }

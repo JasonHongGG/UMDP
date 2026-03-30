@@ -3,7 +3,7 @@
 import React, { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
+import type { SceneGateway } from '@/domain/scene/gateway';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { useSceneWorkspaceState } from './useSceneWorkspaceState';
@@ -41,7 +41,7 @@ function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): Work
   };
 }
 
-function createRepository(): AnalysisRepository {
+function createRepository(): SceneGateway {
   const workspace = createSceneWorkspaceState({
     snapshot: {
       generatedAt: '2026-03-30T00:00:00.000Z',
@@ -63,10 +63,10 @@ function createRepository(): AnalysisRepository {
     startSceneRefresh: vi.fn().mockResolvedValue(workspace),
     cancelSceneObjectChildrenAnalysis: vi.fn(),
     cancelSceneObjectInspectorAnalysis: vi.fn(),
-  } as unknown as AnalysisRepository;
+  } as unknown as SceneGateway;
 }
 
-function HookHarness({ repository }: { repository: AnalysisRepository }) {
+function HookHarness({ repository }: { repository: SceneGateway }) {
   const state = useSceneWorkspaceState({
     repository,
     workspaceLifecycle: createLifecycle({

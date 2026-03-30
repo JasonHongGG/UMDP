@@ -89,8 +89,11 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
     } finally {
       setLoadingImages(false);
       await refreshWorkspaceLifecycle({
+        status: 'attached-without-snapshot',
         processSession: session,
         runtime: session?.runtime ?? 'unknown',
+        hasSnapshot: false,
+        errorMessage: null,
       }, 'after-metadata-load');
     }
   }, [patchWorkspaceLifecycle, refreshWorkspaceLifecycle, repository]);

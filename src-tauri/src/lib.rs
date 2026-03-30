@@ -1,4 +1,5 @@
 mod commands;
+mod application;
 mod domain;
 mod services;
 mod state;

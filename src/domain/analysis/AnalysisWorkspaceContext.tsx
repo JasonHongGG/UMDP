@@ -5,8 +5,7 @@ import type {
   ProcessSession,
   RuntimeClassOverlayDescriptor,
 } from './contracts';
-import type { WorkspaceLifecycleState } from '@/shared/contracts';
-import type { SystemContractVersions } from '@/shared/contracts';
+import type { SystemContractVersions, WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 import {
   type ClassBinding,
   type ClassInfoCatalog,
@@ -109,7 +108,10 @@ type WorkspaceShellContextValue = Pick<AnalysisWorkspaceContextValue,
   | 'workspaceLifecycle'
   | 'activePage'
   | 'setActivePage'
->;
+> & {
+  workspaceTasks: WorkspaceTaskSnapshot[];
+  setWorkspaceTasks: (sourceKey: string, tasks: WorkspaceTaskSnapshot[]) => void;
+};
 
 type StudioWorkspaceContextValue = Pick<AnalysisWorkspaceContextValue,
   'studioRuntimeData'
@@ -179,6 +181,7 @@ const InspectorWorkspaceContext = createContext<InspectorWorkspaceContextValue |
 export function AnalysisWorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [selectedImageStableId, setSelectedImageStableId] = useState<StableId | null>(null);
   const [contractVersions, setContractVersions] = useState<SystemContractVersions | null>(null);
+  const [workspaceTasksBySource, setWorkspaceTasksBySource] = useState<Record<string, WorkspaceTaskSnapshot[]>>({});
 
   const [tabs, setTabs] = useState<InspectorTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
@@ -195,9 +198,33 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     setSelectedImageStableId(null);
     setTabs([]);
     setActiveTabIndex(-1);
+    setWorkspaceTasksBySource({});
     resetNavigationStateRef.current();
     resetSearchStateRef.current();
   }, []);
+
+  const setWorkspaceTasks = useCallback((sourceKey: string, tasks: WorkspaceTaskSnapshot[]) => {
+    setWorkspaceTasksBySource((previous) => {
+      if (tasks.length === 0) {
+        if (!Object.prototype.hasOwnProperty.call(previous, sourceKey)) {
+          return previous;
+        }
+
+        const next = { ...previous };
+        delete next[sourceKey];
+        return next;
+      }
+
+      return {
+        ...previous,
+        [sourceKey]: tasks,
+      };
+    });
+  }, []);
+
+  const workspaceTasks = useMemo(() => {
+    return Object.values(workspaceTasksBySource).flat();
+  }, [workspaceTasksBySource]);
 
   const {
     processSession,
@@ -424,7 +451,9 @@ export function AnalysisWorkspaceProvider({ children }: { children: React.ReactN
     workspaceLifecycle,
     activePage,
     setActivePage,
-  }), [activePage, contractVersions, processSession, workspaceLifecycle]);
+    workspaceTasks,
+    setWorkspaceTasks,
+  }), [activePage, contractVersions, processSession, setWorkspaceTasks, workspaceLifecycle, workspaceTasks]);
 
   const studioWorkspaceValue = useMemo<StudioWorkspaceContextValue>(() => ({
     studioRuntimeData,

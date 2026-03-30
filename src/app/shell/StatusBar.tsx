@@ -1,9 +1,10 @@
 import { Binary, Database } from 'lucide-react';
-import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import type { WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 import { getWorkspaceLifecycleLabel, getWorkspaceLifecycleTone } from './workspaceLifecycle';
 
 interface StatusBarProps {
   workspace: WorkspaceLifecycleState;
+  tasks: WorkspaceTaskSnapshot[];
 }
 
 const toneClassMap = {
@@ -33,10 +34,33 @@ function formatRuntimeSessionLabel(workspace: WorkspaceLifecycleState) {
   }
 }
 
-export function StatusBar({ workspace }: StatusBarProps) {
+function selectActiveWorkspaceTask(tasks: WorkspaceTaskSnapshot[]) {
+  const statusRank: Record<WorkspaceTaskSnapshot['status'], number> = {
+    running: 0,
+    queued: 1,
+    error: 2,
+    cancelled: 3,
+    success: 4,
+    idle: 5,
+  };
+
+  return [...tasks]
+    .filter((task) => task.status === 'running' || task.status === 'queued' || task.status === 'error')
+    .sort((left, right) => {
+      const rankDelta = statusRank[left.status] - statusRank[right.status];
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+
+      return right.updatedAt.localeCompare(left.updatedAt);
+    })[0] ?? null;
+}
+
+export function StatusBar({ workspace, tasks }: StatusBarProps) {
   const tone = getWorkspaceLifecycleTone(workspace);
   const label = getWorkspaceLifecycleLabel(workspace);
   const runtimeLabel = formatRuntimeSessionLabel(workspace);
+  const activeTask = selectActiveWorkspaceTask(tasks);
 
   return (
     <div className="h-7 border-t border-[#1c2838] bg-[#05080c] flex items-center px-4 justify-between text-[10px] text-slate-500 shrink-0 select-none z-20 relative">
@@ -57,7 +81,9 @@ export function StatusBar({ workspace }: StatusBarProps) {
         </span>
       </div>
       <div className="truncate text-right text-slate-500">
-        {workspace.runtimeSession.lastError
+        {activeTask?.progress?.message
+          ? `${activeTask.progress.message}${activeTask.progress.total != null ? ` (${activeTask.progress.completed}/${activeTask.progress.total})` : ''}`
+          : workspace.runtimeSession.lastError
           ? workspace.runtimeSession.lastError
           : workspace.processSession
             ? `${workspace.processSession.processName} (${workspace.processSession.pid})`

@@ -2,6 +2,8 @@
 mod tests {
     use serde::Deserialize;
 
+    use crate::domain::bridge_protocol::all_protocol_names;
+
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct BridgeCommandEnvelope {
@@ -30,6 +32,15 @@ mod tests {
         bridge_protocol_version: u32,
         analysis_schema_version: u32,
         workflow_schema_version: u32,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct BridgeOperationRegistry {
+        schema_version: u32,
+        protocol_version: u32,
+        groups: serde_json::Value,
+        operations: Vec<String>,
     }
 
     #[derive(Debug, Deserialize)]
@@ -83,6 +94,18 @@ mod tests {
         assert!(fixture.ok);
         assert!(fixture.result.is_some());
         assert!(fixture.error.is_none());
+    }
+
+    #[test]
+    fn bridge_operation_registry_fixture_matches_protocol_surface() {
+        let fixture: BridgeOperationRegistry = serde_json::from_str(include_str!("../../../contract-fixtures/bridge-operation-registry.json"))
+            .expect("bridge operation registry fixture should deserialize");
+
+        assert_eq!(fixture.schema_version, 1);
+        assert_eq!(fixture.protocol_version, 2);
+        assert!(fixture.groups.is_object());
+        assert_eq!(fixture.operations.len(), all_protocol_names().len());
+        assert_eq!(fixture.operations, all_protocol_names().into_iter().map(str::to_string).collect::<Vec<_>>());
     }
 
     #[test]

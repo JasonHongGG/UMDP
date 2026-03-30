@@ -1,36 +1,24 @@
-export type BridgeOperation =
-  | 'process-fetch'
-  | 'process-attach'
-  | 'analysis-snapshot-load'
-  | 'analysis-overlay-load'
-  | 'scene-catalog-load'
-  | 'scene-object-children-load'
-  | 'scene-object-children-page-load'
-  | 'scene-object-inspect'
-  | 'scene-object-inspect-header'
-  | 'scene-object-inspect-children-page'
-  | 'scene-object-inspect-components-page'
-  | 'scene-object-create-root'
-  | 'scene-object-create-child'
-  | 'scene-object-duplicate'
-  | 'scene-object-delete'
-  | 'scene-object-rename'
-  | 'scene-object-set-tag'
-  | 'scene-object-set-layer'
-  | 'scene-object-set-hide-flags'
-  | 'scene-object-reparent'
-  | 'scene-object-set-active'
-  | 'scene-object-set-transform'
-  | 'scene-component-set-behaviour-enabled'
-  | 'scene-component-create'
-  | 'scene-component-delete'
-  | 'scene-load-by-build-index'
-  | 'runtime-field-read'
-  | 'runtime-field-write'
-  | 'runtime-method-invoke';
+import {
+  BRIDGE_OPERATIONS,
+  BRIDGE_OPERATION_GROUPS,
+  isBridgeOperation,
+  type BridgeOperation,
+  type BridgeOperationGroup,
+} from './bridgeOperationRegistry';
 
 export const BRIDGE_PROTOCOL_VERSION = 2 as const;
 export const BRIDGE_SCHEMA_VERSION = 1 as const;
+
+export {
+  BRIDGE_OPERATIONS,
+  BRIDGE_OPERATION_GROUPS,
+  isBridgeOperation,
+};
+
+export type {
+  BridgeOperation,
+  BridgeOperationGroup,
+};
 
 export interface BridgeCommandEnvelope<TPayload = unknown> {
   schemaVersion: typeof BRIDGE_SCHEMA_VERSION;

@@ -6,7 +6,7 @@ import type {
   RuntimeSceneKind,
   RuntimeSceneNodeSummary,
 } from '@/domain/analysis/contracts';
-import { collectLoadedSceneNodeRecords, type LoadedSceneNodeRecord } from '../loadedSceneNodes';
+import { buildLoadedSceneGraph, createLoadedSceneSearchProjection } from '../loadedSceneNodes';
 import { useSceneMutationState, useSceneTreeState } from '../SceneWorkspaceContext';
 
 const VIRTUAL_OVERSCAN = 10;
@@ -101,40 +101,8 @@ export function SceneHierarchyPanel() {
     return { sceneCount, rootCount };
   }, [scenes]);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
-  const loadedNodeRecords = useMemo(() => collectLoadedSceneNodeRecords(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
-  const searchState = useMemo(() => {
-    if (!deferredSearchQuery) {
-      return null;
-    }
-
-    const visibleNodeAddresses = new Set<string>();
-    const matchingNodeAddresses = new Set<string>();
-    const recordByAddress = new Map(loadedNodeRecords.map((record) => [record.node.objectAddress, record]));
-
-    loadedNodeRecords.forEach((record) => {
-      if (!record.searchText.includes(deferredSearchQuery)) {
-        return;
-      }
-
-      matchingNodeAddresses.add(record.node.objectAddress);
-
-      let current: LoadedSceneNodeRecord | undefined = record;
-      while (current) {
-        if (visibleNodeAddresses.has(current.node.objectAddress)) {
-          break;
-        }
-
-        visibleNodeAddresses.add(current.node.objectAddress);
-        current = current.node.parentObjectAddress ? recordByAddress.get(current.node.parentObjectAddress) : undefined;
-      }
-    });
-
-    return {
-      matchCount: matchingNodeAddresses.size,
-      matchingNodeAddresses,
-      visibleNodeAddresses,
-    };
-  }, [deferredSearchQuery, loadedNodeRecords]);
+  const sceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
+  const searchState = useMemo(() => createLoadedSceneSearchProjection(sceneGraph, deferredSearchQuery), [deferredSearchQuery, sceneGraph]);
   const searchActive = searchState != null;
 
   const toggleScene = (sceneHandle: number) => {

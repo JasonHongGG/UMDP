@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum BridgeOperation {
     ProcessFetch,
@@ -34,7 +34,45 @@ pub enum BridgeOperation {
     RuntimeMethodInvoke,
 }
 
+#[cfg(test)]
+pub const ALL_BRIDGE_OPERATIONS: [BridgeOperation; 29] = [
+    BridgeOperation::ProcessFetch,
+    BridgeOperation::ProcessAttach,
+    BridgeOperation::AnalysisSnapshotLoad,
+    BridgeOperation::AnalysisOverlayLoad,
+    BridgeOperation::SceneCatalogLoad,
+    BridgeOperation::SceneObjectChildrenLoad,
+    BridgeOperation::SceneObjectChildrenPageLoad,
+    BridgeOperation::SceneObjectInspect,
+    BridgeOperation::SceneObjectInspectHeader,
+    BridgeOperation::SceneObjectInspectChildrenPage,
+    BridgeOperation::SceneObjectInspectComponentsPage,
+    BridgeOperation::SceneObjectCreateRoot,
+    BridgeOperation::SceneObjectCreateChild,
+    BridgeOperation::SceneObjectDuplicate,
+    BridgeOperation::SceneObjectDelete,
+    BridgeOperation::SceneObjectRename,
+    BridgeOperation::SceneObjectSetTag,
+    BridgeOperation::SceneObjectSetLayer,
+    BridgeOperation::SceneObjectSetHideFlags,
+    BridgeOperation::SceneObjectReparent,
+    BridgeOperation::SceneObjectSetActive,
+    BridgeOperation::SceneObjectSetTransform,
+    BridgeOperation::SceneComponentSetBehaviourEnabled,
+    BridgeOperation::SceneComponentCreate,
+    BridgeOperation::SceneComponentDelete,
+    BridgeOperation::SceneLoadByBuildIndex,
+    BridgeOperation::RuntimeFieldRead,
+    BridgeOperation::RuntimeFieldWrite,
+    BridgeOperation::RuntimeMethodInvoke,
+];
+
 impl BridgeOperation {
+    #[cfg(test)]
+    pub fn all() -> &'static [BridgeOperation] {
+        &ALL_BRIDGE_OPERATIONS
+    }
+
     pub fn as_protocol_name(&self) -> &'static str {
         match self {
             Self::ProcessFetch => "process-fetch",
@@ -68,4 +106,12 @@ impl BridgeOperation {
             Self::RuntimeMethodInvoke => "runtime-method-invoke",
         }
     }
+}
+
+#[cfg(test)]
+pub fn all_protocol_names() -> Vec<&'static str> {
+    BridgeOperation::all()
+        .iter()
+        .map(BridgeOperation::as_protocol_name)
+        .collect()
 }

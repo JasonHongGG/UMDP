@@ -5,7 +5,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneTransformUpdate,
     SceneWorkspaceState,
 };
-use crate::services::analysis::scene_service;
+use crate::application::scene as scene_application;
 use crate::state::AppState;
 use std::fmt::Display;
 use std::time::Instant;
@@ -24,7 +24,7 @@ pub async fn start_scene_refresh(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::start_scene_refresh(&app_handle, &state);
+        let result = scene_application::start_scene_refresh(&app_handle, &state);
         match &result {
             Ok(workspace) => eprintln!(
                 "[perf][tauri] start_scene_refresh command completed in {}ms refresh_status={:?}",
@@ -45,7 +45,7 @@ pub async fn start_scene_refresh(
 
 #[tauri::command]
 pub fn get_scene_workspace_state(state: State<'_, AppState>) -> SceneWorkspaceState {
-    state.scene.current()
+    scene_application::get_scene_workspace_state(&state)
 }
 
 #[tauri::command]
@@ -55,7 +55,7 @@ pub fn start_scene_object_children_analysis(
     object_address: String,
 ) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
     let started_at = Instant::now();
-    let result = scene_service::start_scene_object_children_analysis(&app, &state, &object_address);
+    let result = scene_application::start_scene_object_children_analysis(&app, &state, &object_address);
     match &result {
         Ok(task) => eprintln!(
             "[perf][tauri] start_scene_object_children_analysis completed in {}ms object_address={} task_id={} status={:?}",
@@ -79,7 +79,7 @@ pub fn get_scene_object_children_state(
     state: State<'_, AppState>,
     object_address: String,
 ) -> Option<RuntimeSceneObjectChildrenTaskState> {
-    scene_service::get_scene_object_children_state(&state, &object_address)
+    scene_application::get_scene_object_children_state(&state, &object_address)
 }
 
 #[tauri::command]
@@ -88,7 +88,7 @@ pub fn cancel_scene_object_children_analysis(
     object_address: String,
     task_id: Option<u64>,
 ) -> Option<RuntimeSceneObjectChildrenTaskState> {
-    scene_service::cancel_scene_object_children_analysis(&state, &object_address, task_id)
+    scene_application::cancel_scene_object_children_analysis(&state, &object_address, task_id)
 }
 
 #[tauri::command]
@@ -98,7 +98,7 @@ pub fn start_scene_object_inspector_analysis(
     object_address: String,
 ) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
     let started_at = Instant::now();
-    let result = scene_service::start_scene_object_inspector_analysis(&app, &state, &object_address);
+    let result = scene_application::start_scene_object_inspector_analysis(&app, &state, &object_address);
     match &result {
         Ok(task) => eprintln!(
             "[perf][tauri] start_scene_object_inspector_analysis completed in {}ms object_address={} task_id={} status={:?}",
@@ -119,7 +119,7 @@ pub fn start_scene_object_inspector_analysis(
 
 #[tauri::command]
 pub fn get_scene_object_inspector_state(state: State<'_, AppState>) -> Option<RuntimeSceneObjectInspectorTaskState> {
-    scene_service::get_scene_object_inspector_state(&state)
+    scene_application::get_scene_object_inspector_state(&state)
 }
 
 #[tauri::command]
@@ -127,7 +127,7 @@ pub fn cancel_scene_object_inspector_analysis(
     state: State<'_, AppState>,
     task_id: Option<u64>,
 ) -> Option<RuntimeSceneObjectInspectorTaskState> {
-    scene_service::cancel_scene_object_inspector_analysis(&state, task_id)
+    scene_application::cancel_scene_object_inspector_analysis(&state, task_id)
 }
 
 #[tauri::command]
@@ -140,7 +140,7 @@ pub async fn get_scene_object_children(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::get_scene_object_children(&app_handle, &state, &object_address);
+        let result = scene_application::get_scene_object_children(&app_handle, &state, &object_address);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] get_scene_object_children command completed in {}ms object_address={} child_count={}",
@@ -171,7 +171,7 @@ pub async fn get_scene_object_inspector(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::get_scene_object_inspector(&app_handle, &state, &object_address);
+        let result = scene_application::get_scene_object_inspector(&app_handle, &state, &object_address);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] get_scene_object_inspector command completed in {}ms object_address={} children={} components={}",
@@ -204,7 +204,7 @@ pub async fn create_scene_child(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::create_scene_child(&app_handle, &state, &parent_object_address, &name);
+        let result = scene_application::create_scene_child(&app_handle, &state, &parent_object_address, &name);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] create_scene_child command completed in {}ms parent_object_address={} target_object_address={}",
@@ -236,7 +236,7 @@ pub async fn create_scene_root(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::create_scene_root(&app_handle, &state, scene_handle, &name);
+        let result = scene_application::create_scene_root(&app_handle, &state, scene_handle, &name);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] create_scene_root command completed in {}ms scene_handle={} target_object_address= {}",
@@ -267,7 +267,7 @@ pub async fn duplicate_scene_object(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::duplicate_scene_object(&app_handle, &state, &object_address);
+        let result = scene_application::duplicate_scene_object(&app_handle, &state, &object_address);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] duplicate_scene_object command completed in {}ms object_address={} target_object_address={}",
@@ -298,7 +298,7 @@ pub async fn delete_scene_object(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::delete_scene_object(&app_handle, &state, &object_address);
+        let result = scene_application::delete_scene_object(&app_handle, &state, &object_address);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] delete_scene_object command completed in {}ms object_address={} deleted_object_address={}",
@@ -330,7 +330,7 @@ pub async fn rename_scene_object(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::rename_scene_object(&app_handle, &state, &object_address, &name);
+        let result = scene_application::rename_scene_object(&app_handle, &state, &object_address, &name);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] rename_scene_object command completed in {}ms object_address={} target_object_address={}",
@@ -362,7 +362,7 @@ pub async fn set_scene_object_tag(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::set_scene_object_tag(&app_handle, &state, &object_address, &tag);
+        let result = scene_application::set_scene_object_tag(&app_handle, &state, &object_address, &tag);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] set_scene_object_tag command completed in {}ms object_address={} target_object_address={}",
@@ -394,7 +394,7 @@ pub async fn set_scene_object_layer(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::set_scene_object_layer(&app_handle, &state, &object_address, layer);
+        let result = scene_application::set_scene_object_layer(&app_handle, &state, &object_address, layer);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] set_scene_object_layer command completed in {}ms object_address={} target_object_address={}",
@@ -426,7 +426,7 @@ pub async fn set_scene_object_hide_flags(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::set_scene_object_hide_flags(&app_handle, &state, &object_address, &hide_flags);
+        let result = scene_application::set_scene_object_hide_flags(&app_handle, &state, &object_address, &hide_flags);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] set_scene_object_hide_flags command completed in {}ms object_address={} target_object_address={}",
@@ -459,7 +459,7 @@ pub async fn reparent_scene_object(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::reparent_scene_object(
+        let result = scene_application::reparent_scene_object(
             &app_handle,
             &state,
             &object_address,
@@ -497,7 +497,7 @@ pub async fn set_scene_object_active(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::set_scene_object_active(&app_handle, &state, &object_address, active_self);
+        let result = scene_application::set_scene_object_active(&app_handle, &state, &object_address, active_self);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] set_scene_object_active command completed in {}ms object_address={} active_self={} target_object_address={}",
@@ -530,7 +530,7 @@ pub async fn set_scene_object_transform(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::set_scene_object_transform(&app_handle, &state, &object_address, &transform_update);
+        let result = scene_application::set_scene_object_transform(&app_handle, &state, &object_address, &transform_update);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] set_scene_object_transform command completed in {}ms object_address={} target_object_address={}",
@@ -562,7 +562,7 @@ pub async fn set_scene_behaviour_enabled(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::set_scene_behaviour_enabled(&app_handle, &state, &component_address, enabled);
+        let result = scene_application::set_scene_behaviour_enabled(&app_handle, &state, &component_address, enabled);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] set_scene_behaviour_enabled command completed in {}ms component_address={} target_object_address={}",
@@ -594,7 +594,7 @@ pub async fn create_scene_component(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::create_scene_component(&app_handle, &state, &object_address, &component_type_name);
+        let result = scene_application::create_scene_component(&app_handle, &state, &object_address, &component_type_name);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] create_scene_component command completed in {}ms object_address={} target_object_address={}",
@@ -625,7 +625,7 @@ pub async fn delete_scene_component(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::delete_scene_component(&app_handle, &state, &component_address);
+        let result = scene_application::delete_scene_component(&app_handle, &state, &component_address);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] delete_scene_component command completed in {}ms component_address={} target_object_address={}",
@@ -656,7 +656,7 @@ pub async fn load_scene_by_build_index(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_service::load_scene_by_build_index(&app_handle, &state, build_index);
+        let result = scene_application::load_scene_by_build_index(&app_handle, &state, build_index);
         match &result {
             Ok(snapshot) => eprintln!(
                 "[perf][tauri] load_scene_by_build_index command completed in {}ms build_index={} target_object_address={}",

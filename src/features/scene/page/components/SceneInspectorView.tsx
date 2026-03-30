@@ -21,7 +21,7 @@ import type {
   RuntimeVector3Snapshot,
 } from '@/domain/analysis/contracts';
 import { useAnalysisWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
-import { collectLoadedDescendantAddresses, collectLoadedSceneNodeRecords } from '../loadedSceneNodes';
+import { buildLoadedSceneGraph, collectLoadedDescendantAddresses, filterLoadedSceneNodeRecords } from '../loadedSceneNodes';
 import { useSceneInspectorState, useSceneMutationState, useSceneWorkspace } from '../SceneWorkspaceContext';
 import { ActionButton, EmptyNotice, ErrorNotice, KeyValue, ObjectLinkCard, SceneCard } from './SceneUiPrimitives';
 
@@ -55,6 +55,7 @@ export function SceneInspectorView() {
     createSceneComponent,
     deleteSceneComponent,
     sceneMutationState,
+    activeSceneTask,
   } = useSceneMutationState();
 
   const [newChildName, setNewChildName] = useState('GameObject');
@@ -102,8 +103,9 @@ export function SceneInspectorView() {
 
     return Array.from(new Set(options));
   }, [analysisSnapshot?.classes]);
-  const loadedNodeRecords = useMemo(() => collectLoadedSceneNodeRecords(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
-  const loadedNodeRecordByAddress = useMemo(() => new Map(loadedNodeRecords.map((record) => [record.node.objectAddress, record])), [loadedNodeRecords]);
+  const loadedSceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
+  const loadedNodeRecords = loadedSceneGraph.records;
+  const loadedNodeRecordByAddress = loadedSceneGraph.recordByAddress;
   const blockedReparentAddresses = useMemo(() => {
     if (!sceneInspector) {
       return new Set<string>();
@@ -114,19 +116,8 @@ export function SceneInspectorView() {
     return blocked;
   }, [childrenByParent, sceneInspector]);
   const filteredReparentCandidates = useMemo(() => {
-    const query = reparentQuery.trim().toLowerCase();
-    return loadedNodeRecords.filter((record) => {
-      if (blockedReparentAddresses.has(record.node.objectAddress)) {
-        return false;
-      }
-
-      if (!query) {
-        return true;
-      }
-
-      return record.searchText.includes(query);
-    });
-  }, [blockedReparentAddresses, loadedNodeRecords, reparentQuery]);
+    return filterLoadedSceneNodeRecords(loadedSceneGraph, reparentQuery, blockedReparentAddresses);
+  }, [blockedReparentAddresses, loadedSceneGraph, reparentQuery]);
   const selectedReparentCandidate = reparentTargetAddress ? loadedNodeRecordByAddress.get(reparentTargetAddress) ?? null : null;
 
   const transformDirty = useMemo(() => {
@@ -221,7 +212,7 @@ export function SceneInspectorView() {
               {sceneInspectorTaskState.childrenLoadedCount}/{sceneInspectorTaskState.childrenTotalCount} children, {sceneInspectorTaskState.componentsLoadedCount}/{sceneInspectorTaskState.componentsTotalCount} components
             </div>
           ) : null}
-          {sceneMutationState.loading ? <div className="text-cyan-300 mt-1">Applying {sceneMutationState.operation}...</div> : null}
+          {sceneMutationState.loading ? <div className="text-cyan-300 mt-1">{activeSceneTask?.progress?.message ?? `Applying ${sceneMutationState.operation}...`}</div> : null}
         </div>
       </div>
 

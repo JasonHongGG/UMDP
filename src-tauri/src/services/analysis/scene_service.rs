@@ -1876,13 +1876,17 @@ mod tests {
         let mapped = map_scene_node_summary(HelperSceneNodeSummary {
             object_address: "0x10".into(),
             transform_address: Some("0x20".into()),
+            parent_object_address: Some("0x01".into()),
             name: "Player".into(),
             active_self: true,
+            is_static: Some(false),
             child_count: 2,
             has_children: true,
             component_count: Some(3),
             layer: Some(0),
             tag: Some("Player".into()),
+            hide_flags: Some("None".into()),
+            path: Some("GameplayRoot/Player".into()),
         });
 
         assert_eq!(mapped.object_address, "0x10");
