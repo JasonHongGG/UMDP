@@ -175,6 +175,7 @@ struct SceneNodeSummary {
     std::optional<std::string> parent_object_address;
     std::string name;
     bool active_self = false;
+    std::optional<bool> is_static;
     std::size_t child_count = 0;
     bool has_children = false;
     std::optional<std::size_t> component_count;

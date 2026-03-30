@@ -212,6 +212,7 @@ export interface RuntimeSceneNodeSummary {
   parentObjectAddress: string | null;
   name: string;
   activeSelf: boolean;
+  isStatic: boolean | null;
   childCount: number;
   hasChildren: boolean;
   componentCount: number | null;

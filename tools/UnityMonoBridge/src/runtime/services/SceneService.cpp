@@ -1695,6 +1695,10 @@ SceneNodeSummary SceneService::BuildNodeSummary(
         node.active_self = InvokeBool(game_object_class, get_active_self, game_object_address);
         node.layer = InvokeInt(game_object_class, get_layer, game_object_address);
 
+        if (const auto get_is_static = TryFindMethod(game_object_class, "get_isStatic", 0); get_is_static.has_value()) {
+            node.is_static = InvokeBool(game_object_class, *get_is_static, game_object_address);
+        }
+
         if (const auto get_tag = TryFindMethod(game_object_class, "get_tag", 0); get_tag.has_value()) {
             node.tag = TryInvokeString(game_object_class, *get_tag, game_object_address);
         }

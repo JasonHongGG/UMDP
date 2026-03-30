@@ -1,11 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, FolderPlus, Map, Play, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderPlus, Map as MapIcon, Play, RefreshCw, Search } from 'lucide-react';
 import type {
   RuntimeSceneBuildSettingsEntry,
   RuntimeSceneDescriptor,
   RuntimeSceneKind,
   RuntimeSceneNodeSummary,
 } from '@/domain/analysis/contracts';
+import { collectLoadedSceneNodeRecords, type LoadedSceneNodeRecord } from '../loadedSceneNodes';
 import { useSceneMutationState, useSceneTreeState } from '../SceneWorkspaceContext';
 
 const VIRTUAL_OVERSCAN = 10;
@@ -87,6 +88,7 @@ export function SceneHierarchyPanel() {
   const [expandedSceneHandles, setExpandedSceneHandles] = useState<Record<number, boolean>>({});
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
   const [rootNameBySceneHandle, setRootNameBySceneHandle] = useState<Record<number, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +100,42 @@ export function SceneHierarchyPanel() {
     const rootCount = scenes.reduce((count, scene) => count + scene.roots.length, 0);
     return { sceneCount, rootCount };
   }, [scenes]);
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
+  const loadedNodeRecords = useMemo(() => collectLoadedSceneNodeRecords(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
+  const searchState = useMemo(() => {
+    if (!deferredSearchQuery) {
+      return null;
+    }
+
+    const visibleNodeAddresses = new Set<string>();
+    const matchingNodeAddresses = new Set<string>();
+    const recordByAddress = new Map(loadedNodeRecords.map((record) => [record.node.objectAddress, record]));
+
+    loadedNodeRecords.forEach((record) => {
+      if (!record.searchText.includes(deferredSearchQuery)) {
+        return;
+      }
+
+      matchingNodeAddresses.add(record.node.objectAddress);
+
+      let current: LoadedSceneNodeRecord | undefined = record;
+      while (current) {
+        if (visibleNodeAddresses.has(current.node.objectAddress)) {
+          break;
+        }
+
+        visibleNodeAddresses.add(current.node.objectAddress);
+        current = current.node.parentObjectAddress ? recordByAddress.get(current.node.parentObjectAddress) : undefined;
+      }
+    });
+
+    return {
+      matchCount: matchingNodeAddresses.size,
+      matchingNodeAddresses,
+      visibleNodeAddresses,
+    };
+  }, [deferredSearchQuery, loadedNodeRecords]);
+  const searchActive = searchState != null;
 
   const toggleScene = (sceneHandle: number) => {
     setExpandedSceneHandles((previous) => ({
@@ -129,12 +167,19 @@ export function SceneHierarchyPanel() {
     const items: SceneListItem[] = [];
 
     const appendNode = (node: RuntimeSceneNodeSummary, depth: number) => {
+      if (searchState && !searchState.visibleNodeAddresses.has(node.objectAddress)) {
+        return;
+      }
+
       const loadedChildren = childrenByParent[node.objectAddress] ?? [];
+      const visibleChildren = searchState
+        ? loadedChildren.filter((child) => searchState.visibleNodeAddresses.has(child.objectAddress))
+        : loadedChildren;
       const taskState = childTaskByParent[node.objectAddress] ?? null;
       const loading = loadingChildrenByParent[node.objectAddress] ?? false;
       const childError = childErrorByParent[node.objectAddress] ?? null;
       const hasLoadedChildren = Object.prototype.hasOwnProperty.call(childrenByParent, node.objectAddress);
-      const expanded = expandedNodes[node.objectAddress] ?? false;
+      const expanded = searchState ? visibleChildren.length > 0 : (expandedNodes[node.objectAddress] ?? false);
 
       items.push({
         key: `node:${node.objectAddress}`,
@@ -142,18 +187,18 @@ export function SceneHierarchyPanel() {
         node,
         depth,
         expanded,
-        loading,
+        loading: searchState ? false : loading,
         childError,
         hasLoadedChildren,
-        loadedChildren,
-        taskState,
+        loadedChildren: visibleChildren,
+        taskState: searchState ? null : taskState,
       });
 
       if (!expanded) {
         return;
       }
 
-      if (loading) {
+      if (!searchState && loading) {
         items.push({
           key: `node-status:loading:${node.objectAddress}`,
           kind: 'node-status',
@@ -164,7 +209,7 @@ export function SceneHierarchyPanel() {
         });
       }
 
-      if (childError) {
+      if (!searchState && childError) {
         items.push({
           key: `node-status:error:${node.objectAddress}`,
           kind: 'node-status',
@@ -175,7 +220,7 @@ export function SceneHierarchyPanel() {
         });
       }
 
-      if (!loading && !childError && hasLoadedChildren && loadedChildren.length === 0) {
+      if (!searchState && !loading && !childError && hasLoadedChildren && loadedChildren.length === 0) {
         items.push({
           key: `node-status:empty:${node.objectAddress}`,
           kind: 'node-status',
@@ -186,10 +231,18 @@ export function SceneHierarchyPanel() {
         });
       }
 
-      loadedChildren.forEach((child) => appendNode(child, depth + 1));
+      visibleChildren.forEach((child) => appendNode(child, depth + 1));
     };
 
     scenes.forEach((scene) => {
+      const visibleRoots = searchState
+        ? scene.roots.filter((node) => searchState.visibleNodeAddresses.has(node.objectAddress))
+        : scene.roots;
+
+      if (searchState && visibleRoots.length === 0) {
+        return;
+      }
+
       const expanded = expandedSceneHandles[scene.sceneHandle] ?? true;
       items.push({
         key: `scene-header:${scene.sceneHandle}`,
@@ -199,14 +252,16 @@ export function SceneHierarchyPanel() {
       });
 
       if (expanded) {
-        items.push({
-          key: `scene-create:${scene.sceneHandle}`,
-          kind: 'scene-create',
-          scene,
-          rootName: rootNameBySceneHandle[scene.sceneHandle] ?? 'GameObject',
-        });
+        if (!searchState) {
+          items.push({
+            key: `scene-create:${scene.sceneHandle}`,
+            kind: 'scene-create',
+            scene,
+            rootName: rootNameBySceneHandle[scene.sceneHandle] ?? 'GameObject',
+          });
+        }
 
-        if (scene.roots.length === 0) {
+        if (!searchState && scene.roots.length === 0) {
           items.push({
             key: `scene-empty:${scene.sceneHandle}`,
             kind: 'scene-empty',
@@ -214,7 +269,7 @@ export function SceneHierarchyPanel() {
           });
         }
 
-        scene.roots.forEach((node) => appendNode(node, 0));
+        visibleRoots.forEach((node) => appendNode(node, 0));
       }
 
       items.push({
@@ -233,6 +288,7 @@ export function SceneHierarchyPanel() {
     loadingChildrenByParent,
     rootNameBySceneHandle,
     scenes,
+    searchState,
   ]);
 
   const deferredFlatItems = useDeferredValue(flatItems);
@@ -345,6 +401,24 @@ export function SceneHierarchyPanel() {
         </button>
       </div>
 
+      <div className="px-4 pt-4">
+        <label className="rounded-2xl border border-[#142132] bg-[#09111a]/80 px-3 py-3 flex items-center gap-3">
+          <Search size={15} className="text-cyan-300 shrink-0" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+            placeholder="Search loaded objects"
+          />
+          {searchActive ? <span className="text-[11px] text-slate-500 shrink-0">loaded only</span> : null}
+        </label>
+        <div className="mt-2 text-[11px] text-slate-500">
+          {searchActive
+            ? `${searchState.matchCount} loaded matches`
+            : 'Search only covers roots and children that have already been loaded.'}
+        </div>
+      </div>
+
       {sceneWorkspace.errorMessage ? (
         <div className="mx-4 mt-4 rounded-xl border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
           {sceneWorkspace.errorMessage}
@@ -388,6 +462,12 @@ export function SceneHierarchyPanel() {
         <div className="px-4 py-3 text-sm text-slate-400">No scene snapshot yet. Click refresh to enumerate loaded scenes.</div>
       ) : null}
 
+      {searchActive && searchState.matchCount === 0 ? (
+        <div className="mx-4 mt-4 rounded-xl border border-[#172231] bg-[#091019] px-3 py-3 text-sm text-slate-400">
+          No loaded objects match this filter yet.
+        </div>
+      ) : null}
+
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto slim-scrollbar px-2 py-3"
@@ -412,6 +492,8 @@ export function SceneHierarchyPanel() {
                   [sceneHandle]: value,
                 }))}
                 onCreateRoot={createSceneRoot}
+                searchActive={searchActive}
+                searchMatches={searchState?.matchingNodeAddresses ?? null}
               />
             </div>
           ))}
@@ -430,6 +512,8 @@ function SceneVirtualRow({
   onToggleNode,
   onRootNameChange,
   onCreateRoot,
+  searchActive,
+  searchMatches,
 }: {
   item: SceneListItem;
   selectedObjectAddress: string | null;
@@ -439,6 +523,8 @@ function SceneVirtualRow({
   onToggleNode: (node: RuntimeSceneNodeSummary) => void;
   onRootNameChange: (sceneHandle: number, value: string) => void;
   onCreateRoot: (sceneHandle: number, name: string) => Promise<unknown>;
+  searchActive: boolean;
+  searchMatches: Set<string> | null;
 }) {
   switch (item.kind) {
     case 'scene-header':
@@ -449,7 +535,7 @@ function SceneVirtualRow({
             className="w-full h-full rounded-2xl border border-[#142132] bg-[#0a0f16]/80 px-3 flex items-center gap-2 text-left text-sm text-slate-200 hover:bg-white/5 transition"
           >
             {item.expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            <Map size={15} className="text-cyan-300" />
+            <MapIcon size={15} className="text-cyan-300" />
             <span className="font-medium truncate">{item.scene.name}</span>
             <SceneKindBadge kind={item.scene.kind} />
             <span className="ml-auto text-[11px] text-slate-500">{item.scene.roots.length} roots</span>
@@ -510,7 +596,8 @@ function SceneVirtualRow({
     case 'scene-gap':
       return <div className="h-full" />;
     case 'node': {
-      const canExpand = item.node.hasChildren || item.loadedChildren.length > 0;
+      const canExpand = searchActive ? item.loadedChildren.length > 0 : (item.node.hasChildren || item.loadedChildren.length > 0);
+      const searchMatched = searchMatches?.has(item.node.objectAddress) ?? false;
       return (
         <div className="px-1 h-full">
           <div className={`h-full rounded-xl border ${selectedObjectAddress === item.node.objectAddress ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-transparent hover:border-[#1c2838] hover:bg-white/5'} transition`}>
@@ -523,7 +610,7 @@ function SceneVirtualRow({
                 {item.expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               </button>
               <button onClick={() => onSelect(item.node.objectAddress)} className="min-w-0 flex-1 text-left">
-                <div className="text-sm text-slate-200 truncate">{item.node.name}</div>
+                <div className={`text-sm truncate ${searchMatched ? 'text-cyan-200' : 'text-slate-200'}`}>{item.node.name}</div>
                 <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
                   <span>{item.node.activeSelf ? 'active' : 'inactive'}</span>
                   {item.node.tag ? <span>tag:{item.node.tag}</span> : null}

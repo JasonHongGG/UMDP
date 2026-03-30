@@ -180,6 +180,9 @@ void WriteSceneNode(std::ostringstream& output, const bridge::SceneNodeSummary& 
     WriteOptionalString(output, node.parent_object_address);
     output << ",\"name\":\"" << JsonEscape(node.name) << "\",";
     output << "\"active_self\":" << (node.active_self ? "true" : "false") << ',';
+    output << "\"is_static\":";
+    WriteOptionalBool(output, node.is_static);
+    output << ',';
     output << "\"child_count\":" << node.child_count << ',';
     output << "\"has_children\":" << (node.has_children ? "true" : "false") << ',';
     output << "\"component_count\":";

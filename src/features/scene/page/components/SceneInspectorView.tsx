@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Copy,
@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   Power,
+  Search,
   Tags,
   Trash2,
 } from 'lucide-react';
@@ -20,11 +21,16 @@ import type {
   RuntimeVector3Snapshot,
 } from '@/domain/analysis/contracts';
 import { useAnalysisWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
-import { useSceneInspectorState, useSceneMutationState } from '../SceneWorkspaceContext';
+import { collectLoadedDescendantAddresses, collectLoadedSceneNodeRecords } from '../loadedSceneNodes';
+import { useSceneInspectorState, useSceneMutationState, useSceneWorkspace } from '../SceneWorkspaceContext';
 import { ActionButton, EmptyNotice, ErrorNotice, KeyValue, ObjectLinkCard, SceneCard } from './SceneUiPrimitives';
+
+type TransformVectorKey = 'worldPosition' | 'localPosition' | 'localEulerAngles' | 'localScale';
+type TransformAxis = keyof RuntimeVector3Snapshot;
 
 export function SceneInspectorView() {
   const { analysisSnapshot } = useAnalysisWorkspace();
+  const { sceneWorkspace, childrenByParent } = useSceneWorkspace();
   const {
     setSelectedObjectAddress,
     sceneInspector,
@@ -57,16 +63,23 @@ export function SceneInspectorView() {
   const [tagDraft, setTagDraft] = useState('');
   const [layerDraft, setLayerDraft] = useState('0');
   const [hideFlagsDraft, setHideFlagsDraft] = useState('None');
-  const [reparentParentAddressDraft, setReparentParentAddressDraft] = useState('');
+  const [reparentQuery, setReparentQuery] = useState('');
+  const [reparentTargetAddress, setReparentTargetAddress] = useState<string | null>(null);
+  const [pathCopyState, setPathCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const [transformDraft, setTransformDraft] = useState<RuntimeSceneTransformUpdate | null>(null);
+  const transformDraftRef = useRef<RuntimeSceneTransformUpdate | null>(null);
 
   useEffect(() => {
     setNameDraft(sceneInspector?.object.name ?? '');
     setTagDraft(sceneInspector?.object.tag ?? 'Untagged');
     setLayerDraft(sceneInspector?.object.layer == null ? '0' : String(sceneInspector.object.layer));
     setHideFlagsDraft(sceneInspector?.object.hideFlags ?? 'None');
-    setReparentParentAddressDraft(sceneInspector?.parent?.objectAddress ?? '');
-    setTransformDraft(toTransformDraft(sceneInspector?.transform));
+    setReparentTargetAddress(sceneInspector?.parent?.objectAddress ?? null);
+    setReparentQuery('');
+    setPathCopyState('idle');
+    const nextTransformDraft = toTransformDraft(sceneInspector?.transform);
+    transformDraftRef.current = nextTransformDraft;
+    setTransformDraft(nextTransformDraft);
   }, [
     sceneInspector?.object.name,
     sceneInspector?.object.tag,
@@ -75,6 +88,10 @@ export function SceneInspectorView() {
     sceneInspector?.parent?.objectAddress,
     sceneInspector?.transform,
   ]);
+
+  useEffect(() => {
+    transformDraftRef.current = transformDraft;
+  }, [transformDraft]);
 
   const componentTypeOptions = useMemo(() => {
     const classes = Object.values(analysisSnapshot?.classes ?? {});
@@ -85,6 +102,32 @@ export function SceneInspectorView() {
 
     return Array.from(new Set(options));
   }, [analysisSnapshot?.classes]);
+  const loadedNodeRecords = useMemo(() => collectLoadedSceneNodeRecords(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
+  const loadedNodeRecordByAddress = useMemo(() => new Map(loadedNodeRecords.map((record) => [record.node.objectAddress, record])), [loadedNodeRecords]);
+  const blockedReparentAddresses = useMemo(() => {
+    if (!sceneInspector) {
+      return new Set<string>();
+    }
+
+    const blocked = collectLoadedDescendantAddresses(sceneInspector.object.objectAddress, childrenByParent);
+    blocked.add(sceneInspector.object.objectAddress);
+    return blocked;
+  }, [childrenByParent, sceneInspector]);
+  const filteredReparentCandidates = useMemo(() => {
+    const query = reparentQuery.trim().toLowerCase();
+    return loadedNodeRecords.filter((record) => {
+      if (blockedReparentAddresses.has(record.node.objectAddress)) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      return record.searchText.includes(query);
+    });
+  }, [blockedReparentAddresses, loadedNodeRecords, reparentQuery]);
+  const selectedReparentCandidate = reparentTargetAddress ? loadedNodeRecordByAddress.get(reparentTargetAddress) ?? null : null;
 
   const transformDirty = useMemo(() => {
     if (!sceneInspector?.transform || !transformDraft) {
@@ -104,7 +147,49 @@ export function SceneInspectorView() {
   const layerDirty = sceneInspector != null
     && Number.isInteger(parsedLayer)
     && parsedLayer !== (sceneInspector.object.layer ?? 0);
-  const reparentDirty = sceneInspector != null && reparentParentAddressDraft !== (sceneInspector.parent?.objectAddress ?? '');
+  const currentParentAddress = sceneInspector?.parent?.objectAddress ?? null;
+  const reparentDirty = sceneInspector != null && reparentTargetAddress !== currentParentAddress;
+
+  const updateTransformAxis = (vectorKey: TransformVectorKey, axis: TransformAxis, nextValue: number, commit: boolean) => {
+    const current = transformDraftRef.current;
+    const currentVector = current?.[vectorKey];
+    if (!current || !currentVector) {
+      return;
+    }
+
+    const nextDraft: RuntimeSceneTransformUpdate = {
+      ...current,
+      [vectorKey]: {
+        ...currentVector,
+        [axis]: nextValue,
+      },
+    };
+
+    transformDraftRef.current = nextDraft;
+    setTransformDraft(nextDraft);
+
+    if (commit) {
+      setSceneObjectTransform(nextDraft).catch(() => undefined);
+    }
+  };
+
+  const applySelectedParent = () => {
+    reparentSceneObject(reparentTargetAddress, selectedReparentCandidate?.canonicalPath ?? null).catch(() => undefined);
+  };
+
+  const copyHierarchyPath = async () => {
+    const path = formatCopyableHierarchyPath(sceneInspector?.object.path, sceneInspector?.hierarchyPath ?? []);
+    if (!sceneInspector || path === 'n/a') {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(path);
+      setPathCopyState('copied');
+    } catch {
+      setPathCopyState('error');
+    }
+  };
 
   if (!sceneInspector && !sceneInspectorLoading) {
     return (
@@ -196,10 +281,31 @@ export function SceneInspectorView() {
                 <SceneCard title="Object Summary" icon={<Info size={15} />}>
                   <KeyValue label="Address" value={sceneInspector.object.objectAddress} />
                   <KeyValue label="Scene" value={sceneInspector.sceneName ?? 'unknown'} />
-                  <KeyValue label="Hierarchy Path" value={formatHierarchyPath(sceneInspector.hierarchyPath)} />
                   <KeyValue label="Active" value={sceneInspector.object.activeSelf ? 'true' : 'false'} />
+                  <KeyValue label="Static" value={formatBoolean(sceneInspector.object.isStatic)} />
                   <KeyValue label="Children" value={String(sceneInspector.object.childCount)} />
                   <KeyValue label="Components" value={sceneInspector.object.componentCount == null ? 'n/a' : String(sceneInspector.object.componentCount)} />
+
+                  <div className="rounded-xl border border-[#172231] bg-[#091019] px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Hierarchy Path</div>
+                      <button
+                        onClick={() => copyHierarchyPath().catch(() => undefined)}
+                        disabled={formatHierarchyPath(sceneInspector.hierarchyPath) === 'n/a'}
+                        className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <span className="inline-flex items-center gap-2"><Copy size={12} />Copy Path</span>
+                      </button>
+                    </div>
+                    <div className="mt-3 break-all text-sm text-slate-200">{formatHierarchyPath(sceneInspector.hierarchyPath)}</div>
+                    <div className={`mt-2 text-[11px] ${pathCopyState === 'error' ? 'text-rose-300' : 'text-slate-500'}`}>
+                      {pathCopyState === 'copied'
+                        ? 'Hierarchy path copied.'
+                        : pathCopyState === 'error'
+                          ? 'Clipboard write failed in this environment.'
+                          : 'Copies the resolved hierarchy path shown above.'}
+                    </div>
+                  </div>
 
                   <InlineEditor
                     label="Name"
@@ -242,28 +348,84 @@ export function SceneInspectorView() {
                   />
 
                   <div className="rounded-xl border border-[#172231] bg-[#091019] px-3 py-3">
-                    <div className="text-xs uppercase tracking-[0.16em] text-slate-500 mb-3">Reparent</div>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Reparent</div>
+                      <div className="text-[11px] text-slate-500">loaded nodes only</div>
+                    </div>
                     <div className="space-y-3">
-                      <input
-                        value={reparentParentAddressDraft}
-                        onChange={(event) => setReparentParentAddressDraft(event.target.value)}
-                        className="w-full rounded-lg border border-[#1c2838] bg-[#0d1520] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500/40"
-                        placeholder="Parent object address, or leave empty for root"
-                      />
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <label className="rounded-xl border border-[#1c2838] bg-[#0d1520] px-3 py-3 flex items-center gap-3">
+                        <Search size={14} className="text-cyan-300 shrink-0" />
+                        <input
+                          value={reparentQuery}
+                          onChange={(event) => setReparentQuery(event.target.value)}
+                          className="flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                          placeholder="Search parent by loaded name or path"
+                        />
+                      </label>
+
+                      <div className="rounded-xl border border-[#1c2838] bg-[#0d1520] p-2">
+                        <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500 px-2 pb-2">Current target</div>
+                        <div className="rounded-lg border border-[#172231] bg-[#091019] px-3 py-3">
+                          <div className="text-sm text-slate-200">
+                            {selectedReparentCandidate ? selectedReparentCandidate.node.name : 'Scene Root'}
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500 break-all">
+                            {selectedReparentCandidate
+                              ? `${selectedReparentCandidate.sceneName} • ${selectedReparentCandidate.displayPath}`
+                              : 'Detach from parent and place under the scene root.'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-[#1c2838] bg-[#0d1520] p-2 max-h-56 overflow-y-auto slim-scrollbar space-y-2">
                         <button
-                          onClick={() => reparentSceneObject(reparentParentAddressDraft.trim() || null, null).catch(() => undefined)}
+                          onClick={() => setReparentTargetAddress(null)}
+                          className={`w-full rounded-lg border px-3 py-3 text-left transition ${reparentTargetAddress == null ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-[#172231] bg-[#091019] hover:border-cyan-500/20 hover:bg-[#101a26]'}`}
+                        >
+                          <div className="text-sm text-slate-200">Scene Root</div>
+                          <div className="mt-1 text-[11px] text-slate-500">No parent object.</div>
+                        </button>
+
+                        {filteredReparentCandidates.length === 0 ? (
+                          <div className="px-3 py-4 text-sm text-slate-500">No loaded parent candidates match this filter.</div>
+                        ) : filteredReparentCandidates.map((candidate) => (
+                          <button
+                            key={candidate.node.objectAddress}
+                            onClick={() => setReparentTargetAddress(candidate.node.objectAddress)}
+                            className={`w-full rounded-lg border px-3 py-3 text-left transition ${reparentTargetAddress === candidate.node.objectAddress ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-[#172231] bg-[#091019] hover:border-cyan-500/20 hover:bg-[#101a26]'}`}
+                          >
+                            <div className="text-sm text-slate-200">{candidate.node.name}</div>
+                            <div className="mt-1 text-[11px] text-slate-500 break-all">
+                              {candidate.sceneName} • {candidate.displayPath}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <button
+                          onClick={applySelectedParent}
                           disabled={sceneMutationState.loading || !reparentDirty}
                           className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <span className="inline-flex items-center gap-2"><GitBranchPlus size={14} />Apply Parent</span>
                         </button>
                         <button
-                          onClick={() => reparentSceneObject(null, null).catch(() => undefined)}
-                          disabled={sceneMutationState.loading || sceneInspector.parent == null}
+                          onClick={() => setReparentTargetAddress(null)}
+                          disabled={sceneMutationState.loading}
                           className="rounded-lg border border-[#1c2838] bg-[#0a1018] px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/20 hover:bg-[#0d1520] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Move To Root
+                        </button>
+                        <button
+                          onClick={() => {
+                            setReparentTargetAddress(currentParentAddress);
+                            setReparentQuery('');
+                          }}
+                          disabled={sceneMutationState.loading || !reparentDirty}
+                          className="rounded-lg border border-[#1c2838] bg-[#0a1018] px-3 py-2 text-sm text-slate-200 hover:border-cyan-500/20 hover:bg-[#0d1520] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Reset Target
                         </button>
                       </div>
                     </div>
@@ -292,28 +454,28 @@ export function SceneInspectorView() {
                         <VectorEditor
                           label="World Position"
                           value={transformDraft.worldPosition}
-                          onChange={(value) => setTransformDraft((previous) => previous ? { ...previous, worldPosition: value } : previous)}
+                          onAxisChange={(axis, value, commit) => updateTransformAxis('worldPosition', axis, value, commit)}
                         />
                       ) : null}
                       {transformDraft.localPosition ? (
                         <VectorEditor
                           label="Local Position"
                           value={transformDraft.localPosition}
-                          onChange={(value) => setTransformDraft((previous) => previous ? { ...previous, localPosition: value } : previous)}
+                          onAxisChange={(axis, value, commit) => updateTransformAxis('localPosition', axis, value, commit)}
                         />
                       ) : null}
                       {transformDraft.localEulerAngles ? (
                         <VectorEditor
                           label="Local Euler"
                           value={transformDraft.localEulerAngles}
-                          onChange={(value) => setTransformDraft((previous) => previous ? { ...previous, localEulerAngles: value } : previous)}
+                          onAxisChange={(axis, value, commit) => updateTransformAxis('localEulerAngles', axis, value, commit)}
                         />
                       ) : null}
                       {transformDraft.localScale ? (
                         <VectorEditor
                           label="Local Scale"
                           value={transformDraft.localScale}
-                          onChange={(value) => setTransformDraft((previous) => previous ? { ...previous, localScale: value } : previous)}
+                          onAxisChange={(axis, value, commit) => updateTransformAxis('localScale', axis, value, commit)}
                         />
                       ) : null}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -325,7 +487,11 @@ export function SceneInspectorView() {
                           Apply Transform
                         </button>
                         <button
-                          onClick={() => setTransformDraft(toTransformDraft(sceneInspector.transform))}
+                          onClick={() => {
+                            const nextTransformDraft = toTransformDraft(sceneInspector.transform);
+                            transformDraftRef.current = nextTransformDraft;
+                            setTransformDraft(nextTransformDraft);
+                          }}
                           disabled={!transformDirty || sceneMutationState.loading}
                           className="rounded-xl border border-[#1c2838] bg-[#0a1018] px-4 py-3 text-sm font-medium text-slate-200 hover:border-cyan-500/20 hover:bg-[#0d1520] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -542,6 +708,26 @@ function formatHierarchyPath(path: Array<{ name: string }>) {
   return path.map((entry) => entry.name).join(' / ');
 }
 
+function formatCopyableHierarchyPath(canonicalPath: string | null | undefined, path: Array<{ name: string }>) {
+  if (canonicalPath) {
+    return canonicalPath;
+  }
+
+  if (path.length === 0) {
+    return 'n/a';
+  }
+
+  return path.map((entry) => entry.name).join('/');
+}
+
+function formatBoolean(value: boolean | null | undefined) {
+  if (value == null) {
+    return 'unknown';
+  }
+
+  return value ? 'true' : 'false';
+}
+
 function isLikelyComponentClass(descriptor: ClassDescriptor) {
   if (descriptor.fullName === 'UnityEngine.Transform') {
     return true;
@@ -556,19 +742,19 @@ function isLikelyComponentClass(descriptor: ClassDescriptor) {
 function VectorEditor({
   label,
   value,
-  onChange,
+  onAxisChange,
 }: {
   label: string;
   value: RuntimeVector3Snapshot;
-  onChange: (value: RuntimeVector3Snapshot) => void;
+  onAxisChange: (axis: TransformAxis, value: number, commit: boolean) => void;
 }) {
   return (
     <div className="rounded-xl border border-[#172231] bg-[#091019] px-3 py-3">
       <div className="text-xs uppercase tracking-[0.16em] text-slate-500 mb-3">{label}</div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <NumberField label="X" value={value.x} onChange={(x) => onChange({ ...value, x })} />
-        <NumberField label="Y" value={value.y} onChange={(y) => onChange({ ...value, y })} />
-        <NumberField label="Z" value={value.z} onChange={(z) => onChange({ ...value, z })} />
+        <NumberField label="X" value={value.x} onChange={(x) => onAxisChange('x', x, false)} onDragCommit={(x) => onAxisChange('x', x, true)} />
+        <NumberField label="Y" value={value.y} onChange={(y) => onAxisChange('y', y, false)} onDragCommit={(y) => onAxisChange('y', y, true)} />
+        <NumberField label="Z" value={value.z} onChange={(z) => onAxisChange('z', z, false)} onDragCommit={(z) => onAxisChange('z', z, true)} />
       </div>
     </div>
   );
@@ -578,20 +764,96 @@ function NumberField({
   label,
   value,
   onChange,
+  onDragCommit,
+  step = 0.1,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  onDragCommit?: (value: number) => void;
+  step?: number;
 }) {
-  const [draft, setDraft] = useState(() => value.toString());
+  const [draft, setDraft] = useState(() => formatNumericDraft(value));
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    setDraft(value.toString());
+    setDraft(formatNumericDraft(value));
   }, [value]);
+
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.();
+    };
+  }, []);
+
+  const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    dragCleanupRef.current?.();
+
+    const startingValue = value;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let lastValue = startingValue;
+    let changed = false;
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      const dominantDelta = Math.abs(deltaX) >= Math.abs(deltaY) ? deltaX : -deltaY;
+      const deltaUnits = dominantDelta / 8;
+      const nextValue = roundToStep(startingValue + deltaUnits * step, step);
+
+      if (nextValue === lastValue) {
+        return;
+      }
+
+      changed = true;
+      lastValue = nextValue;
+      setDraft(formatNumericDraft(nextValue));
+      onChange(nextValue);
+    };
+
+    const finishDrag = () => {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
+      document.body.style.removeProperty('cursor');
+      if (changed) {
+        onDragCommit?.(lastValue);
+      }
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', finishDrag, { once: true });
+    window.addEventListener('pointercancel', finishDrag, { once: true });
+    document.body.style.cursor = 'ew-resize';
+
+    dragCleanupRef.current = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', finishDrag);
+      window.removeEventListener('pointercancel', finishDrag);
+      document.body.style.removeProperty('cursor');
+    };
+  };
 
   return (
     <label className="rounded-lg border border-[#1c2838] bg-[#0d1520] px-3 py-2 text-sm text-slate-100 flex flex-col gap-1">
-      <span className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</span>
+      <span className="flex items-center justify-between gap-2 text-[11px] uppercase tracking-[0.12em] text-slate-500">
+        <span>{label}</span>
+        <button
+          type="button"
+          onPointerDown={startDrag}
+          aria-label={`Drag ${label} value`}
+          className="rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] tracking-[0.14em] text-cyan-200 hover:bg-cyan-500/20 cursor-ew-resize"
+        >
+          drag
+        </button>
+      </span>
       <input
         value={draft}
         onChange={(event) => {
@@ -607,4 +869,18 @@ function NumberField({
       />
     </label>
   );
+}
+
+function formatNumericDraft(value: number) {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function roundToStep(value: number, step: number) {
+  const fractionalDigits = `${step}`.split('.')[1]?.length ?? 0;
+  const scale = 10 ** fractionalDigits;
+  return Math.round(value * scale) / scale;
 }

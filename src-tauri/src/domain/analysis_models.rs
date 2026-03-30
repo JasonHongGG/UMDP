@@ -310,6 +310,7 @@ pub struct RuntimeSceneNodeSummary {
     pub parent_object_address: Option<String>,
     pub name: String,
     pub active_self: bool,
+    pub is_static: Option<bool>,
     pub child_count: usize,
     pub has_children: bool,
     pub component_count: Option<usize>,
