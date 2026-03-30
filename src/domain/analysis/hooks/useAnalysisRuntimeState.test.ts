@@ -41,7 +41,13 @@ const EMPTY_SCENE_MUTATION_RESULT = {
   object: null,
   deletedObjectAddress: null,
   preferredSelectionAddress: null,
+  preferredSelectionHint: null,
   activeSelf: null,
+  tag: null,
+  layer: null,
+  hideFlags: null,
+  behaviourEnabled: null,
+  hierarchyPath: [],
   transform: null,
 };
 
@@ -107,13 +113,21 @@ function createRepository(): AnalysisRepository {
     startSceneObjectInspectorAnalysis: vi.fn(),
     getSceneObjectInspectorState: vi.fn(),
     cancelSceneObjectInspectorAnalysis: vi.fn(),
+    createSceneRoot: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     createSceneChild: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     duplicateSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     deleteSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    renameSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneObjectTag: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneObjectLayer: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneObjectHideFlags: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    reparentSceneObject: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     setSceneObjectActive: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     setSceneObjectTransform: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    setSceneBehaviourEnabled: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     createSceneComponent: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
     deleteSceneComponent: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
+    loadSceneByBuildIndex: vi.fn().mockResolvedValue(EMPTY_SCENE_MUTATION_RESULT),
   } as AnalysisRepository;
 }
 

@@ -226,6 +226,38 @@ pub async fn create_scene_child(
 }
 
 #[tauri::command]
+pub async fn create_scene_root(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    scene_handle: i32,
+    name: String,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::create_scene_root(&app_handle, &state, scene_handle, &name);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] create_scene_root command completed in {}ms scene_handle={} target_object_address= {}",
+                started_at.elapsed().as_millis(),
+                scene_handle,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] create_scene_root command failed in {}ms scene_handle={} error={}",
+                started_at.elapsed().as_millis(),
+                scene_handle,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
 pub async fn duplicate_scene_object(
     app: AppHandle,
     _state: State<'_, AppState>,
@@ -276,6 +308,173 @@ pub async fn delete_scene_object(
             ),
             Err(error) => eprintln!(
                 "[perf][tauri] delete_scene_object command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn rename_scene_object(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    name: String,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::rename_scene_object(&app_handle, &state, &object_address, &name);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] rename_scene_object command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] rename_scene_object command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn set_scene_object_tag(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    tag: String,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::set_scene_object_tag(&app_handle, &state, &object_address, &tag);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] set_scene_object_tag command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] set_scene_object_tag command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn set_scene_object_layer(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    layer: i32,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::set_scene_object_layer(&app_handle, &state, &object_address, layer);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] set_scene_object_layer command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] set_scene_object_layer command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn set_scene_object_hide_flags(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    hide_flags: String,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::set_scene_object_hide_flags(&app_handle, &state, &object_address, &hide_flags);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] set_scene_object_hide_flags command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] set_scene_object_hide_flags command failed in {}ms object_address={} error={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn reparent_scene_object(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    object_address: String,
+    parent_object_address: Option<String>,
+    parent_path: Option<String>,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::reparent_scene_object(
+            &app_handle,
+            &state,
+            &object_address,
+            parent_object_address.as_deref(),
+            parent_path.as_deref(),
+        );
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] reparent_scene_object command completed in {}ms object_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                object_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] reparent_scene_object command failed in {}ms object_address={} error={}",
                 started_at.elapsed().as_millis(),
                 object_address,
                 error
@@ -353,6 +552,38 @@ pub async fn set_scene_object_transform(
 }
 
 #[tauri::command]
+pub async fn set_scene_behaviour_enabled(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    component_address: String,
+    enabled: bool,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::set_scene_behaviour_enabled(&app_handle, &state, &component_address, enabled);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] set_scene_behaviour_enabled command completed in {}ms component_address={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                component_address,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] set_scene_behaviour_enabled command failed in {}ms component_address={} error={}",
+                started_at.elapsed().as_millis(),
+                component_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
 pub async fn create_scene_component(
     app: AppHandle,
     _state: State<'_, AppState>,
@@ -406,6 +637,37 @@ pub async fn delete_scene_component(
                 "[perf][tauri] delete_scene_component command failed in {}ms component_address={} error={}",
                 started_at.elapsed().as_millis(),
                 component_address,
+                error
+            ),
+        }
+        result
+    })
+    .await
+    .map_err(join_error_message)?
+}
+
+#[tauri::command]
+pub async fn load_scene_by_build_index(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    build_index: i32,
+) -> Result<RuntimeSceneMutationResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let started_at = Instant::now();
+        let state = app_handle.state::<AppState>();
+        let result = scene_service::load_scene_by_build_index(&app_handle, &state, build_index);
+        match &result {
+            Ok(snapshot) => eprintln!(
+                "[perf][tauri] load_scene_by_build_index command completed in {}ms build_index={} target_object_address={}",
+                started_at.elapsed().as_millis(),
+                build_index,
+                snapshot.target_object_address.as_deref().unwrap_or("null")
+            ),
+            Err(error) => eprintln!(
+                "[perf][tauri] load_scene_by_build_index command failed in {}ms build_index={} error={}",
+                started_at.elapsed().as_millis(),
+                build_index,
                 error
             ),
         }

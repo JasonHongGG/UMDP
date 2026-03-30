@@ -34,17 +34,27 @@ public:
     SceneChildrenPageResponse LoadSceneInspectorChildrenPage(Address object_address, std::size_t offset, std::size_t limit) const;
     SceneComponentsPageResponse LoadSceneInspectorComponentsPage(Address object_address, std::size_t offset, std::size_t limit) const;
     SceneObjectInspectorResponse InspectSceneObject(Address object_address) const;
+    SceneMutationResponse CreateSceneRoot(int scene_handle, const std::string& name) const;
     SceneMutationResponse CreateSceneChild(Address parent_object_address, const std::string& name) const;
     SceneMutationResponse DuplicateSceneObject(Address object_address) const;
     SceneMutationResponse DeleteSceneObject(Address object_address) const;
+    SceneMutationResponse RenameSceneObject(Address object_address, const std::string& name) const;
+    SceneMutationResponse SetSceneObjectTag(Address object_address, const std::string& tag) const;
+    SceneMutationResponse SetSceneObjectLayer(Address object_address, int layer) const;
+    SceneMutationResponse SetSceneObjectHideFlags(Address object_address, const std::string& hide_flags) const;
+    SceneMutationResponse ReparentSceneObject(Address object_address, std::optional<Address> parent_object_address) const;
     SceneMutationResponse SetSceneObjectActive(Address object_address, bool active_self) const;
     SceneMutationResponse SetSceneObjectTransform(
         Address object_address,
-        const Vector3Snapshot& local_position,
-        const QuaternionSnapshot& local_rotation,
-        const Vector3Snapshot& local_scale) const;
+        const std::optional<Vector3Snapshot>& world_position,
+        const std::optional<Vector3Snapshot>& local_position,
+        const std::optional<QuaternionSnapshot>& local_rotation,
+        const std::optional<Vector3Snapshot>& local_euler_angles,
+        const std::optional<Vector3Snapshot>& local_scale) const;
+    SceneMutationResponse SetSceneBehaviourEnabled(Address component_address, bool enabled) const;
     SceneMutationResponse CreateSceneComponent(Address object_address, const std::string& component_type_name) const;
     SceneMutationResponse DeleteSceneComponent(Address component_address) const;
+    SceneMutationResponse LoadSceneByBuildIndex(int build_index) const;
 
 private:
     enum class NodeSummaryFlavor {
@@ -101,6 +111,11 @@ private:
         const MethodRecord& method,
         std::optional<Address> instance_address,
         std::vector<InvokeArgument> arguments = {}) const;
+    void InvokePreparedArguments(
+        const MethodRecord& method,
+        std::optional<Address> instance_address,
+        const std::vector<Address>& argument_pointers,
+        const char* fallback) const;
     void InvokeValueTypeVoid(
         const MethodRecord& method,
         std::optional<Address> instance_address,
@@ -114,8 +129,11 @@ private:
     std::optional<Address> TryReadParentObjectAddress(Address game_object_address) const;
     std::optional<Address> TryReadOwningObjectAddressForComponent(Address component_address) const;
     std::optional<int> ReadSceneHandleForObject(Address game_object_address) const;
+    std::optional<Address> TryResolveLoadedSceneBoxedAddress(int scene_handle) const;
     std::optional<Vector3Snapshot> ReadVector3(Address boxed_value_address) const;
     std::optional<QuaternionSnapshot> ReadQuaternion(Address boxed_value_address) const;
+    std::optional<std::string> ReadEnumString(Address boxed_value_address) const;
+    std::optional<std::string> TryReadHideFlags(Address object_address) const;
     Address RequireUnboxed(Address boxed_object_address, const std::string& context) const;
     Address CreateManagedObject(Address class_handle, const std::string& context) const;
     std::string DescribeInvokeFailure(const RuntimeMethodInvokeResponse& response, const MethodRecord& method, const char* fallback) const;
@@ -142,6 +160,7 @@ private:
         std::optional<std::size_t>* next_offset = nullptr) const;
     std::optional<SceneTransformSnapshotResponse> BuildTransformSnapshot(Address transform_address) const;
     std::pair<std::optional<int>, std::optional<std::string>> ReadSceneIdentity(Address scene_boxed_address) const;
+    std::vector<SceneHierarchyPathEntry> BuildHierarchyPath(Address game_object_address) const;
 
     const RuntimeApi& api_;
     const win32::Memory& memory_;

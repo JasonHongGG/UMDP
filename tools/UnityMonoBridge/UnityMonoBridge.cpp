@@ -38,20 +38,36 @@ const char* ProtocolOperationName(bridge::BridgeOperation operation)
         return "scene-object-inspect-children-page";
     case bridge::BridgeOperation::InspectSceneObjectComponentsPage:
         return "scene-object-inspect-components-page";
+    case bridge::BridgeOperation::CreateSceneRoot:
+        return "scene-object-create-root";
     case bridge::BridgeOperation::CreateSceneChild:
         return "scene-object-create-child";
     case bridge::BridgeOperation::DuplicateSceneObject:
         return "scene-object-duplicate";
     case bridge::BridgeOperation::DeleteSceneObject:
         return "scene-object-delete";
+    case bridge::BridgeOperation::RenameSceneObject:
+        return "scene-object-rename";
+    case bridge::BridgeOperation::SetSceneObjectTag:
+        return "scene-object-set-tag";
+    case bridge::BridgeOperation::SetSceneObjectLayer:
+        return "scene-object-set-layer";
+    case bridge::BridgeOperation::SetSceneObjectHideFlags:
+        return "scene-object-set-hide-flags";
+    case bridge::BridgeOperation::ReparentSceneObject:
+        return "scene-object-reparent";
     case bridge::BridgeOperation::SetSceneObjectActive:
         return "scene-object-set-active";
     case bridge::BridgeOperation::SetSceneObjectTransform:
         return "scene-object-set-transform";
+    case bridge::BridgeOperation::SetSceneBehaviourEnabled:
+        return "scene-component-set-behaviour-enabled";
     case bridge::BridgeOperation::CreateSceneComponent:
         return "scene-component-create";
     case bridge::BridgeOperation::DeleteSceneComponent:
         return "scene-component-delete";
+    case bridge::BridgeOperation::LoadSceneByBuildIndex:
+        return "scene-load-by-build-index";
     case bridge::BridgeOperation::InvokeMethod:
         return "runtime-method-invoke";
     case bridge::BridgeOperation::SetField:
@@ -98,13 +114,21 @@ std::string ExecuteRequest(bridge::RuntimeBridge& runtime_bridge, const bridge::
     if (request.operation == bridge::BridgeOperation::InspectSceneObject) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneInspect(request));
     }
-    if (request.operation == bridge::BridgeOperation::CreateSceneChild
+    if (request.operation == bridge::BridgeOperation::CreateSceneRoot
+        || request.operation == bridge::BridgeOperation::CreateSceneChild
         || request.operation == bridge::BridgeOperation::DuplicateSceneObject
         || request.operation == bridge::BridgeOperation::DeleteSceneObject
+        || request.operation == bridge::BridgeOperation::RenameSceneObject
+        || request.operation == bridge::BridgeOperation::SetSceneObjectTag
+        || request.operation == bridge::BridgeOperation::SetSceneObjectLayer
+        || request.operation == bridge::BridgeOperation::SetSceneObjectHideFlags
+        || request.operation == bridge::BridgeOperation::ReparentSceneObject
         || request.operation == bridge::BridgeOperation::SetSceneObjectActive
         || request.operation == bridge::BridgeOperation::SetSceneObjectTransform
+        || request.operation == bridge::BridgeOperation::SetSceneBehaviourEnabled
         || request.operation == bridge::BridgeOperation::CreateSceneComponent
-        || request.operation == bridge::BridgeOperation::DeleteSceneComponent) {
+        || request.operation == bridge::BridgeOperation::DeleteSceneComponent
+        || request.operation == bridge::BridgeOperation::LoadSceneByBuildIndex) {
         return bridge::SerializeResponse(runtime_bridge.ExecuteSceneMutation(request));
     }
     if (request.operation == bridge::BridgeOperation::InvokeMethod) {

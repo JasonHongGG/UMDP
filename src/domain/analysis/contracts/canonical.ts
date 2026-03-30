@@ -209,6 +209,7 @@ export interface RuntimeQuaternionSnapshot {
 export interface RuntimeSceneNodeSummary {
   objectAddress: string;
   transformAddress: string | null;
+  parentObjectAddress: string | null;
   name: string;
   activeSelf: boolean;
   childCount: number;
@@ -216,29 +217,53 @@ export interface RuntimeSceneNodeSummary {
   componentCount: number | null;
   layer: number | null;
   tag: string | null;
+  hideFlags: string | null;
+  path: string | null;
+}
+
+export type RuntimeSceneKind = 'loaded' | 'dont-destroy-on-load' | 'hide-and-dont-save';
+
+export interface RuntimeSceneBuildSettingsEntry {
+  buildIndex: number;
+  path: string;
+  name: string;
+  isLoaded: boolean;
 }
 
 export interface RuntimeSceneDescriptor {
   sceneHandle: number;
   name: string;
   isLoaded: boolean;
+  kind: RuntimeSceneKind;
+  buildIndex: number | null;
+  path: string | null;
   roots: RuntimeSceneNodeSummary[];
 }
 
 export interface RuntimeSceneCatalogSnapshot {
   generatedAt: string;
   scenes: RuntimeSceneDescriptor[];
+  buildSettingsScenes: RuntimeSceneBuildSettingsEntry[];
 }
 
 export interface RuntimeSceneComponentSummary {
   componentAddress: string;
   typeName: string;
+  isBehaviour: boolean;
+  behaviourEnabled: boolean | null;
+}
+
+export interface RuntimeSceneHierarchyPathEntry {
+  objectAddress: string;
+  name: string;
 }
 
 export interface RuntimeSceneTransformSnapshot {
   transformAddress: string;
+  worldPosition: RuntimeVector3Snapshot | null;
   localPosition: RuntimeVector3Snapshot | null;
   localRotation: RuntimeQuaternionSnapshot | null;
+  localEulerAngles: RuntimeVector3Snapshot | null;
   localScale: RuntimeVector3Snapshot | null;
   parentTransformAddress: string | null;
   parentObjectAddress: string | null;
@@ -246,9 +271,11 @@ export interface RuntimeSceneTransformSnapshot {
 }
 
 export interface RuntimeSceneTransformUpdate {
-  localPosition: RuntimeVector3Snapshot;
-  localRotation: RuntimeQuaternionSnapshot;
-  localScale: RuntimeVector3Snapshot;
+  worldPosition?: RuntimeVector3Snapshot | null;
+  localPosition?: RuntimeVector3Snapshot | null;
+  localRotation?: RuntimeQuaternionSnapshot | null;
+  localEulerAngles?: RuntimeVector3Snapshot | null;
+  localScale?: RuntimeVector3Snapshot | null;
 }
 
 export interface RuntimeSceneChildrenSnapshot {
@@ -301,8 +328,10 @@ export interface RuntimeSceneObjectInspectorHeaderSnapshot {
   generatedAt: string;
   sceneHandle: number | null;
   sceneName: string | null;
+  sceneKind: RuntimeSceneKind | null;
   object: RuntimeSceneNodeSummary;
   parent: RuntimeSceneNodeSummary | null;
+  hierarchyPath: RuntimeSceneHierarchyPathEntry[];
   transform: RuntimeSceneTransformSnapshot | null;
 }
 
@@ -340,8 +369,10 @@ export interface RuntimeSceneObjectInspectorSnapshot {
   generatedAt: string;
   sceneHandle: number | null;
   sceneName: string | null;
+  sceneKind: RuntimeSceneKind | null;
   object: RuntimeSceneNodeSummary;
   parent: RuntimeSceneNodeSummary | null;
+  hierarchyPath: RuntimeSceneHierarchyPathEntry[];
   children: RuntimeSceneNodeSummary[];
   components: RuntimeSceneComponentSummary[];
   transform: RuntimeSceneTransformSnapshot | null;
@@ -349,12 +380,26 @@ export interface RuntimeSceneObjectInspectorSnapshot {
 
 export type RuntimeSceneMutationOperation =
   | 'create-child'
+  | 'create-root'
   | 'duplicate'
   | 'delete'
+  | 'rename'
+  | 'set-tag'
+  | 'set-layer'
+  | 'set-hide-flags'
+  | 'reparent'
   | 'set-active'
   | 'set-transform'
+  | 'set-behaviour-enabled'
   | 'add-component'
-  | 'remove-component';
+  | 'remove-component'
+  | 'load-scene';
+
+export interface RuntimeSceneSelectionHint {
+  sceneHandle: number | null;
+  objectAddress: string;
+  ancestorObjectAddresses: string[];
+}
 
 export interface RuntimeSceneMutationResult {
   operation: RuntimeSceneMutationOperation;
@@ -364,7 +409,13 @@ export interface RuntimeSceneMutationResult {
   object: RuntimeSceneNodeSummary | null;
   deletedObjectAddress: string | null;
   preferredSelectionAddress: string | null;
+  preferredSelectionHint: RuntimeSceneSelectionHint | null;
   activeSelf: boolean | null;
+  tag: string | null;
+  layer: number | null;
+  hideFlags: string | null;
+  behaviourEnabled: boolean | null;
+  hierarchyPath: RuntimeSceneHierarchyPathEntry[];
   transform: RuntimeSceneTransformSnapshot | null;
 }
 

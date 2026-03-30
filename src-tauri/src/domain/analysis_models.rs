@@ -307,6 +307,7 @@ pub struct RuntimeQuaternionSnapshot {
 pub struct RuntimeSceneNodeSummary {
     pub object_address: String,
     pub transform_address: Option<String>,
+    pub parent_object_address: Option<String>,
     pub name: String,
     pub active_self: bool,
     pub child_count: usize,
@@ -314,6 +315,25 @@ pub struct RuntimeSceneNodeSummary {
     pub component_count: Option<usize>,
     pub layer: Option<i32>,
     pub tag: Option<String>,
+    pub hide_flags: Option<String>,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneKind {
+    Loaded,
+    DontDestroyOnLoad,
+    HideAndDontSave,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneBuildSettingsEntry {
+    pub build_index: i32,
+    pub path: String,
+    pub name: String,
+    pub is_loaded: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -322,6 +342,9 @@ pub struct RuntimeSceneDescriptor {
     pub scene_handle: i32,
     pub name: String,
     pub is_loaded: bool,
+    pub kind: RuntimeSceneKind,
+    pub build_index: Option<i32>,
+    pub path: Option<String>,
     pub roots: Vec<RuntimeSceneNodeSummary>,
 }
 
@@ -330,6 +353,7 @@ pub struct RuntimeSceneDescriptor {
 pub struct RuntimeSceneCatalogSnapshot {
     pub generated_at: String,
     pub scenes: Vec<RuntimeSceneDescriptor>,
+    pub build_settings_scenes: Vec<RuntimeSceneBuildSettingsEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -337,14 +361,25 @@ pub struct RuntimeSceneCatalogSnapshot {
 pub struct RuntimeSceneComponentSummary {
     pub component_address: String,
     pub type_name: String,
+    pub is_behaviour: bool,
+    pub behaviour_enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneHierarchyPathEntry {
+    pub object_address: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneTransformSnapshot {
     pub transform_address: String,
+    pub world_position: Option<RuntimeVector3Snapshot>,
     pub local_position: Option<RuntimeVector3Snapshot>,
     pub local_rotation: Option<RuntimeQuaternionSnapshot>,
+    pub local_euler_angles: Option<RuntimeVector3Snapshot>,
     pub local_scale: Option<RuntimeVector3Snapshot>,
     pub parent_transform_address: Option<String>,
     pub parent_object_address: Option<String>,
@@ -354,9 +389,11 @@ pub struct RuntimeSceneTransformSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneTransformUpdate {
-    pub local_position: RuntimeVector3Snapshot,
-    pub local_rotation: RuntimeQuaternionSnapshot,
-    pub local_scale: RuntimeVector3Snapshot,
+    pub world_position: Option<RuntimeVector3Snapshot>,
+    pub local_position: Option<RuntimeVector3Snapshot>,
+    pub local_rotation: Option<RuntimeQuaternionSnapshot>,
+    pub local_euler_angles: Option<RuntimeVector3Snapshot>,
+    pub local_scale: Option<RuntimeVector3Snapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,8 +465,10 @@ pub struct RuntimeSceneObjectInspectorHeaderSnapshot {
     pub generated_at: String,
     pub scene_handle: Option<i32>,
     pub scene_name: Option<String>,
+    pub scene_kind: Option<RuntimeSceneKind>,
     pub object: RuntimeSceneNodeSummary,
     pub parent: Option<RuntimeSceneNodeSummary>,
+    pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
     pub transform: Option<RuntimeSceneTransformSnapshot>,
 }
 
@@ -480,8 +519,10 @@ pub struct RuntimeSceneObjectInspectorSnapshot {
     pub generated_at: String,
     pub scene_handle: Option<i32>,
     pub scene_name: Option<String>,
+    pub scene_kind: Option<RuntimeSceneKind>,
     pub object: RuntimeSceneNodeSummary,
     pub parent: Option<RuntimeSceneNodeSummary>,
+    pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
     pub children: Vec<RuntimeSceneNodeSummary>,
     pub components: Vec<RuntimeSceneComponentSummary>,
     pub transform: Option<RuntimeSceneTransformSnapshot>,
@@ -491,12 +532,28 @@ pub struct RuntimeSceneObjectInspectorSnapshot {
 #[serde(rename_all = "kebab-case")]
 pub enum RuntimeSceneMutationOperation {
     CreateChild,
+    CreateRoot,
     Duplicate,
     Delete,
+    Rename,
+    SetTag,
+    SetLayer,
+    SetHideFlags,
+    Reparent,
     SetActive,
     SetTransform,
+    SetBehaviourEnabled,
     AddComponent,
     RemoveComponent,
+    LoadScene,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneSelectionHint {
+    pub scene_handle: Option<i32>,
+    pub object_address: String,
+    pub ancestor_object_addresses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -509,7 +566,13 @@ pub struct RuntimeSceneMutationResult {
     pub object: Option<RuntimeSceneNodeSummary>,
     pub deleted_object_address: Option<String>,
     pub preferred_selection_address: Option<String>,
+    pub preferred_selection_hint: Option<RuntimeSceneSelectionHint>,
     pub active_self: Option<bool>,
+    pub tag: Option<String>,
+    pub layer: Option<i32>,
+    pub hide_flags: Option<String>,
+    pub behaviour_enabled: Option<bool>,
+    pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
     pub transform: Option<RuntimeSceneTransformSnapshot>,
 }
 

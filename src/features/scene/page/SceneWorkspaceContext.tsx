@@ -84,24 +84,40 @@ export function useSceneInspectorState() {
 
 export function useSceneMutationState() {
   const {
+    createSceneRoot,
     createSceneChild,
     duplicateSceneObject,
     deleteSceneObject,
+    renameSceneObject,
+    setSceneObjectTag,
+    setSceneObjectLayer,
+    setSceneObjectHideFlags,
+    reparentSceneObject,
     setSceneObjectActive,
     setSceneObjectTransform,
+    setSceneBehaviourEnabled,
     createSceneComponent,
     deleteSceneComponent,
+    loadSceneByBuildIndex,
     sceneMutationState,
   } = useSceneWorkspace();
 
   return {
+    createSceneRoot,
     createSceneChild,
     duplicateSceneObject,
     deleteSceneObject,
+    renameSceneObject,
+    setSceneObjectTag,
+    setSceneObjectLayer,
+    setSceneObjectHideFlags,
+    reparentSceneObject,
     setSceneObjectActive,
     setSceneObjectTransform,
+    setSceneBehaviourEnabled,
     createSceneComponent,
     deleteSceneComponent,
+    loadSceneByBuildIndex,
     sceneMutationState,
   };
 }

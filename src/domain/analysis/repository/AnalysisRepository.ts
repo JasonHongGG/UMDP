@@ -23,6 +23,12 @@ export interface RuntimeInstanceFieldsRequest {
   instanceAddress: string;
 }
 
+export interface ReparentSceneObjectRequest {
+  objectAddress: string;
+  parentObjectAddress?: string | null;
+  parentPath?: string | null;
+}
+
 export interface AnalysisRepository {
   attachToProcess(request: AttachToProcessRequest): Promise<ProcessSession>;
   getContractVersions(): Promise<SystemContractVersions>;
@@ -40,11 +46,19 @@ export interface AnalysisRepository {
   startSceneObjectInspectorAnalysis(objectAddress: string): Promise<RuntimeSceneObjectInspectorTaskState | null>;
   getSceneObjectInspectorState(): Promise<RuntimeSceneObjectInspectorTaskState | null>;
   cancelSceneObjectInspectorAnalysis(taskId?: number): Promise<RuntimeSceneObjectInspectorTaskState | null>;
+  createSceneRoot(sceneHandle: number, name: string): Promise<RuntimeSceneMutationResult>;
   createSceneChild(parentObjectAddress: string, name: string): Promise<RuntimeSceneMutationResult>;
   duplicateSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;
   deleteSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;
+  renameSceneObject(objectAddress: string, name: string): Promise<RuntimeSceneMutationResult>;
+  setSceneObjectTag(objectAddress: string, tag: string): Promise<RuntimeSceneMutationResult>;
+  setSceneObjectLayer(objectAddress: string, layer: number): Promise<RuntimeSceneMutationResult>;
+  setSceneObjectHideFlags(objectAddress: string, hideFlags: string): Promise<RuntimeSceneMutationResult>;
+  reparentSceneObject(request: ReparentSceneObjectRequest): Promise<RuntimeSceneMutationResult>;
   setSceneObjectActive(objectAddress: string, activeSelf: boolean): Promise<RuntimeSceneMutationResult>;
   setSceneObjectTransform(objectAddress: string, transformUpdate: RuntimeSceneTransformUpdate): Promise<RuntimeSceneMutationResult>;
+  setSceneBehaviourEnabled(componentAddress: string, enabled: boolean): Promise<RuntimeSceneMutationResult>;
   createSceneComponent(objectAddress: string, componentTypeName: string): Promise<RuntimeSceneMutationResult>;
   deleteSceneComponent(componentAddress: string): Promise<RuntimeSceneMutationResult>;
+  loadSceneByBuildIndex(buildIndex: number): Promise<RuntimeSceneMutationResult>;
 }

@@ -14,6 +14,11 @@ import type {
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
+import {
+  onSceneObjectChildrenTaskUpdated,
+  onSceneObjectInspectorTaskUpdated,
+  onSceneWorkspaceStateUpdated,
+} from '@/infrastructure/tauri/TauriSceneEvents';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 
 const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
@@ -52,13 +57,21 @@ export interface SceneWorkspaceStateResult {
   sceneInspectorChildrenLoading: boolean;
   sceneInspectorComponentsLoading: boolean;
   sceneInspectorError: string | null;
+  createSceneRoot: (sceneHandle: number, name: string) => Promise<RuntimeSceneMutationResult | null>;
   createSceneChild: (name: string) => Promise<RuntimeSceneMutationResult | null>;
   duplicateSceneObject: () => Promise<RuntimeSceneMutationResult | null>;
   deleteSceneObject: () => Promise<RuntimeSceneMutationResult | null>;
+  renameSceneObject: (name: string) => Promise<RuntimeSceneMutationResult | null>;
+  setSceneObjectTag: (tag: string) => Promise<RuntimeSceneMutationResult | null>;
+  setSceneObjectLayer: (layer: number) => Promise<RuntimeSceneMutationResult | null>;
+  setSceneObjectHideFlags: (hideFlags: string) => Promise<RuntimeSceneMutationResult | null>;
+  reparentSceneObject: (parentObjectAddress?: string | null, parentPath?: string | null) => Promise<RuntimeSceneMutationResult | null>;
   setSceneObjectActive: (activeSelf: boolean) => Promise<RuntimeSceneMutationResult | null>;
   setSceneObjectTransform: (transformUpdate: RuntimeSceneTransformUpdate) => Promise<RuntimeSceneMutationResult | null>;
+  setSceneBehaviourEnabled: (componentAddress: string, enabled: boolean) => Promise<RuntimeSceneMutationResult | null>;
   createSceneComponent: (componentTypeName: string) => Promise<RuntimeSceneMutationResult | null>;
   deleteSceneComponent: (componentAddress: string) => Promise<RuntimeSceneMutationResult | null>;
+  loadSceneByBuildIndex: (buildIndex: number) => Promise<RuntimeSceneMutationResult | null>;
   sceneMutationState: SceneMutationState;
   sceneRootsByHandle: Record<number, RuntimeSceneNodeSummary[]>;
 }
@@ -143,8 +156,10 @@ function buildInspectorSnapshot(taskState: RuntimeSceneObjectInspectorTaskState)
     generatedAt: taskState.header.generatedAt,
     sceneHandle: taskState.header.sceneHandle,
     sceneName: taskState.header.sceneName,
+    sceneKind: taskState.header.sceneKind,
     object: taskState.header.object,
     parent: taskState.header.parent,
+    hierarchyPath: taskState.header.hierarchyPath,
     transform: taskState.header.transform,
     children: taskState.children,
     components: taskState.components,
@@ -790,6 +805,74 @@ export function useSceneWorkspaceState({
     });
   }, [applySummaryPatch]);
 
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    let disposed = false;
+    let disposeWorkspace: (() => void) | undefined;
+    let disposeChildren: (() => void) | undefined;
+    let disposeInspector: (() => void) | undefined;
+
+    onSceneWorkspaceStateUpdated((nextWorkspace) => {
+      if (disposed) {
+        return;
+      }
+      setSceneWorkspace(nextWorkspace);
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      disposeWorkspace = dispose;
+    }).catch(() => undefined);
+
+    onSceneObjectChildrenTaskUpdated((taskState) => {
+      if (disposed) {
+        return;
+      }
+
+      const activeTaskId = activeChildTaskIdByParentRef.current[taskState.parentObjectAddress];
+      if (activeTaskId == null || taskState.taskId !== activeTaskId) {
+        return;
+      }
+
+      applySceneChildrenTaskState(taskState);
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      disposeChildren = dispose;
+    }).catch(() => undefined);
+
+    onSceneObjectInspectorTaskUpdated((taskState) => {
+      if (disposed) {
+        return;
+      }
+
+      if (activeInspectorTaskIdRef.current == null || taskState.taskId !== activeInspectorTaskIdRef.current) {
+        return;
+      }
+
+      applyInspectorTaskState(taskState);
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      disposeInspector = dispose;
+    }).catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      disposeWorkspace?.();
+      disposeChildren?.();
+      disposeInspector?.();
+    };
+  }, [active, applyInspectorTaskState, applySceneChildrenTaskState]);
+
   const bumpParentChildCount = useCallback((objectAddress: string, delta: number) => {
     setSceneWorkspace((previous) => {
       if (!previous.snapshot) {
@@ -850,20 +933,6 @@ export function useSceneWorkspaceState({
       activeInspectorTaskIdRef.current = taskState.taskId;
       applyInspectorTaskState(taskState);
 
-      while (!isTerminalInspectorTaskStatus(taskState.status) && inspectorPollTokenRef.current === pollToken) {
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
-        const nextTaskState = await repository.getSceneObjectInspectorState();
-        if (!nextTaskState || inspectorPollTokenRef.current !== pollToken) {
-          continue;
-        }
-        if (nextTaskState.taskId !== activeInspectorTaskIdRef.current || nextTaskState.objectAddress !== objectAddress) {
-          continue;
-        }
-
-        taskState = nextTaskState;
-        applyInspectorTaskState(taskState);
-      }
-
       if (taskState.header) {
         logScenePerf(`getSceneObjectInspector:${objectAddress}`, startedAt, {
           status: taskState.status,
@@ -879,13 +948,6 @@ export function useSceneWorkspaceState({
         ...previous,
         [objectAddress]: message,
       }));
-    } finally {
-      if (inspectorPollTokenRef.current === pollToken) {
-        setInspectorLoadingByAddress((previous) => ({
-          ...previous,
-          [objectAddress]: false,
-        }));
-      }
     }
   }, [applyInspectorTaskState, repository]);
 
@@ -921,20 +983,6 @@ export function useSceneWorkspaceState({
       activeChildTaskIdByParentRef.current[objectAddress] = taskState.taskId;
       applySceneChildrenTaskState(taskState);
 
-      while (!isTerminalChildrenTaskStatus(taskState.status) && (childPollTokensRef.current[objectAddress] ?? 0) === pollToken) {
-        await new Promise((resolve) => window.setTimeout(resolve, 90));
-        const nextTaskState = await repository.getSceneObjectChildrenState(objectAddress);
-        if (!nextTaskState || (childPollTokensRef.current[objectAddress] ?? 0) !== pollToken) {
-          continue;
-        }
-        if (nextTaskState.taskId !== activeChildTaskIdByParentRef.current[objectAddress]) {
-          continue;
-        }
-
-        taskState = nextTaskState;
-        applySceneChildrenTaskState(taskState);
-      }
-
       logScenePerf(`getSceneObjectChildren:${objectAddress}`, startedAt, {
         status: taskState.status,
         loadedCount: taskState.loadedCount,
@@ -946,13 +994,6 @@ export function useSceneWorkspaceState({
         ...previous,
         [objectAddress]: message,
       }));
-    } finally {
-      if ((childPollTokensRef.current[objectAddress] ?? 0) === pollToken) {
-        setLoadingChildrenByParent((previous) => ({
-          ...previous,
-          [objectAddress]: false,
-        }));
-      }
     }
   }, [applySceneChildrenTaskState, repository]);
 
@@ -1093,6 +1134,10 @@ export function useSceneWorkspaceState({
         }
         break;
       }
+      case 'create-root': {
+        setSceneWorkspace((previous) => insertRootNode(previous, result.sceneHandle, result.object));
+        break;
+      }
       case 'duplicate': {
         if (result.parentObjectAddress && result.object) {
           bumpParentChildCount(result.parentObjectAddress, 1);
@@ -1139,14 +1184,33 @@ export function useSceneWorkspaceState({
         }
         break;
       }
+      case 'rename':
+      case 'set-tag':
+      case 'set-layer':
+      case 'set-hide-flags': {
+        if (result.object) {
+          applySummaryPatch(result.object);
+        }
+        break;
+      }
+      case 'reparent': {
+        if (result.object) {
+          applySummaryPatch(result.object);
+        }
+        break;
+      }
       case 'set-transform': {
         if (result.targetObjectAddress && result.transform) {
           setInspectorsByAddress((previous) => patchInspectorTransform(previous, result.targetObjectAddress!, result.transform!));
         }
         break;
       }
+      case 'set-behaviour-enabled':
       case 'add-component':
       case 'remove-component': {
+        break;
+      }
+      case 'load-scene': {
         break;
       }
       default:
@@ -1201,6 +1265,10 @@ export function useSceneWorkspaceState({
     return runMutation('create-child', () => repository.createSceneChild(selectedObjectAddress, name));
   }, [repository, runMutation, selectedObjectAddress]);
 
+  const createSceneRoot = useCallback(async (sceneHandle: number, name: string) => {
+    return runMutation('create-root', () => repository.createSceneRoot(sceneHandle, name));
+  }, [repository, runMutation]);
+
   const duplicateSceneObject = useCallback(async () => {
     if (!selectedObjectAddress) {
       return null;
@@ -1216,6 +1284,66 @@ export function useSceneWorkspaceState({
 
     return runMutation('delete', () => repository.deleteSceneObject(selectedObjectAddress));
   }, [repository, runMutation, selectedObjectAddress]);
+
+  const renameSceneObject = useCallback(async (name: string) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('rename', () => repository.renameSceneObject(selectedObjectAddress, name));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const setSceneObjectTag = useCallback(async (tag: string) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('set-tag', () => repository.setSceneObjectTag(selectedObjectAddress, tag));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const setSceneObjectLayer = useCallback(async (layer: number) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('set-layer', () => repository.setSceneObjectLayer(selectedObjectAddress, layer));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const setSceneObjectHideFlags = useCallback(async (hideFlags: string) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('set-hide-flags', () => repository.setSceneObjectHideFlags(selectedObjectAddress, hideFlags));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const reparentSceneObject = useCallback(async (parentObjectAddress?: string | null, parentPath?: string | null) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('reparent', () => repository.reparentSceneObject({
+      objectAddress: selectedObjectAddress,
+      parentObjectAddress,
+      parentPath,
+    }));
+    await refreshSceneWorkspace();
+    if (result.preferredSelectionAddress !== undefined) {
+      setSelectedObjectAddress(result.preferredSelectionAddress);
+    }
+    if (result.preferredSelectionAddress) {
+      loadSceneObjectInspector(result.preferredSelectionAddress, true).catch(() => undefined);
+    }
+    return result;
+  }, [loadSceneObjectInspector, refreshSceneWorkspace, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectActive = useCallback(async (activeSelf: boolean) => {
     if (!selectedObjectAddress) {
@@ -1234,6 +1362,16 @@ export function useSceneWorkspaceState({
     if (selectedObjectAddress) {
       loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
     }
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const setSceneBehaviourEnabled = useCallback(async (componentAddress: string, enabled: boolean) => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    const result = await runMutation('set-behaviour-enabled', () => repository.setSceneBehaviourEnabled(componentAddress, enabled));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
     return result;
   }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
 
@@ -1256,6 +1394,15 @@ export function useSceneWorkspaceState({
     loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
     return result;
   }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+
+  const loadSceneByBuildIndex = useCallback(async (buildIndex: number) => {
+    const result = await runMutation('load-scene', () => repository.loadSceneByBuildIndex(buildIndex));
+    await refreshSceneWorkspace();
+    if (result.preferredSelectionAddress !== undefined) {
+      setSelectedObjectAddress(result.preferredSelectionAddress);
+    }
+    return result;
+  }, [refreshSceneWorkspace, repository, runMutation]);
 
   useEffect(() => {
     const processKey = workspaceLifecycle.processSession
@@ -1340,13 +1487,21 @@ export function useSceneWorkspaceState({
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneInspectorError,
+    createSceneRoot,
     createSceneChild,
     duplicateSceneObject,
     deleteSceneObject,
+    renameSceneObject,
+    setSceneObjectTag,
+    setSceneObjectLayer,
+    setSceneObjectHideFlags,
+    reparentSceneObject,
     setSceneObjectActive,
     setSceneObjectTransform,
+    setSceneBehaviourEnabled,
     createSceneComponent,
     deleteSceneComponent,
+    loadSceneByBuildIndex,
     sceneMutationState,
     sceneRootsByHandle,
   };

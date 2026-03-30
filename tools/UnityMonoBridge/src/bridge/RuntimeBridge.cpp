@@ -109,6 +109,9 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
             else if (value == "scene-inspect-components-page") {
                 request.operation = BridgeOperation::InspectSceneObjectComponentsPage;
             }
+            else if (value == "scene-create-root") {
+                request.operation = BridgeOperation::CreateSceneRoot;
+            }
             else if (value == "scene-create-child") {
                 request.operation = BridgeOperation::CreateSceneChild;
             }
@@ -118,17 +121,38 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
             else if (value == "scene-delete") {
                 request.operation = BridgeOperation::DeleteSceneObject;
             }
+            else if (value == "scene-rename") {
+                request.operation = BridgeOperation::RenameSceneObject;
+            }
+            else if (value == "scene-set-tag") {
+                request.operation = BridgeOperation::SetSceneObjectTag;
+            }
+            else if (value == "scene-set-layer") {
+                request.operation = BridgeOperation::SetSceneObjectLayer;
+            }
+            else if (value == "scene-set-hide-flags") {
+                request.operation = BridgeOperation::SetSceneObjectHideFlags;
+            }
+            else if (value == "scene-reparent") {
+                request.operation = BridgeOperation::ReparentSceneObject;
+            }
             else if (value == "scene-set-active") {
                 request.operation = BridgeOperation::SetSceneObjectActive;
             }
             else if (value == "scene-set-transform") {
                 request.operation = BridgeOperation::SetSceneObjectTransform;
             }
+            else if (value == "scene-component-set-behaviour-enabled") {
+                request.operation = BridgeOperation::SetSceneBehaviourEnabled;
+            }
             else if (value == "scene-component-create") {
                 request.operation = BridgeOperation::CreateSceneComponent;
             }
             else if (value == "scene-component-delete") {
                 request.operation = BridgeOperation::DeleteSceneComponent;
+            }
+            else if (value == "scene-load-by-build-index") {
+                request.operation = BridgeOperation::LoadSceneByBuildIndex;
             }
             else {
                 request.operation = BridgeOperation::InspectClass;
@@ -170,20 +194,62 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
         else if (key == "--component-address") {
             request.component_address = ParseUnsignedValue<std::size_t>(value);
         }
+        else if (key == "--parent-object-address") {
+            request.parent_object_address = ParseUnsignedValue<std::size_t>(value);
+        }
         else if (key == "--name") {
             request.object_name = value;
+        }
+        else if (key == "--path") {
+            request.object_path = value;
         }
         else if (key == "--component-type") {
             request.component_type_name = value;
         }
+        else if (key == "--tag") {
+            request.tag = value;
+        }
+        else if (key == "--hide-flags") {
+            request.hide_flags = value;
+        }
         else if (key == "--active-self") {
             request.active_self = value == "true";
+        }
+        else if (key == "--enabled") {
+            request.behaviour_enabled = value == "true";
+        }
+        else if (key == "--layer") {
+            request.layer = std::stoi(value, nullptr, 0);
+        }
+        else if (key == "--scene-handle") {
+            request.scene_handle = std::stoi(value, nullptr, 0);
+        }
+        else if (key == "--build-index") {
+            request.build_index = std::stoi(value, nullptr, 0);
         }
         else if (key == "--offset") {
             request.offset = ParseUnsignedValue<std::size_t>(value);
         }
         else if (key == "--limit") {
             request.limit = ParseUnsignedValue<std::size_t>(value);
+        }
+        else if (key == "--world-position-x") {
+            if (!request.world_position.has_value()) {
+                request.world_position = Vector3Snapshot{};
+            }
+            request.world_position->x = ParseFloatValue(value);
+        }
+        else if (key == "--world-position-y") {
+            if (!request.world_position.has_value()) {
+                request.world_position = Vector3Snapshot{};
+            }
+            request.world_position->y = ParseFloatValue(value);
+        }
+        else if (key == "--world-position-z") {
+            if (!request.world_position.has_value()) {
+                request.world_position = Vector3Snapshot{};
+            }
+            request.world_position->z = ParseFloatValue(value);
         }
         else if (key == "--position-x") {
             if (!request.local_position.has_value()) {
@@ -226,6 +292,24 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
                 request.local_rotation = QuaternionSnapshot{};
             }
             request.local_rotation->w = ParseFloatValue(value);
+        }
+        else if (key == "--euler-x") {
+            if (!request.local_euler_angles.has_value()) {
+                request.local_euler_angles = Vector3Snapshot{};
+            }
+            request.local_euler_angles->x = ParseFloatValue(value);
+        }
+        else if (key == "--euler-y") {
+            if (!request.local_euler_angles.has_value()) {
+                request.local_euler_angles = Vector3Snapshot{};
+            }
+            request.local_euler_angles->y = ParseFloatValue(value);
+        }
+        else if (key == "--euler-z") {
+            if (!request.local_euler_angles.has_value()) {
+                request.local_euler_angles = Vector3Snapshot{};
+            }
+            request.local_euler_angles->z = ParseFloatValue(value);
         }
         else if (key == "--scale-x") {
             if (!request.local_scale.has_value()) {
@@ -299,12 +383,22 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
     }
 
     if ((request.operation == BridgeOperation::DuplicateSceneObject
+            || request.operation == BridgeOperation::RenameSceneObject
+            || request.operation == BridgeOperation::SetSceneObjectTag
+            || request.operation == BridgeOperation::SetSceneObjectLayer
+            || request.operation == BridgeOperation::SetSceneObjectHideFlags
+            || request.operation == BridgeOperation::ReparentSceneObject
             || request.operation == BridgeOperation::DeleteSceneObject
             || request.operation == BridgeOperation::SetSceneObjectActive
             || request.operation == BridgeOperation::SetSceneObjectTransform
             || request.operation == BridgeOperation::CreateSceneComponent)
         && !request.object_address.has_value()) {
         throw std::runtime_error("Missing scene object address");
+    }
+
+    if (request.operation == BridgeOperation::CreateSceneRoot
+        && (!request.scene_handle.has_value() || !request.object_name.has_value())) {
+        throw std::runtime_error("Missing scene root creation arguments");
     }
 
     if (request.operation == BridgeOperation::DeleteSceneComponent && !request.component_address.has_value()) {
@@ -322,8 +416,36 @@ BridgeRequest ParseTokens(const std::vector<std::string>& tokens)
     }
 
     if (request.operation == BridgeOperation::SetSceneObjectTransform
-        && (!request.local_position.has_value() || !request.local_rotation.has_value() || !request.local_scale.has_value())) {
+        && !request.world_position.has_value()
+        && !request.local_position.has_value()
+        && !request.local_rotation.has_value()
+        && !request.local_euler_angles.has_value()
+        && !request.local_scale.has_value()) {
         throw std::runtime_error("Missing scene transform arguments");
+    }
+
+    if (request.operation == BridgeOperation::SetSceneObjectTag
+        && (!request.object_address.has_value() || !request.tag.has_value())) {
+        throw std::runtime_error("Missing scene tag arguments");
+    }
+
+    if (request.operation == BridgeOperation::SetSceneObjectLayer
+        && (!request.object_address.has_value() || !request.layer.has_value())) {
+        throw std::runtime_error("Missing scene layer arguments");
+    }
+
+    if (request.operation == BridgeOperation::SetSceneObjectHideFlags
+        && (!request.object_address.has_value() || !request.hide_flags.has_value())) {
+        throw std::runtime_error("Missing scene hideFlags arguments");
+    }
+
+    if (request.operation == BridgeOperation::SetSceneBehaviourEnabled
+        && (!request.component_address.has_value() || !request.behaviour_enabled.has_value())) {
+        throw std::runtime_error("Missing scene behaviour toggle arguments");
+    }
+
+    if (request.operation == BridgeOperation::LoadSceneByBuildIndex && !request.build_index.has_value()) {
+        throw std::runtime_error("Missing scene build index");
     }
 
     if (request.operation == BridgeOperation::CreateSceneComponent

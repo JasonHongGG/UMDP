@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AnalysisRepository, AttachToProcessRequest, RuntimeInstanceFieldsRequest } from '@/domain/analysis/repository/AnalysisRepository';
+import type { AnalysisRepository, AttachToProcessRequest, ReparentSceneObjectRequest, RuntimeInstanceFieldsRequest } from '@/domain/analysis/repository/AnalysisRepository';
 import type {
   AnalysisSnapshot,
   ProcessSession,
@@ -98,6 +98,9 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     cancelSceneObjectInspectorAnalysis(taskId?: number) {
       return timedInvoke<RuntimeSceneObjectInspectorTaskState | null>('cancel_scene_object_inspector_analysis', 'cancel_scene_object_inspector_analysis', taskId == null ? undefined : { taskId });
     },
+    createSceneRoot(sceneHandle: number, name: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('create_scene_root', 'create_scene_root', { sceneHandle, name });
+    },
     createSceneChild(parentObjectAddress: string, name: string) {
       return timedInvoke<RuntimeSceneMutationResult>('create_scene_child', 'create_scene_child', { parentObjectAddress, name });
     },
@@ -107,17 +110,38 @@ export function createTauriAnalysisRepository(): AnalysisRepository {
     deleteSceneObject(objectAddress: string) {
       return timedInvoke<RuntimeSceneMutationResult>('delete_scene_object', 'delete_scene_object', { objectAddress });
     },
+    renameSceneObject(objectAddress: string, name: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('rename_scene_object', 'rename_scene_object', { objectAddress, name });
+    },
+    setSceneObjectTag(objectAddress: string, tag: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_tag', 'set_scene_object_tag', { objectAddress, tag });
+    },
+    setSceneObjectLayer(objectAddress: string, layer: number) {
+      return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_layer', 'set_scene_object_layer', { objectAddress, layer });
+    },
+    setSceneObjectHideFlags(objectAddress: string, hideFlags: string) {
+      return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_hide_flags', 'set_scene_object_hide_flags', { objectAddress, hideFlags });
+    },
+    reparentSceneObject(request: ReparentSceneObjectRequest) {
+      return timedInvoke<RuntimeSceneMutationResult>('reparent_scene_object', 'reparent_scene_object', request as unknown as Record<string, unknown>);
+    },
     setSceneObjectActive(objectAddress: string, activeSelf: boolean) {
       return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_active', 'set_scene_object_active', { objectAddress, activeSelf });
     },
     setSceneObjectTransform(objectAddress: string, transformUpdate: RuntimeSceneTransformUpdate) {
       return timedInvoke<RuntimeSceneMutationResult>('set_scene_object_transform', 'set_scene_object_transform', { objectAddress, transformUpdate });
     },
+    setSceneBehaviourEnabled(componentAddress: string, enabled: boolean) {
+      return timedInvoke<RuntimeSceneMutationResult>('set_scene_behaviour_enabled', 'set_scene_behaviour_enabled', { componentAddress, enabled });
+    },
     createSceneComponent(objectAddress: string, componentTypeName: string) {
       return timedInvoke<RuntimeSceneMutationResult>('create_scene_component', 'create_scene_component', { objectAddress, componentTypeName });
     },
     deleteSceneComponent(componentAddress: string) {
       return timedInvoke<RuntimeSceneMutationResult>('delete_scene_component', 'delete_scene_component', { componentAddress });
+    },
+    loadSceneByBuildIndex(buildIndex: number) {
+      return timedInvoke<RuntimeSceneMutationResult>('load_scene_by_build_index', 'load_scene_by_build_index', { buildIndex });
     },
     getRuntimeStaticFields(classStableId: string) {
       return timedInvoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', 'get_runtime_static_fields', { classStableId });

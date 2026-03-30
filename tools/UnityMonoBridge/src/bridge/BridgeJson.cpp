@@ -176,6 +176,8 @@ void WriteSceneNode(std::ostringstream& output, const bridge::SceneNodeSummary& 
            << "\"object_address\":\"" << JsonEscape(node.object_address) << "\",";
     output << "\"transform_address\":";
     WriteOptionalString(output, node.transform_address);
+    output << ",\"parent_object_address\":";
+    WriteOptionalString(output, node.parent_object_address);
     output << ",\"name\":\"" << JsonEscape(node.name) << "\",";
     output << "\"active_self\":" << (node.active_self ? "true" : "false") << ',';
     output << "\"child_count\":" << node.child_count << ',';
@@ -187,7 +189,40 @@ void WriteSceneNode(std::ostringstream& output, const bridge::SceneNodeSummary& 
     WriteOptionalInt(output, node.layer);
     output << ",\"tag\":";
     WriteOptionalString(output, node.tag);
+    output << ",\"hide_flags\":";
+    WriteOptionalString(output, node.hide_flags);
+    output << ",\"path\":";
+    WriteOptionalString(output, node.path);
     output << '}';
+}
+
+std::string SceneKindToString(bridge::SceneKind kind)
+{
+    switch (kind) {
+    case bridge::SceneKind::DontDestroyOnLoad:
+        return "dont-destroy-on-load";
+    case bridge::SceneKind::HideAndDontSave:
+        return "hide-and-dont-save";
+    case bridge::SceneKind::Loaded:
+    default:
+        return "loaded";
+    }
+}
+
+void WriteSceneBuildSettingsEntries(std::ostringstream& output, const std::vector<bridge::SceneBuildSettingsEntry>& scenes)
+{
+    for (std::size_t index = 0; index < scenes.size(); ++index) {
+        if (index > 0) {
+            output << ',';
+        }
+
+        output << '{'
+               << "\"build_index\":" << scenes[index].build_index << ','
+               << "\"path\":\"" << JsonEscape(scenes[index].path) << "\","
+               << "\"name\":\"" << JsonEscape(scenes[index].name) << "\","
+               << "\"is_loaded\":" << (scenes[index].is_loaded ? "true" : "false")
+               << '}';
+    }
 }
 
 void WriteSceneNodes(std::ostringstream& output, const std::vector<bridge::SceneNodeSummary>& nodes)
@@ -209,7 +244,25 @@ void WriteSceneComponents(std::ostringstream& output, const std::vector<bridge::
 
         output << '{'
                << "\"component_address\":\"" << JsonEscape(components[index].component_address) << "\"," 
-               << "\"type_name\":\"" << JsonEscape(components[index].type_name) << "\""
+               << "\"type_name\":\"" << JsonEscape(components[index].type_name) << "\","
+               << "\"is_behaviour\":" << (components[index].is_behaviour ? "true" : "false") << ',';
+        output << "\"behaviour_enabled\":";
+        WriteOptionalBool(output, components[index].behaviour_enabled);
+        output << '}'
+               ;
+    }
+}
+
+void WriteHierarchyPath(std::ostringstream& output, const std::vector<bridge::SceneHierarchyPathEntry>& entries)
+{
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        if (index > 0) {
+            output << ',';
+        }
+
+        output << '{'
+               << "\"object_address\":\"" << JsonEscape(entries[index].object_address) << "\","
+               << "\"name\":\"" << JsonEscape(entries[index].name) << "\""
                << '}';
     }
 }
@@ -217,20 +270,36 @@ void WriteSceneComponents(std::ostringstream& output, const std::vector<bridge::
 std::string SceneMutationOperationToString(bridge::SceneMutationOperation operation)
 {
     switch (operation) {
+    case bridge::SceneMutationOperation::CreateRoot:
+        return "create-root";
     case bridge::SceneMutationOperation::CreateChild:
         return "create-child";
     case bridge::SceneMutationOperation::Duplicate:
         return "duplicate";
     case bridge::SceneMutationOperation::Delete:
         return "delete";
+    case bridge::SceneMutationOperation::Rename:
+        return "rename";
+    case bridge::SceneMutationOperation::SetTag:
+        return "set-tag";
+    case bridge::SceneMutationOperation::SetLayer:
+        return "set-layer";
+    case bridge::SceneMutationOperation::SetHideFlags:
+        return "set-hide-flags";
+    case bridge::SceneMutationOperation::Reparent:
+        return "reparent";
     case bridge::SceneMutationOperation::SetActive:
         return "set-active";
     case bridge::SceneMutationOperation::SetTransform:
         return "set-transform";
+    case bridge::SceneMutationOperation::SetBehaviourEnabled:
+        return "set-behaviour-enabled";
     case bridge::SceneMutationOperation::AddComponent:
         return "add-component";
     case bridge::SceneMutationOperation::RemoveComponent:
         return "remove-component";
+    case bridge::SceneMutationOperation::LoadScene:
+        return "load-scene";
     default:
         return "set-active";
     }
@@ -240,10 +309,14 @@ void WriteTransformSnapshot(std::ostringstream& output, const bridge::SceneTrans
 {
     output << '{'
            << "\"transform_address\":\"" << JsonEscape(value.transform_address) << "\",";
-    output << "\"local_position\":";
+    output << "\"world_position\":";
+    WriteOptionalVector3(output, value.world_position);
+    output << ",\"local_position\":";
     WriteOptionalVector3(output, value.local_position);
     output << ",\"local_rotation\":";
     WriteOptionalQuaternion(output, value.local_rotation);
+    output << ",\"local_euler_angles\":";
+    WriteOptionalVector3(output, value.local_euler_angles);
     output << ",\"local_scale\":";
     WriteOptionalVector3(output, value.local_scale);
     output << ",\"parent_transform_address\":";
@@ -329,10 +402,17 @@ std::string SerializeResponse(const SceneCatalogResponse& response)
                << "\"scene_handle\":" << scene.scene_handle << ','
                << "\"name\":\"" << JsonEscape(scene.name) << "\"," 
                << "\"is_loaded\":" << (scene.is_loaded ? "true" : "false") << ','
-               << "\"roots\":[";
+               << "\"kind\":\"" << JsonEscape(SceneKindToString(scene.kind)) << "\",";
+        output << "\"build_index\":";
+        WriteOptionalInt(output, scene.build_index);
+        output << ",\"path\":";
+        WriteOptionalString(output, scene.path);
+        output << ",\"roots\":[";
         WriteSceneNodes(output, scene.roots);
         output << "]}";
     }
+    output << "],\"build_settings_scenes\":[";
+    WriteSceneBuildSettingsEntries(output, response.build_settings_scenes);
     output << "]}";
     return output.str();
 }
@@ -389,6 +469,13 @@ std::string SerializeResponse(const SceneObjectInspectorHeaderResponse& response
     WriteOptionalInt(output, response.scene_handle);
     output << ",\"scene_name\":";
     WriteOptionalString(output, response.scene_name);
+    output << ",\"scene_kind\":";
+    if (response.scene_kind.has_value()) {
+        output << "\"" << JsonEscape(SceneKindToString(*response.scene_kind)) << "\"";
+    }
+    else {
+        output << "null";
+    }
     output << ",\"object\":";
     WriteSceneNode(output, response.object);
     output << ",\"parent\":";
@@ -398,6 +485,9 @@ std::string SerializeResponse(const SceneObjectInspectorHeaderResponse& response
     else {
         output << "null";
     }
+    output << ",\"hierarchy_path\":[";
+    WriteHierarchyPath(output, response.hierarchy_path);
+    output << ']';
     output << ",\"transform\":";
     if (response.transform.has_value()) {
         WriteTransformSnapshot(output, *response.transform);
@@ -418,6 +508,13 @@ std::string SerializeResponse(const SceneObjectInspectorResponse& response)
     WriteOptionalInt(output, response.scene_handle);
     output << ",\"scene_name\":";
     WriteOptionalString(output, response.scene_name);
+    output << ",\"scene_kind\":";
+    if (response.scene_kind.has_value()) {
+        output << "\"" << JsonEscape(SceneKindToString(*response.scene_kind)) << "\"";
+    }
+    else {
+        output << "null";
+    }
     output << ",\"object\":";
     WriteSceneNode(output, response.object);
     output << ",\"parent\":";
@@ -427,6 +524,9 @@ std::string SerializeResponse(const SceneObjectInspectorResponse& response)
     else {
         output << "null";
     }
+    output << ",\"hierarchy_path\":[";
+    WriteHierarchyPath(output, response.hierarchy_path);
+    output << "]";
     output << ",\"children\":[";
     WriteSceneNodes(output, response.children);
     output << "],\"components\":[";
@@ -464,8 +564,37 @@ std::string SerializeResponse(const SceneMutationResponse& response)
     WriteOptionalString(output, response.deleted_object_address);
     output << ",\"preferred_selection_address\":";
     WriteOptionalString(output, response.preferred_selection_address);
+    output << ",\"preferred_selection_hint\":";
+    if (response.preferred_selection_hint.has_value()) {
+        output << '{';
+        output << "\"scene_handle\":";
+        WriteOptionalInt(output, response.preferred_selection_hint->scene_handle);
+        output << ",\"object_address\":\"" << JsonEscape(response.preferred_selection_hint->object_address) << "\",";
+        output << "\"ancestor_object_addresses\":[";
+        for (std::size_t index = 0; index < response.preferred_selection_hint->ancestor_object_addresses.size(); ++index) {
+            if (index > 0) {
+                output << ',';
+            }
+            output << "\"" << JsonEscape(response.preferred_selection_hint->ancestor_object_addresses[index]) << "\"";
+        }
+        output << "]}";
+    }
+    else {
+        output << "null";
+    }
     output << ",\"active_self\":";
     WriteOptionalBool(output, response.active_self);
+    output << ",\"tag\":";
+    WriteOptionalString(output, response.tag);
+    output << ",\"layer\":";
+    WriteOptionalInt(output, response.layer);
+    output << ",\"hide_flags\":";
+    WriteOptionalString(output, response.hide_flags);
+    output << ",\"behaviour_enabled\":";
+    WriteOptionalBool(output, response.behaviour_enabled);
+    output << ",\"hierarchy_path\":[";
+    WriteHierarchyPath(output, response.hierarchy_path);
+    output << ']';
     output << ",\"transform\":";
     if (response.transform.has_value()) {
         WriteTransformSnapshot(output, *response.transform);

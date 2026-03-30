@@ -162,27 +162,49 @@ SceneObjectInspectorResponse RuntimeInspector::InspectSceneObject(const BridgeRe
 SceneMutationResponse RuntimeInspector::MutateSceneObject(const BridgeRequest& request) const
 {
     switch (request.operation) {
+    case BridgeOperation::CreateSceneRoot:
+        return scene_service_.CreateSceneRoot(request.scene_handle.value_or(0), request.object_name.value_or("GameObject"));
     case BridgeOperation::CreateSceneChild:
         return scene_service_.CreateSceneChild(*request.object_address, request.object_name.value_or("GameObject"));
     case BridgeOperation::DuplicateSceneObject:
         return scene_service_.DuplicateSceneObject(*request.object_address);
     case BridgeOperation::DeleteSceneObject:
         return scene_service_.DeleteSceneObject(*request.object_address);
+    case BridgeOperation::RenameSceneObject:
+        return scene_service_.RenameSceneObject(*request.object_address, request.object_name.value_or("GameObject"));
+    case BridgeOperation::SetSceneObjectTag:
+        return scene_service_.SetSceneObjectTag(*request.object_address, request.tag.value_or(std::string()));
+    case BridgeOperation::SetSceneObjectLayer:
+        return scene_service_.SetSceneObjectLayer(*request.object_address, request.layer.value_or(0));
+    case BridgeOperation::SetSceneObjectHideFlags:
+        return scene_service_.SetSceneObjectHideFlags(*request.object_address, request.hide_flags.value_or(std::string()));
+    case BridgeOperation::ReparentSceneObject:
+        return scene_service_.ReparentSceneObject(*request.object_address, request.parent_object_address);
     case BridgeOperation::SetSceneObjectActive:
         return scene_service_.SetSceneObjectActive(*request.object_address, request.active_self.value_or(false));
     case BridgeOperation::SetSceneObjectTransform:
-        if (!request.local_position.has_value() || !request.local_rotation.has_value() || !request.local_scale.has_value()) {
+        if (!request.world_position.has_value()
+            && !request.local_position.has_value()
+            && !request.local_rotation.has_value()
+            && !request.local_euler_angles.has_value()
+            && !request.local_scale.has_value()) {
             throw std::runtime_error("missing scene transform payload");
         }
         return scene_service_.SetSceneObjectTransform(
             *request.object_address,
-            *request.local_position,
-            *request.local_rotation,
-            *request.local_scale);
+            request.world_position,
+            request.local_position,
+            request.local_rotation,
+            request.local_euler_angles,
+            request.local_scale);
+    case BridgeOperation::SetSceneBehaviourEnabled:
+        return scene_service_.SetSceneBehaviourEnabled(*request.component_address, request.behaviour_enabled.value_or(false));
     case BridgeOperation::CreateSceneComponent:
         return scene_service_.CreateSceneComponent(*request.object_address, request.component_type_name.value_or(std::string()));
     case BridgeOperation::DeleteSceneComponent:
         return scene_service_.DeleteSceneComponent(*request.component_address);
+    case BridgeOperation::LoadSceneByBuildIndex:
+        return scene_service_.LoadSceneByBuildIndex(request.build_index.value_or(-1));
     default:
         throw std::runtime_error("unsupported scene mutation operation");
     }
