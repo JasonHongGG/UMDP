@@ -1,7 +1,69 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, FolderPlus, Map, Play, RefreshCw } from 'lucide-react';
-import type { RuntimeSceneKind, RuntimeSceneNodeSummary } from '@/domain/analysis/contracts';
+import type {
+  RuntimeSceneBuildSettingsEntry,
+  RuntimeSceneDescriptor,
+  RuntimeSceneKind,
+  RuntimeSceneNodeSummary,
+} from '@/domain/analysis/contracts';
 import { useSceneMutationState, useSceneTreeState } from '../SceneWorkspaceContext';
+
+const VIRTUAL_OVERSCAN = 10;
+const SCENE_HEADER_HEIGHT = 52;
+const SCENE_CREATE_HEIGHT = 132;
+const NODE_ROW_HEIGHT = 58;
+const NODE_STATUS_HEIGHT = 28;
+const SCENE_EMPTY_HEIGHT = 34;
+const SCENE_GAP_HEIGHT = 14;
+
+type SceneListItem =
+  | {
+      key: string;
+      kind: 'scene-header';
+      scene: RuntimeSceneDescriptor;
+      expanded: boolean;
+    }
+  | {
+      key: string;
+      kind: 'scene-create';
+      scene: RuntimeSceneDescriptor;
+      rootName: string;
+    }
+  | {
+      key: string;
+      kind: 'scene-empty';
+      sceneHandle: number;
+    }
+  | {
+      key: string;
+      kind: 'node';
+      node: RuntimeSceneNodeSummary;
+      depth: number;
+      expanded: boolean;
+      loading: boolean;
+      childError: string | null;
+      hasLoadedChildren: boolean;
+      loadedChildren: RuntimeSceneNodeSummary[];
+      taskState: { loadedCount: number; totalCount: number; status: string } | null;
+    }
+  | {
+      key: string;
+      kind: 'node-status';
+      objectAddress: string;
+      depth: number;
+      tone: 'loading' | 'error' | 'empty';
+      message: string;
+    }
+  | {
+      key: string;
+      kind: 'scene-gap';
+    };
+
+type ItemMetric = {
+  item: SceneListItem;
+  top: number;
+  height: number;
+};
 
 export function SceneHierarchyPanel() {
   const {
@@ -25,6 +87,9 @@ export function SceneHierarchyPanel() {
   const [expandedSceneHandles, setExpandedSceneHandles] = useState<Record<number, boolean>>({});
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
   const [rootNameBySceneHandle, setRootNameBySceneHandle] = useState<Record<number, string>>({});
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const scenes = sceneWorkspace.snapshot?.scenes ?? [];
   const buildSettingsScenes = sceneWorkspace.snapshot?.buildSettingsScenes ?? [];
@@ -59,6 +124,209 @@ export function SceneHierarchyPanel() {
 
     stopSceneObjectChildrenObservation(node.objectAddress);
   };
+
+  const flatItems = useMemo(() => {
+    const items: SceneListItem[] = [];
+
+    const appendNode = (node: RuntimeSceneNodeSummary, depth: number) => {
+      const loadedChildren = childrenByParent[node.objectAddress] ?? [];
+      const taskState = childTaskByParent[node.objectAddress] ?? null;
+      const loading = loadingChildrenByParent[node.objectAddress] ?? false;
+      const childError = childErrorByParent[node.objectAddress] ?? null;
+      const hasLoadedChildren = Object.prototype.hasOwnProperty.call(childrenByParent, node.objectAddress);
+      const expanded = expandedNodes[node.objectAddress] ?? false;
+
+      items.push({
+        key: `node:${node.objectAddress}`,
+        kind: 'node',
+        node,
+        depth,
+        expanded,
+        loading,
+        childError,
+        hasLoadedChildren,
+        loadedChildren,
+        taskState,
+      });
+
+      if (!expanded) {
+        return;
+      }
+
+      if (loading) {
+        items.push({
+          key: `node-status:loading:${node.objectAddress}`,
+          kind: 'node-status',
+          objectAddress: node.objectAddress,
+          depth: depth + 1,
+          tone: 'loading',
+          message: `Loading children ${taskState?.loadedCount ?? 0}/${taskState?.totalCount ?? node.childCount}...`,
+        });
+      }
+
+      if (childError) {
+        items.push({
+          key: `node-status:error:${node.objectAddress}`,
+          kind: 'node-status',
+          objectAddress: node.objectAddress,
+          depth: depth + 1,
+          tone: 'error',
+          message: childError,
+        });
+      }
+
+      if (!loading && !childError && hasLoadedChildren && loadedChildren.length === 0) {
+        items.push({
+          key: `node-status:empty:${node.objectAddress}`,
+          kind: 'node-status',
+          objectAddress: node.objectAddress,
+          depth: depth + 1,
+          tone: 'empty',
+          message: 'No children.',
+        });
+      }
+
+      loadedChildren.forEach((child) => appendNode(child, depth + 1));
+    };
+
+    scenes.forEach((scene) => {
+      const expanded = expandedSceneHandles[scene.sceneHandle] ?? true;
+      items.push({
+        key: `scene-header:${scene.sceneHandle}`,
+        kind: 'scene-header',
+        scene,
+        expanded,
+      });
+
+      if (expanded) {
+        items.push({
+          key: `scene-create:${scene.sceneHandle}`,
+          kind: 'scene-create',
+          scene,
+          rootName: rootNameBySceneHandle[scene.sceneHandle] ?? 'GameObject',
+        });
+
+        if (scene.roots.length === 0) {
+          items.push({
+            key: `scene-empty:${scene.sceneHandle}`,
+            kind: 'scene-empty',
+            sceneHandle: scene.sceneHandle,
+          });
+        }
+
+        scene.roots.forEach((node) => appendNode(node, 0));
+      }
+
+      items.push({
+        key: `scene-gap:${scene.sceneHandle}`,
+        kind: 'scene-gap',
+      });
+    });
+
+    return items;
+  }, [
+    childErrorByParent,
+    childTaskByParent,
+    childrenByParent,
+    expandedNodes,
+    expandedSceneHandles,
+    loadingChildrenByParent,
+    rootNameBySceneHandle,
+    scenes,
+  ]);
+
+  const deferredFlatItems = useDeferredValue(flatItems);
+
+  const itemMetrics = useMemo(() => {
+    const metrics: ItemMetric[] = [];
+    let offset = 0;
+
+    deferredFlatItems.forEach((item) => {
+      const height = getItemHeight(item);
+      metrics.push({ item, top: offset, height });
+      offset += height;
+    });
+
+    return {
+      metrics,
+      totalHeight: offset,
+    };
+  }, [deferredFlatItems]);
+
+  const visibleRange = useMemo(() => {
+    if (itemMetrics.metrics.length === 0) {
+      return { startIndex: 0, endIndex: -1 };
+    }
+
+    const viewportBottom = scrollTop + viewportHeight;
+    const rawStartIndex = findItemIndex(itemMetrics.metrics, scrollTop);
+    const rawEndIndex = findItemIndex(itemMetrics.metrics, viewportBottom);
+
+    return {
+      startIndex: Math.max(0, rawStartIndex - VIRTUAL_OVERSCAN),
+      endIndex: Math.min(itemMetrics.metrics.length - 1, rawEndIndex + VIRTUAL_OVERSCAN),
+    };
+  }, [itemMetrics.metrics, scrollTop, viewportHeight]);
+
+  const visibleMetrics = useMemo(() => {
+    if (visibleRange.endIndex < visibleRange.startIndex) {
+      return [] as ItemMetric[];
+    }
+
+    return itemMetrics.metrics.slice(visibleRange.startIndex, visibleRange.endIndex + 1);
+  }, [itemMetrics.metrics, visibleRange.endIndex, visibleRange.startIndex]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const updateViewportHeight = () => {
+      setViewportHeight(container.clientHeight);
+    };
+
+    updateViewportHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateViewportHeight);
+      return () => {
+        window.removeEventListener('resize', updateViewportHeight);
+      };
+    }
+
+    const observer = new ResizeObserver(() => updateViewportHeight());
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedObjectAddress || !scrollContainerRef.current) {
+      return;
+    }
+
+    const selectedMetric = itemMetrics.metrics.find((metric) => metric.item.kind === 'node' && metric.item.node.objectAddress === selectedObjectAddress);
+    if (!selectedMetric) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    const itemTop = selectedMetric.top;
+    const itemBottom = itemTop + selectedMetric.height;
+    const viewportTop = container.scrollTop;
+    const viewportBottom = viewportTop + container.clientHeight;
+
+    if (itemTop < viewportTop) {
+      container.scrollTop = itemTop;
+      return;
+    }
+
+    if (itemBottom > viewportBottom) {
+      container.scrollTop = Math.max(0, itemBottom - container.clientHeight);
+    }
+  }, [itemMetrics.metrics, selectedObjectAddress]);
 
   return (
     <div className="w-[430px] shrink-0 border-r border-[#1c2838] bg-[#05080c]/95 flex flex-col">
@@ -120,160 +388,231 @@ export function SceneHierarchyPanel() {
         <div className="px-4 py-3 text-sm text-slate-400">No scene snapshot yet. Click refresh to enumerate loaded scenes.</div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto slim-scrollbar px-2 py-3">
-        {scenes.map((scene) => {
-          const sceneExpanded = expandedSceneHandles[scene.sceneHandle] ?? true;
-          const rootName = rootNameBySceneHandle[scene.sceneHandle] ?? 'GameObject';
-
-          return (
-            <div key={scene.sceneHandle} className="mb-3 rounded-2xl border border-[#142132] bg-[#0a0f16]/80 overflow-hidden">
-              <button
-                onClick={() => toggleScene(scene.sceneHandle)}
-                className="w-full px-3 py-3 flex items-center gap-2 text-left text-sm text-slate-200 hover:bg-white/5 transition"
-              >
-                {sceneExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                <Map size={15} className="text-cyan-300" />
-                <span className="font-medium truncate">{scene.name}</span>
-                <SceneKindBadge kind={scene.kind} />
-                <span className="ml-auto text-[11px] text-slate-500">{scene.roots.length} roots</span>
-              </button>
-
-              {sceneExpanded ? (
-                <div className="pb-2 px-2">
-                  <div className="mx-1 mt-1 mb-3 rounded-xl border border-[#172231] bg-[#091019] px-3 py-3">
-                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                      <FolderPlus size={13} className="text-cyan-300" />
-                      Create Root Object
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <input
-                        value={rootName}
-                        onChange={(event) => setRootNameBySceneHandle((previous) => ({
-                          ...previous,
-                          [scene.sceneHandle]: event.target.value,
-                        }))}
-                        className="flex-1 rounded-lg border border-[#1c2838] bg-[#0d1520] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500/40"
-                        placeholder="GameObject"
-                      />
-                      <button
-                        onClick={() => createSceneRoot(scene.sceneHandle, rootName.trim() || 'GameObject').catch(() => undefined)}
-                        disabled={sceneMutationState.loading}
-                        className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Create
-                      </button>
-                    </div>
-                    <div className="mt-2 text-[11px] text-slate-500 break-all">
-                      Handle #{scene.sceneHandle}
-                      {scene.buildIndex != null ? ` • Build ${scene.buildIndex}` : ''}
-                      {scene.path ? ` • ${scene.path}` : ''}
-                    </div>
-                  </div>
-
-                  {scene.roots.map((node) => (
-                    <SceneNodeRow
-                      key={node.objectAddress}
-                      node={node}
-                      depth={0}
-                      selectedObjectAddress={selectedObjectAddress}
-                      onSelect={setSelectedObjectAddress}
-                      expandedNodes={expandedNodes}
-                      onToggle={toggleNode}
-                      childrenByParent={childrenByParent}
-                      childTaskByParent={childTaskByParent}
-                      loadingChildrenByParent={loadingChildrenByParent}
-                      childErrorByParent={childErrorByParent}
-                    />
-                  ))}
-                </div>
-              ) : null}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto slim-scrollbar px-2 py-3"
+        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      >
+        <div className="relative" style={{ height: `${itemMetrics.totalHeight}px` }}>
+          {visibleMetrics.map((metric) => (
+            <div
+              key={metric.item.key}
+              className="absolute left-0 w-full"
+              style={{ top: `${metric.top}px`, height: `${metric.height}px` }}
+            >
+              <SceneVirtualRow
+                item={metric.item}
+                selectedObjectAddress={selectedObjectAddress}
+                sceneMutationLoading={sceneMutationState.loading}
+                onSelect={setSelectedObjectAddress}
+                onToggleScene={toggleScene}
+                onToggleNode={toggleNode}
+                onRootNameChange={(sceneHandle, value) => setRootNameBySceneHandle((previous) => ({
+                  ...previous,
+                  [sceneHandle]: value,
+                }))}
+                onCreateRoot={createSceneRoot}
+              />
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function SceneNodeRow({
-  node,
-  depth,
+function SceneVirtualRow({
+  item,
   selectedObjectAddress,
+  sceneMutationLoading,
   onSelect,
-  expandedNodes,
-  onToggle,
-  childrenByParent,
-  childTaskByParent,
-  loadingChildrenByParent,
-  childErrorByParent,
+  onToggleScene,
+  onToggleNode,
+  onRootNameChange,
+  onCreateRoot,
 }: {
-  node: RuntimeSceneNodeSummary;
-  depth: number;
+  item: SceneListItem;
   selectedObjectAddress: string | null;
+  sceneMutationLoading: boolean;
   onSelect: (objectAddress: string) => void;
-  expandedNodes: Record<string, boolean>;
-  onToggle: (node: RuntimeSceneNodeSummary) => void;
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>;
-  childTaskByParent: Record<string, { loadedCount: number; totalCount: number; status: string }>;
-  loadingChildrenByParent: Record<string, boolean>;
-  childErrorByParent: Record<string, string | null>;
+  onToggleScene: (sceneHandle: number) => void;
+  onToggleNode: (node: RuntimeSceneNodeSummary) => void;
+  onRootNameChange: (sceneHandle: number, value: string) => void;
+  onCreateRoot: (sceneHandle: number, name: string) => Promise<unknown>;
 }) {
-  const children = childrenByParent[node.objectAddress] ?? [];
-  const taskState = childTaskByParent[node.objectAddress] ?? null;
-  const loading = loadingChildrenByParent[node.objectAddress];
-  const childError = childErrorByParent[node.objectAddress];
-  const hasLoadedChildren = Object.prototype.hasOwnProperty.call(childrenByParent, node.objectAddress);
-  const expanded = expandedNodes[node.objectAddress] ?? false;
-  const canExpand = node.hasChildren || children.length > 0;
-
-  return (
-    <div>
-      <div className={`mx-2 mt-1 rounded-xl border ${selectedObjectAddress === node.objectAddress ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-transparent hover:border-[#1c2838] hover:bg-white/5'} transition`}>
-        <div className="flex items-center gap-1 px-2 py-2" style={{ paddingLeft: `${12 + depth * 18}px` }}>
+  switch (item.kind) {
+    case 'scene-header':
+      return (
+        <div className="px-1 h-full">
           <button
-            onClick={() => onToggle(node)}
-            disabled={!canExpand}
-            className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center ${canExpand ? 'text-slate-400 hover:text-slate-200' : 'text-slate-700 cursor-default'}`}
+            onClick={() => onToggleScene(item.scene.sceneHandle)}
+            className="w-full h-full rounded-2xl border border-[#142132] bg-[#0a0f16]/80 px-3 flex items-center gap-2 text-left text-sm text-slate-200 hover:bg-white/5 transition"
           >
-            {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            {item.expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <Map size={15} className="text-cyan-300" />
+            <span className="font-medium truncate">{item.scene.name}</span>
+            <SceneKindBadge kind={item.scene.kind} />
+            <span className="ml-auto text-[11px] text-slate-500">{item.scene.roots.length} roots</span>
           </button>
-          <button onClick={() => onSelect(node.objectAddress)} className="min-w-0 flex-1 text-left">
-            <div className="text-sm text-slate-200 truncate">{node.name}</div>
-            <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
-              <span>{node.activeSelf ? 'active' : 'inactive'}</span>
-              {node.tag ? <span>tag:{node.tag}</span> : null}
-              {node.layer != null ? <span>layer:{node.layer}</span> : null}
-            </div>
-          </button>
-          {node.hasChildren || hasLoadedChildren ? <span className="text-[11px] text-slate-500 shrink-0">{node.childCount}</span> : null}
         </div>
-      </div>
+      );
+    case 'scene-create':
+      return (
+        <div className="px-1 pt-2 h-full">
+          <div className="h-full rounded-2xl border border-[#142132] bg-[#0a0f16]/80 px-3 py-3">
+            <div className="rounded-xl border border-[#172231] bg-[#091019] px-3 py-3 h-full flex flex-col justify-center">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                <FolderPlus size={13} className="text-cyan-300" />
+                Create Root Object
+              </div>
+              <div className="mt-3 flex gap-2">
+                <input
+                  value={item.rootName}
+                  onChange={(event) => onRootNameChange(item.scene.sceneHandle, event.target.value)}
+                  className="flex-1 rounded-lg border border-[#1c2838] bg-[#0d1520] px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500/40"
+                  placeholder="GameObject"
+                />
+                <button
+                  onClick={() => onCreateRoot(item.scene.sceneHandle, item.rootName.trim() || 'GameObject').catch(() => undefined)}
+                  disabled={sceneMutationLoading}
+                  className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create
+                </button>
+              </div>
+              <div className="mt-2 text-[11px] text-slate-500 break-all">
+                Handle #{item.scene.sceneHandle}
+                {item.scene.buildIndex != null ? ` • Build ${item.scene.buildIndex}` : ''}
+                {item.scene.path ? ` • ${item.scene.path}` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    case 'scene-empty':
+      return (
+        <div className="px-4 h-full flex items-center text-xs text-slate-500">
+          Scene has no root objects yet.
+        </div>
+      );
+    case 'node-status': {
+      const textClass = item.tone === 'error'
+        ? 'text-rose-300'
+        : item.tone === 'loading'
+          ? 'text-cyan-300'
+          : 'text-slate-500';
+      return (
+        <div className={`px-4 h-full flex items-center text-xs ${textClass}`} style={{ paddingLeft: `${30 + item.depth * 18}px` }}>
+          {item.message}
+        </div>
+      );
+    }
+    case 'scene-gap':
+      return <div className="h-full" />;
+    case 'node': {
+      const canExpand = item.node.hasChildren || item.loadedChildren.length > 0;
+      return (
+        <div className="px-1 h-full">
+          <div className={`h-full rounded-xl border ${selectedObjectAddress === item.node.objectAddress ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-transparent hover:border-[#1c2838] hover:bg-white/5'} transition`}>
+            <div className="h-full flex items-center gap-1 px-2" style={{ paddingLeft: `${12 + item.depth * 18}px` }}>
+              <button
+                onClick={() => onToggleNode(item.node)}
+                disabled={!canExpand}
+                className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center ${canExpand ? 'text-slate-400 hover:text-slate-200' : 'text-slate-700 cursor-default'}`}
+              >
+                {item.expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+              </button>
+              <button onClick={() => onSelect(item.node.objectAddress)} className="min-w-0 flex-1 text-left">
+                <div className="text-sm text-slate-200 truncate">{item.node.name}</div>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
+                  <span>{item.node.activeSelf ? 'active' : 'inactive'}</span>
+                  {item.node.tag ? <span>tag:{item.node.tag}</span> : null}
+                  {item.node.layer != null ? <span>layer:{item.node.layer}</span> : null}
+                </div>
+              </button>
+              {(item.node.hasChildren || item.hasLoadedChildren) ? <span className="text-[11px] text-slate-500 shrink-0">{item.node.childCount}</span> : null}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
+}
 
-      {expanded ? (
-        <div>
-          {loading ? (
-            <div className="ml-10 px-4 py-1 text-xs text-cyan-300">
-              Loading children {taskState?.loadedCount ?? 0}/{taskState?.totalCount ?? node.childCount}...
+function getItemHeight(item: SceneListItem) {
+  switch (item.kind) {
+    case 'scene-header':
+      return SCENE_HEADER_HEIGHT;
+    case 'scene-create':
+      return SCENE_CREATE_HEIGHT;
+    case 'scene-empty':
+      return SCENE_EMPTY_HEIGHT;
+    case 'node':
+      return NODE_ROW_HEIGHT;
+    case 'node-status':
+      return NODE_STATUS_HEIGHT;
+    case 'scene-gap':
+      return SCENE_GAP_HEIGHT;
+    default:
+      return NODE_ROW_HEIGHT;
+  }
+}
+
+function findItemIndex(metrics: ItemMetric[], offset: number) {
+  let low = 0;
+  let high = metrics.length - 1;
+  let result = metrics.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const metric = metrics[mid];
+    const bottom = metric.top + metric.height;
+    if (offset < bottom) {
+      result = mid;
+      high = mid - 1;
+    } else {
+      low = mid + 1;
+    }
+  }
+
+  return result;
+}
+
+function BuildSettingsSection({
+  scenes,
+  loading,
+  onLoadScene,
+}: {
+  scenes: RuntimeSceneBuildSettingsEntry[];
+  loading: boolean;
+  onLoadScene: (buildIndex: number) => Promise<unknown>;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#142132] bg-[#09111a]/80 overflow-hidden">
+      <div className="px-3 py-3 border-b border-[#142132] text-xs uppercase tracking-[0.18em] text-slate-500">
+        Build Settings Scenes
+      </div>
+      <div className="max-h-48 overflow-y-auto slim-scrollbar p-2 space-y-2">
+        {scenes.map((scene) => (
+          <div key={scene.buildIndex} className="rounded-xl border border-[#1c2838] bg-[#0a0f16]/80 px-3 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm text-slate-200 truncate">{scene.name}</div>
+                <div className="mt-1 text-[11px] text-slate-500 break-all">#{scene.buildIndex} • {scene.path}</div>
+              </div>
+              <button
+                onClick={() => onLoadScene(scene.buildIndex).catch(() => undefined)}
+                disabled={loading || scene.isLoaded}
+                className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="inline-flex items-center gap-2"><Play size={12} />{scene.isLoaded ? 'Loaded' : 'Load'}</span>
+              </button>
             </div>
-          ) : null}
-          {childError ? <div className="ml-10 px-4 py-1 text-xs text-rose-300">{childError}</div> : null}
-          {children.map((child) => (
-            <SceneNodeRow
-              key={child.objectAddress}
-              node={child}
-              depth={depth + 1}
-              selectedObjectAddress={selectedObjectAddress}
-              onSelect={onSelect}
-              expandedNodes={expandedNodes}
-              onToggle={onToggle}
-              childrenByParent={childrenByParent}
-              childTaskByParent={childTaskByParent}
-              loadingChildrenByParent={loadingChildrenByParent}
-              childErrorByParent={childErrorByParent}
-            />
-          ))}
-        </div>
-      ) : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
