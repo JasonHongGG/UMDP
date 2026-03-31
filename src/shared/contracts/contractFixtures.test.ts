@@ -81,7 +81,7 @@ describe('shared contract fixtures', () => {
     expect(fixture).toEqual({
       tauriCommandVersion: 1,
       bridgeProtocolVersion: 2,
-      analysisSchemaVersion: 1,
+      analysisSchemaVersion: 2,
       workflowSchemaVersion: 1,
     });
   });

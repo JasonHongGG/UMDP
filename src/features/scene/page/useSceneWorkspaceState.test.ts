@@ -7,12 +7,19 @@ import type { SceneGateway } from '@/domain/scene/gateway';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { useSceneWorkspaceState } from './useSceneWorkspaceState';
-import { createSceneNodeSummary, createSceneWorkspaceState } from './testUtils';
+import { createSceneDescriptor, createSceneNodeSummary, createSceneWorkspaceState } from './testUtils';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+let workspaceStateUpdatedHandler: ((state: ReturnType<typeof createSceneWorkspaceState>) => void | Promise<void>) | null = null;
+
 vi.mock('@/infrastructure/tauri/TauriSceneEvents', () => ({
-  onSceneWorkspaceStateUpdated: vi.fn().mockResolvedValue(() => undefined),
+  onSceneWorkspaceStateUpdated: vi.fn(async (handler: (state: ReturnType<typeof createSceneWorkspaceState>) => void | Promise<void>) => {
+    workspaceStateUpdatedHandler = handler;
+    return () => {
+      workspaceStateUpdatedHandler = null;
+    };
+  }),
   onSceneObjectChildrenTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
   onSceneObjectInspectorTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
 }));
@@ -36,6 +43,7 @@ function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): Work
       status: 'ready',
       runtime: 'mono',
       bridgeConnected: true,
+      sessionKey: 'session-1',
       ...overrides.runtimeSession,
     },
   };
@@ -43,6 +51,8 @@ function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): Work
 
 function createRepository(): SceneGateway {
   const workspace = createSceneWorkspaceState({
+    resourceRevision: 4,
+    sessionKey: 'session-1',
     snapshot: {
       generatedAt: '2026-03-30T00:00:00.000Z',
       scenes: [{
@@ -102,6 +112,7 @@ describe('useSceneWorkspaceState', () => {
 
   beforeEach(() => {
     latestState = null;
+    workspaceStateUpdatedHandler = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -124,6 +135,58 @@ describe('useSceneWorkspaceState', () => {
 
     expect(repository.getSceneWorkspaceState).toHaveBeenCalled();
     expect(latestState?.sceneWorkspace.snapshot?.scenes[0]?.roots[0]?.isStatic).toBe(true);
+    expect(latestState?.sceneRootsByHandle[7]?.[0]?.name).toBe('GameplayRoot');
+  });
+
+  it('ignores workspace events from a previous runtime session', async () => {
+    const repository = createRepository();
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      await workspaceStateUpdatedHandler?.(createSceneWorkspaceState({
+        sessionKey: 'session-stale',
+        snapshot: {
+          generatedAt: '2026-03-30T00:00:00.000Z',
+          scenes: [createSceneDescriptor({
+            sceneHandle: 7,
+            roots: [createSceneNodeSummary({ objectAddress: '0xstale', name: 'StaleRoot' })],
+          })],
+          buildSettingsScenes: [],
+        },
+      }));
+    });
+
+    expect(latestState?.sceneRootsByHandle[7]?.[0]?.name).toBe('GameplayRoot');
+  });
+
+  it('ignores workspace events from an older revision in the same runtime session', async () => {
+    const repository = createRepository();
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      await workspaceStateUpdatedHandler?.(createSceneWorkspaceState({
+        resourceRevision: 3,
+        sessionKey: 'session-1',
+        snapshot: {
+          generatedAt: '2026-03-30T00:00:00.000Z',
+          scenes: [createSceneDescriptor({
+            sceneHandle: 7,
+            roots: [createSceneNodeSummary({ objectAddress: '0xolder', name: 'OlderRoot' })],
+          })],
+          buildSettingsScenes: [],
+        },
+      }));
+    });
+
+    expect(latestState?.sceneWorkspace.resourceRevision).toBe(4);
     expect(latestState?.sceneRootsByHandle[7]?.[0]?.name).toBe('GameplayRoot');
   });
 });

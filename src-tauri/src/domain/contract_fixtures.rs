@@ -132,7 +132,7 @@ mod tests {
 
         assert_eq!(fixture.tauri_command_version, 1);
         assert_eq!(fixture.bridge_protocol_version, 2);
-        assert_eq!(fixture.analysis_schema_version, 1);
+        assert_eq!(fixture.analysis_schema_version, 2);
         assert_eq!(fixture.workflow_schema_version, 1);
     }
 }

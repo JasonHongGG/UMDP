@@ -1,4 +1,4 @@
-import { useWorkspaceShellState } from '@/domain/analysis/AnalysisWorkspaceContext';
+import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { SceneWorkspaceProvider } from './SceneWorkspaceContext';
 import { SceneHierarchyPanel } from './components/SceneHierarchyPanel';
 import { SceneInspectorView } from './components/SceneInspectorView';
@@ -12,13 +12,19 @@ export function ScenePage() {
 }
 
 function SceneWorkspaceShell() {
-  const { workspaceLifecycle } = useWorkspaceShellState();
-  const detached = !workspaceLifecycle.processSession || !workspaceLifecycle.hasSnapshot;
+  const { pageReadiness } = useWorkspaceShellState();
+  const readiness = pageReadiness.scene;
 
-  if (detached) {
+  if (!readiness.selectionReady) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#0a0f16] text-slate-400">
-        Attach to a Unity process and load metadata before opening the Scene workspace.
+        <div className="max-w-xl px-6 text-center space-y-3">
+          <div className="text-[11px] uppercase tracking-[0.28em] text-cyan-300/80">
+            {readiness.sessionReady ? readiness.catalogReady ? 'selection-ready pending' : 'catalog-ready pending' : 'session-ready pending'}
+          </div>
+          <div className="text-lg font-semibold text-slate-100">{readiness.title}</div>
+          <div className="text-sm leading-6 text-slate-400">{readiness.description}</div>
+        </div>
       </div>
     );
   }

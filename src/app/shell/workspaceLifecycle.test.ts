@@ -4,6 +4,7 @@ import { EMPTY_WORKSPACE_LIFECYCLE, getWorkspaceLifecycleLabel, getWorkspaceLife
 describe('workspaceLifecycle shell helpers', () => {
   it('exposes a detached backend-first default lifecycle', () => {
     expect(EMPTY_WORKSPACE_LIFECYCLE).toEqual({
+      resourceRevision: 0,
       status: 'detached',
       processSession: null,
       runtime: 'unknown',

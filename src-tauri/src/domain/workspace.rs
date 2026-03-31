@@ -79,6 +79,7 @@ impl Default for WorkspaceLifecycleStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceLifecycleState {
+    pub resource_revision: u64,
     pub status: WorkspaceLifecycleStatus,
     pub process_session: Option<ProcessSession>,
     pub runtime: RuntimeFlavor,
@@ -90,6 +91,7 @@ pub struct WorkspaceLifecycleState {
 impl Default for WorkspaceLifecycleState {
     fn default() -> Self {
         Self {
+            resource_revision: 0,
             status: WorkspaceLifecycleStatus::Detached,
             process_session: None,
             runtime: RuntimeFlavor::Unknown,
@@ -113,7 +115,7 @@ pub fn current_contract_versions() -> SystemContractVersions {
     SystemContractVersions {
         tauri_command_version: 1,
         bridge_protocol_version: 2,
-        analysis_schema_version: 1,
+        analysis_schema_version: 2,
         workflow_schema_version: 1,
     }
 }

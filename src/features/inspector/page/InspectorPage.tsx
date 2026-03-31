@@ -7,7 +7,7 @@ import { AssembliesColumn } from '@/features/inspector/components/AssembliesColu
 import { ClassesColumn } from '@/features/inspector/components/ClassesColumn';
 import { InspectorTabBar } from '@/features/inspector/components/InspectorTabBar';
 import ClassInspectorApp from '@/features/inspector/components/ClassInspectorApp';
-import { useInspectorWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
+import { useInspectorWorkspace } from '@/domain/inspector/InspectorWorkspaceContext';
 import { useInspectorPageController } from './useInspectorPageController';
 
 export function InspectorPage() {

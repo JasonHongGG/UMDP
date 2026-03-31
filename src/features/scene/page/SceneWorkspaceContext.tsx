@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import { useSceneGateway } from '@/domain/scene/hooks/useSceneGateway';
-import { useWorkspaceShellState } from '@/domain/analysis/AnalysisWorkspaceContext';
+import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { useSceneWorkspaceState, type SceneWorkspaceStateResult } from './useSceneWorkspaceState';
 
 const SceneWorkspaceContext = createContext<SceneWorkspaceStateResult | null>(null);
@@ -43,6 +43,10 @@ export function useSceneTreeState() {
     refreshSceneWorkspace,
     selectedObjectAddress,
     setSelectedObjectAddress,
+    loadedSceneGraph,
+    sceneHierarchySearchQuery,
+    setSceneHierarchySearchQuery,
+    sceneHierarchySearch,
     childrenByParent,
     childTaskByParent,
     loadingChildrenByParent,
@@ -56,6 +60,10 @@ export function useSceneTreeState() {
     refreshSceneWorkspace,
     selectedObjectAddress,
     setSelectedObjectAddress,
+    loadedSceneGraph,
+    sceneHierarchySearchQuery,
+    setSceneHierarchySearchQuery,
+    sceneHierarchySearch,
     childrenByParent,
     childTaskByParent,
     loadingChildrenByParent,

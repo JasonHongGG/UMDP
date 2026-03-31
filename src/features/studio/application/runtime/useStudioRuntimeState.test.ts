@@ -88,7 +88,7 @@ describe('useStudioRuntimeState', () => {
     container.remove();
   });
 
-  it('clears runtime snapshots and active run when workspace recovery begins', () => {
+  it('clears runtime snapshots when workspace recovery begins', () => {
     executeStudioFlowMock.mockImplementation(({ onNodeStateChange, onNodeSnapshot, onRunStart, onRunComplete }) => {
       onNodeStateChange('node-1', 'success');
       onNodeSnapshot({
@@ -100,8 +100,6 @@ describe('useStudioRuntimeState', () => {
         outputs: {},
         progress: null,
       });
-      onRunStart({ runId: 'run-1', startNodeId: 'node-1', startedAt: 1, status: 'running' });
-      onRunComplete({ runId: 'run-1', startNodeId: 'node-1', startedAt: 1, completedAt: 2, status: 'success' });
       return vi.fn();
     });
 
@@ -117,9 +115,6 @@ describe('useStudioRuntimeState', () => {
 
     expect(latestState?.state.nodeStates['node-1']).toBe('success');
     expect(latestState?.state.nodeSnapshots['node-1']?.status).toBe('success');
-    expect(latestState?.state.activeRun).toBeNull();
-    expect(latestState?.state.runHistory).toHaveLength(1);
-    expect(latestState?.state.runHistory[0]?.runId).toBe('run-1');
 
     act(() => {
       root.render(createElement(HookHarness, {
@@ -129,7 +124,6 @@ describe('useStudioRuntimeState', () => {
 
     expect(latestState?.state.nodeStates).toEqual({});
     expect(latestState?.state.nodeSnapshots).toEqual({});
-    expect(latestState?.state.activeRun).toBeNull();
   });
 
   it('passes structured abort reasons into execution cleanup for reruns and workspace resets', () => {

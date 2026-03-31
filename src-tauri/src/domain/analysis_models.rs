@@ -115,7 +115,6 @@ pub struct RuntimeResolvedFieldDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct ClassDescriptor {
     pub stable_id: StableId,
-    #[serde(alias = "legacyImageId", skip_serializing)]
     pub bridge_image_name: String,
     pub image_stable_id: StableId,
     pub name: String,
@@ -436,6 +435,8 @@ impl Default for RuntimeSceneChildrenTaskStatus {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneObjectChildrenTaskState {
     pub task_id: u64,
+    pub resource_revision: u64,
+    pub session_key: Option<String>,
     pub parent_object_address: String,
     pub status: RuntimeSceneChildrenTaskStatus,
     pub mutation_epoch: u64,
@@ -496,6 +497,8 @@ impl Default for RuntimeSceneInspectorTaskStatus {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneObjectInspectorTaskState {
     pub task_id: u64,
+    pub resource_revision: u64,
+    pub session_key: Option<String>,
     pub object_address: String,
     pub status: RuntimeSceneInspectorTaskStatus,
     pub mutation_epoch: u64,
@@ -580,6 +583,8 @@ pub struct RuntimeSceneMutationResult {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneWorkspaceState {
+    pub resource_revision: u64,
+    pub session_key: Option<String>,
     pub refresh_status: SceneRefreshStatus,
     pub error_message: Option<String>,
     pub snapshot: Option<RuntimeSceneCatalogSnapshot>,

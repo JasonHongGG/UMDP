@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyStudioDocument, createTraceEvent } from '@/domain/studio/kernel';
 import {
   createStudioEngineState,
   reduceStudioEngineState,
   selectCanvasMode,
-  selectExecutionEventsForRun,
-  selectLatestRun,
   selectOpenEditorNodeId,
-  selectRunHistory,
 } from './StudioEngine';
 
 describe('StudioEngine foundation', () => {
@@ -28,31 +24,10 @@ describe('StudioEngine foundation', () => {
     expect(selectCanvasMode(closed)).toEqual({ kind: 'idle' });
   });
 
-  it('tracks execution runs inside a single engine state tree', () => {
-    const initial = createStudioEngineState(createEmptyStudioDocument('doc-1'));
-    const started = reduceStudioEngineState(initial, {
-      type: 'begin-run',
-      run: {
-        runId: 'run-1',
-        startNodeId: 'trigger-1',
-        status: 'running',
-        startedAt: 10,
-      },
-      event: createTraceEvent('run-1', 1, 'run-started', 10),
-    });
+  it('resets transient execution state without tracking run history', () => {
+    const initial = createStudioEngineState();
+    const reset = reduceStudioEngineState(initial, { type: 'reset-execution' });
 
-    const completed = reduceStudioEngineState(started, {
-      type: 'complete-run',
-      runId: 'run-1',
-      status: 'success',
-      completedAt: 20,
-      event: createTraceEvent('run-1', 2, 'run-completed', 20),
-    });
-
-    expect(completed.execution.activeRunId).toBeNull();
-    expect(selectLatestRun(completed)).toMatchObject({ runId: 'run-1', status: 'success' });
-    expect(selectRunHistory(completed)).toHaveLength(1);
-    expect(completed.execution.runsById['run-1']).toMatchObject({ status: 'success', completedAt: 20 });
-    expect(selectExecutionEventsForRun(completed, 'run-1')).toHaveLength(2);
+    expect(reset.execution.isExecuting).toBe(false);
   });
 });

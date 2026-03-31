@@ -1,10 +1,12 @@
 import { Binary, Database } from 'lucide-react';
 import type { WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 import { getWorkspaceLifecycleLabel, getWorkspaceLifecycleTone } from './workspaceLifecycle';
+import type { WorkspaceResetNotice } from '@/domain/workspace/pageReadiness';
 
 interface StatusBarProps {
   workspace: WorkspaceLifecycleState;
   tasks: WorkspaceTaskSnapshot[];
+  resetNotice?: WorkspaceResetNotice | null;
 }
 
 const toneClassMap = {
@@ -56,7 +58,7 @@ function selectActiveWorkspaceTask(tasks: WorkspaceTaskSnapshot[]) {
     })[0] ?? null;
 }
 
-export function StatusBar({ workspace, tasks }: StatusBarProps) {
+export function StatusBar({ workspace, tasks, resetNotice = null }: StatusBarProps) {
   const tone = getWorkspaceLifecycleTone(workspace);
   const label = getWorkspaceLifecycleLabel(workspace);
   const runtimeLabel = formatRuntimeSessionLabel(workspace);
@@ -83,6 +85,8 @@ export function StatusBar({ workspace, tasks }: StatusBarProps) {
       <div className="truncate text-right text-slate-500">
         {activeTask?.progress?.message
           ? `${activeTask.progress.message}${activeTask.progress.total != null ? ` (${activeTask.progress.completed}/${activeTask.progress.total})` : ''}`
+          : resetNotice?.message
+          ? resetNotice.message
           : workspace.runtimeSession.lastError
           ? workspace.runtimeSession.lastError
           : workspace.processSession

@@ -1,8 +1,10 @@
 
 import { Suspense, lazy } from 'react';
+import { AppInfrastructureProvider } from '@/app/AppInfrastructureContext';
 import { MainLayout } from '@/app/shell/MainLayout';
 import { TopBar } from '@/app/shell/TopBar';
-import { AnalysisWorkspaceProvider, useWorkspaceShellState } from './domain/analysis/AnalysisWorkspaceContext';
+import { AnalysisWorkspaceProvider } from './domain/analysis/AnalysisWorkspaceContext';
+import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { StatusBar } from './app/shell/StatusBar';
 import { openProcessSelectorWindow } from './infrastructure/tauri/TauriWorkspaceGateway';
 import './styles.css';
@@ -21,15 +23,18 @@ const ScenePage = lazy(async () => ({
 
 export default function App() {
   return (
-    <AnalysisWorkspaceProvider>
-      <AppContent />
-    </AnalysisWorkspaceProvider>
+    <AppInfrastructureProvider>
+      <AnalysisWorkspaceProvider>
+        <AppContent />
+      </AnalysisWorkspaceProvider>
+    </AppInfrastructureProvider>
   );
 }
 
 function AppContent() {
   const {
     workspaceLifecycle,
+    workspaceResetNotice,
     activePage,
     setActivePage,
     workspaceTasks,
@@ -54,7 +59,7 @@ function AppContent() {
         )}
       </Suspense>
 
-      <StatusBar workspace={workspaceLifecycle} tasks={workspaceTasks} />
+      <StatusBar workspace={workspaceLifecycle} tasks={workspaceTasks} resetNotice={workspaceResetNotice} />
     </MainLayout>
   );
 }

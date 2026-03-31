@@ -9,6 +9,8 @@ import type {
 } from '@/domain/analysis/contracts';
 
 export const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
+  resourceRevision: 0,
+  sessionKey: null,
   refreshStatus: 'idle',
   errorMessage: null,
   snapshot: null,

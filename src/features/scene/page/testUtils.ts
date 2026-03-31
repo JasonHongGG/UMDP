@@ -40,6 +40,8 @@ export function createSceneDescriptor(overrides: Partial<RuntimeSceneDescriptor>
 
 export function createSceneWorkspaceState(overrides: Partial<SceneWorkspaceState> = {}): SceneWorkspaceState {
   return {
+    resourceRevision: 0,
+    sessionKey: null,
     refreshStatus: 'ready',
     errorMessage: null,
     lastUpdatedAt: '2026-03-30T00:00:00.000Z',

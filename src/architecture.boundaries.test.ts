@@ -185,6 +185,42 @@ describe('frontend architecture boundaries', () => {
     expect(violations).toEqual([]);
   });
 
+  it('does not allow domain adapter hooks to construct infrastructure adapters directly', () => {
+    const files = [
+      'domain/analysis/hooks/useAnalysisRepository.ts',
+      'domain/scene/hooks/useSceneGateway.ts',
+    ];
+
+    const violations = files.filter((relativePath) => {
+      const contents = readFileSync(join(SRC_ROOT, relativePath), 'utf8');
+      return /from\s+['"].*infrastructure\/tauri\//.test(contents);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps scene workspace composition separate from tauri event subscriptions', () => {
+    const contents = readFileSync(join(SRC_ROOT, 'features/scene/page/useSceneWorkspaceState.ts'), 'utf8');
+
+    expect(contents.includes('@/infrastructure/tauri/TauriSceneEvents')).toBe(false);
+  });
+
+  it('keeps analysis workspace provider as a composition shell instead of owning session and catalog logic directly', () => {
+    const contents = readFileSync(join(SRC_ROOT, 'domain/analysis/AnalysisWorkspaceContext.tsx'), 'utf8');
+
+    expect(contents.includes('./hooks/useAnalysisSessionState')).toBe(false);
+    expect(contents.includes('./hooks/useAnalysisRuntimeState')).toBe(false);
+    expect(contents.includes('./view-models')).toBe(false);
+  });
+
+  it('keeps analysis session attach flow separate from workspace lifecycle refresh listeners', () => {
+    const contents = readFileSync(join(SRC_ROOT, 'domain/analysis/hooks/useAnalysisSessionState.ts'), 'utf8');
+
+    expect(contents.includes('repository.getWorkspaceLifecycle')).toBe(false);
+    expect(contents.includes("window.addEventListener('focus'")).toBe(false);
+    expect(contents.includes("document.addEventListener('visibilitychange'")).toBe(false);
+  });
+
   it('keeps studio core isolated under the feature slice', () => {
     const violations = listViolations((relativePath, contents) => {
       if (!relativePath.startsWith(STUDIO_CORE_PREFIX)) {

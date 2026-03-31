@@ -13,6 +13,8 @@ let processSelectedHandler: ((process: ProcessInfo) => void | Promise<void>) | n
 const disposeProcessSelected = vi.fn();
 
 const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
+  resourceRevision: 0,
+  sessionKey: null,
   refreshStatus: 'idle',
   errorMessage: null,
   snapshot: null,

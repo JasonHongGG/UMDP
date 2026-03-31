@@ -1,7 +1,7 @@
 import React from 'react';
 import { StudioProviders } from '@/features/studio/application/StudioProviders';
 import { useStudioPageState } from '@/features/studio/application/useStudioPageState';
-import { useStudioWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
+import { useStudioWorkspace } from '@/domain/studio/StudioWorkspaceContext';
 import type { PendingClassNodeRequest } from '@/domain/studio/editor';
 import { CanvasCore } from '@/features/studio/components/canvas/CanvasCore';
 import { StudioModalLayer } from '@/features/studio/components/StudioModalLayer';

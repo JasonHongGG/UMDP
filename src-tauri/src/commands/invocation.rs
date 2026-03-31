@@ -1,5 +1,5 @@
+use crate::application::runtime_execution;
 use crate::domain::analysis_models::{RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult};
-use crate::services::analysis::invocation_service;
 use crate::state::AppState;
 use std::fmt::Display;
 use tauri::{AppHandle, Manager, State};
@@ -17,7 +17,7 @@ pub async fn invoke_runtime_method(
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
-        invocation_service::invoke_runtime_method(&app_handle, &state, request)
+        runtime_execution::invoke_runtime_method(&app_handle, &state, request)
     })
     .await
     .map_err(join_error_message)

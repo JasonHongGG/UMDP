@@ -6,6 +6,7 @@ import { useStudioServices } from '@/features/studio/core/StudioContext';
 export function useStudioNodeLayerState() {
   const { graph, runtime } = useStudioServices();
   const catalog = getRegisteredStudioNodeCatalog();
+  const isExecutionActive = Object.values(runtime.nodeStates).some((state) => state === 'running');
 
   return graph.nodes.map((node) => {
     const definition = catalog.get(node.type);
@@ -21,7 +22,7 @@ export function useStudioNodeLayerState() {
       outputs: getNodePortsByDirection(definition, 'output'),
       executionState: runtime.nodeStates[node.id] ?? 'idle',
       executionSnapshot: runtime.nodeSnapshots[node.id] ?? null,
-      isRunActive: runtime.activeRun?.status === 'running',
+      isRunActive: isExecutionActive,
     };
   }).filter((entry) => entry !== null);
 }

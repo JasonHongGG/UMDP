@@ -51,6 +51,7 @@ impl BridgeTransport for AppBridgeTransport<'_> {
             let executable = find_bundled_executable(app, request.executable_name)?;
             return self
                 .state
+                .runtime_infra
                 .bridge
                 .execute_runtime_request(executable, request.operation.clone(), &request.args);
         }

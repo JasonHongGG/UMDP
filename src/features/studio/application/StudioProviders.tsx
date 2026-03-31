@@ -2,6 +2,7 @@ import React from 'react';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { StudioProvider } from '@/features/studio/core/StudioContext';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
+import { StudioFeedbackProvider } from './feedback/StudioFeedbackContext';
 
 export function StudioProviders({
   children,
@@ -13,8 +14,10 @@ export function StudioProviders({
   workspaceLifecycle: WorkspaceLifecycleState;
 }) {
   return (
-    <StudioProvider runtimeData={runtimeData} workspaceLifecycle={workspaceLifecycle}>
-      {children}
-    </StudioProvider>
+    <StudioFeedbackProvider>
+      <StudioProvider runtimeData={runtimeData} workspaceLifecycle={workspaceLifecycle}>
+        {children}
+      </StudioProvider>
+    </StudioFeedbackProvider>
   );
 }

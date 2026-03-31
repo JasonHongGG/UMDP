@@ -8,14 +8,16 @@ use tauri::AppHandle;
 
 pub fn ensure_attached_session(state: &AppState) -> Result<ProcessSession, String> {
     state
-        .analysis
+    .workspace_session
+    .analysis
         .process_session()
         .ok_or_else(|| "No process attached".to_string())
 }
 
 pub fn ensure_metadata_snapshot(state: &AppState) -> Result<AnalysisSnapshot, String> {
     state
-        .analysis
+    .workspace_session
+    .analysis
         .metadata_snapshot()
         .ok_or_else(|| "Metadata not loaded. Please attach to a process first.".to_string())
 }
@@ -37,10 +39,10 @@ where
     let result = operation();
     match &result {
         Ok(_) => {
-            state.workspace.touch_runtime_session();
+            state.workspace_session.lifecycle.touch_runtime_session();
         }
         Err(error) => {
-            state.workspace.set_bridge_error(error.clone());
+            state.workspace_session.lifecycle.set_bridge_error(error.clone());
         }
     }
 
@@ -49,8 +51,8 @@ where
 
 pub fn ensure_bridge_session_started(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let executable = find_bundled_executable(app, "UnityMonoBridge.exe")?;
-    state.bridge.ensure_runtime_session(executable)?;
-    state.workspace.mark_runtime_bridge_connected();
+    state.runtime_infra.bridge.ensure_runtime_session(executable)?;
+    state.workspace_session.lifecycle.mark_runtime_bridge_connected();
     Ok(())
 }
 

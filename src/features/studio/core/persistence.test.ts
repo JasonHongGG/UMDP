@@ -172,6 +172,6 @@ describe('studio persistence', () => {
 
     expect(readStudioWorkflowSlot('autosave')).toBeNull();
     expect(readStudioWorkflowSlot('manual-save')).toBeNull();
-    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v2')).toBe('{"legacy":true}');
+    expect(window.localStorage.getItem('unity-mono-studio.workflow.autosave.v2')).toBeNull();
   });
 });

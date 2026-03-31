@@ -1,6 +1,7 @@
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 
 export const EMPTY_WORKSPACE_LIFECYCLE: WorkspaceLifecycleState = {
+  resourceRevision: 0,
   status: 'detached',
   processSession: null,
   runtime: 'unknown',

@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
-import { createTauriSceneGateway } from '@/infrastructure/tauri/TauriSceneGateway';
+import { useAppInfrastructure } from '@/app/AppInfrastructureContext';
 
 export function useSceneGateway() {
-  return useMemo(() => createTauriSceneGateway(), []);
+  return useAppInfrastructure().sceneGateway;
 }

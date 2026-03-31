@@ -13,6 +13,10 @@ const STORAGE_KEYS: Record<StudioWorkflowPersistenceSlot, string> = {
   'manual-save': 'unity-mono-studio.workflow.manual-save',
 };
 
+const DEPRECATED_STORAGE_KEYS = [
+  'unity-mono-studio.workflow.autosave.v2',
+];
+
 export function readStudioWorkflowSlot(slot: StudioWorkflowPersistenceSlot): StoredGraphDocumentRecord | null {
   return readStoredGraphDocument(STORAGE_KEYS[slot]);
 }
@@ -26,7 +30,7 @@ export function clearStudioWorkflowSlot(slot: StudioWorkflowPersistenceSlot) {
 }
 
 export function resetStudioWorkflowPersistence() {
-  (Object.values(STORAGE_KEYS) as string[]).forEach((key) => clearStoredGraphDocument(key));
+  [...Object.values(STORAGE_KEYS), ...DEPRECATED_STORAGE_KEYS].forEach((key) => clearStoredGraphDocument(key));
 }
 
 export function readStudioWorkflowPersistenceSnapshot() {

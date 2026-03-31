@@ -29,6 +29,7 @@ describe('StatusBar', () => {
     await act(async () => {
       root.render(createElement(StatusBar, {
         tasks: [],
+        resetNotice: null,
         workspace: {
           ...EMPTY_WORKSPACE_LIFECYCLE,
           status: 'recovering',
@@ -79,6 +80,12 @@ describe('StatusBar', () => {
             errorMessage: null,
           },
         ],
+        resetNotice: {
+          kind: 'recovering',
+          tone: 'error',
+          title: 'Runtime Recovering',
+          message: 'Resource state is rebuilding.',
+        },
         workspace: {
           ...EMPTY_WORKSPACE_LIFECYCLE,
           status: 'recovering',
@@ -104,5 +111,44 @@ describe('StatusBar', () => {
 
     expect(container.textContent).toContain('Refreshing scene workspace (2/5)');
     expect(container.textContent).not.toContain('bridge helper disconnected');
+    expect(container.textContent).not.toContain('Resource state is rebuilding.');
+  });
+
+  it('shows shell reset notice before the process label when no task is active', async () => {
+    await act(async () => {
+      root.render(createElement(StatusBar, {
+        tasks: [],
+        resetNotice: {
+          kind: 'session-changed',
+          tone: 'warning',
+          title: 'Workspace Reset',
+          message: 'A new Unity session is active. Resource state is rebuilding.',
+        },
+        workspace: {
+          ...EMPTY_WORKSPACE_LIFECYCLE,
+          status: 'ready',
+          hasSnapshot: true,
+          processSession: {
+            pid: 1337,
+            processName: 'Unity.exe',
+            exePath: 'C:/Unity.exe',
+            dataDir: null,
+            managedDir: null,
+            runtime: 'mono',
+          },
+          runtime: 'mono',
+          runtimeSession: {
+            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+            status: 'ready',
+            runtime: 'mono',
+            bridgeConnected: true,
+            sessionKey: 'session-2',
+          },
+        },
+      }));
+    });
+
+    expect(container.textContent).toContain('A new Unity session is active. Resource state is rebuilding.');
+    expect(container.textContent).not.toContain('Unity.exe (1337)');
   });
 });

@@ -12,10 +12,10 @@ fn same_metadata_source(left: &ProcessSession, right: &ProcessSession) -> bool {
 }
 
 pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
-    state.bridge.reset();
-    state.scene.reset();
-    state.scene_children.reset();
-    state.scene_inspector.reset();
+    state.runtime_infra.bridge.reset();
+    state.scene_module.workspace.reset();
+    state.scene_module.children.reset();
+    state.scene_module.inspector.reset();
 
     let mut sys = System::new_all();
     sys.refresh_processes();
@@ -43,15 +43,16 @@ pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<Pro
     };
 
     let preserve_metadata = state
+        .workspace_session
         .analysis
         .process_session()
         .as_ref()
         .is_some_and(|existing| same_metadata_source(existing, &session))
-        && state.analysis.metadata_snapshot().is_some();
+        && state.workspace_session.analysis.metadata_snapshot().is_some();
 
-    state.analysis.set_process_session(session.clone());
+    state.workspace_session.analysis.set_process_session(session.clone());
     if !preserve_metadata {
-        state.analysis.clear_metadata();
+        state.workspace_session.analysis.clear_metadata();
     }
 
     Ok(session)

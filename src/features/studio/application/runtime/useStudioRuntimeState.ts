@@ -5,13 +5,7 @@ import { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '@/features/studio/core/types';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import type { StudioExecutionAbortReason } from '@/domain/studio/contracts';
-import { createTraceEvent } from '@/domain/studio/kernel';
-import {
-  selectRunHistory,
-} from '../kernel';
-import { useStudioEngineState, type StudioEngineController } from '../kernel/useStudioEngineState';
-
-export type StudioExecutionRunStatus = 'running' | 'success' | 'error' | 'aborted';
+import { useStudioFeedback } from '@/features/studio/application/feedback/StudioFeedbackContext';
 
 interface StudioExecutionWorkspaceDiagnostics {
   status: WorkspaceLifecycleState['status'];
@@ -32,22 +26,11 @@ interface StudioExecutionWorkspaceReadiness {
   diagnostics: StudioExecutionWorkspaceDiagnostics;
 }
 
-export interface StudioExecutionRun {
-  runId: string;
-  startNodeId: string;
-  startedAt: number;
-  completedAt?: number;
-  status: StudioExecutionRunStatus;
-  abortReason?: StudioExecutionAbortReason;
-}
-
 type StudioExecutionCleanup = (reason?: StudioExecutionAbortReason) => void;
 
 export interface StudioRuntimeState {
   nodeStates: Record<string, NodeExecutionState>;
   nodeSnapshots: Record<string, NodeExecutionSnapshot>;
-  activeRun: StudioExecutionRun | null;
-  runHistory: StudioExecutionRun[];
   canExecuteFlow: boolean;
   executionBlockedReason: string | null;
   executeFlow: (startNodeId: string) => void;
@@ -121,60 +104,80 @@ export function useStudioRuntimeState(
   edges: StudioEdge[],
   runtimeData: StudioRuntimeDataState,
   workspaceLifecycle: WorkspaceLifecycleState,
-  externalEngine?: StudioEngineController,
 ): StudioRuntimeState {
   const [nodeStates, setNodeStates] = useState<Record<string, NodeExecutionState>>({});
   const [nodeSnapshots, setNodeSnapshots] = useState<Record<string, NodeExecutionSnapshot>>({});
-  const engine = useStudioEngineState(externalEngine);
-  const dispatchEngine = engine.dispatch;
   const executionCleanupRef = useRef<StudioExecutionCleanup | null>(null);
+  const {
+    reportDocumentFeedback,
+    reportRuntimeFeedback,
+    clearDocumentFeedback,
+    clearRuntimeFeedback,
+  } = useStudioFeedback();
   const workspaceExecutionReadiness = useMemo(
     () => getWorkspaceExecutionReadiness(workspaceLifecycle),
     [workspaceLifecycle],
   );
-  const activeRun = useMemo(() => {
-    const activeRunId = engine.state.execution.activeRunId;
-    return activeRunId ? engine.state.execution.runsById[activeRunId] as StudioExecutionRun ?? null : null;
-  }, [engine.state.execution.activeRunId, engine.state.execution.runsById]);
-  const runHistory = useMemo(() => selectRunHistory(engine.state).slice(0, 20) as StudioExecutionRun[], [engine.state]);
 
   useEffect(() => {
     return () => {
       executionCleanupRef.current?.('component-dispose');
+      clearRuntimeFeedback();
     };
-  }, []);
+  }, [clearRuntimeFeedback]);
 
   useEffect(() => {
     executionCleanupRef.current?.('document-reset');
     executionCleanupRef.current = null;
     setNodeStates({});
     setNodeSnapshots({});
-    dispatchEngine({ type: 'reset-execution' });
-  }, [dispatchEngine, document]);
+    clearRuntimeFeedback();
+  }, [clearRuntimeFeedback, document]);
 
   useEffect(() => {
     if (workspaceExecutionReadiness.canExecute) {
+      clearDocumentFeedback();
       return;
     }
 
     if (executionCleanupRef.current) {
       logWorkspaceExecutionInterruption('reset', workspaceExecutionReadiness.blockedReason ?? 'Workspace execution context changed.', workspaceLifecycle);
+      reportRuntimeFeedback({
+        tone: 'warning',
+        title: 'Execution Reset',
+        description: workspaceExecutionReadiness.blockedReason ?? 'Runtime state was cleared because the workspace execution context changed.',
+      });
     }
 
     executionCleanupRef.current?.('workspace-reset');
     executionCleanupRef.current = null;
     setNodeStates({});
     setNodeSnapshots({});
-    dispatchEngine({ type: 'reset-execution' });
-  }, [dispatchEngine, workspaceExecutionReadiness, workspaceLifecycle]);
+    reportDocumentFeedback({
+      tone: workspaceLifecycle.status === 'recovering' || workspaceLifecycle.status === 'bridge-error' ? 'warning' : 'info',
+      title: 'Studio Runtime Locked',
+      description: workspaceExecutionReadiness.blockedReason ?? 'Studio runtime execution is currently unavailable.',
+    });
+  }, [clearDocumentFeedback, reportDocumentFeedback, reportRuntimeFeedback, workspaceExecutionReadiness, workspaceLifecycle]);
 
   const executeFlow = useCallback((startNodeId: string) => {
     if (!workspaceExecutionReadiness.canExecute) {
       logWorkspaceExecutionInterruption('blocked', workspaceExecutionReadiness.blockedReason ?? 'Workspace is not ready for execution.', workspaceLifecycle);
+      reportRuntimeFeedback({
+        tone: 'error',
+        title: 'Execution Blocked',
+        description: workspaceExecutionReadiness.blockedReason ?? 'Workspace is not ready for execution.',
+      });
       return;
     }
 
     executionCleanupRef.current?.('rerun');
+    clearRuntimeFeedback();
+    reportDocumentFeedback({
+      tone: 'info',
+      title: 'Execution Active',
+      description: `Executing workflow from ${startNodeId}.`,
+    });
     executionCleanupRef.current = executeStudioFlow({
       documentId: document.id,
       startNodeId,
@@ -185,7 +188,6 @@ export function useStudioRuntimeState(
       onReset: () => {
         setNodeStates({});
         setNodeSnapshots({});
-        dispatchEngine({ type: 'reset-execution' });
       },
       onNodeStateChange: (nodeId, state) => {
         setNodeStates((previous) => ({ ...previous, [nodeId]: state }));
@@ -193,37 +195,14 @@ export function useStudioRuntimeState(
       onNodeSnapshot: (snapshot) => {
         setNodeSnapshots((previous) => ({ ...previous, [snapshot.nodeId]: snapshot }));
       },
-      onRunStart: (run) => {
-        dispatchEngine({
-          type: 'begin-run',
-          run: { ...run, status: 'running' },
-          event: createTraceEvent(run.runId, 1, 'run-started', run.startedAt, {
-            nodeId: run.startNodeId,
-          }),
-        });
-      },
-      onRunComplete: (run) => {
-        const completedRun: StudioExecutionRun = run;
-        dispatchEngine({
-          type: 'complete-run',
-          runId: completedRun.runId,
-          status: completedRun.status,
-          completedAt: completedRun.completedAt ?? completedRun.startedAt,
-          event: createTraceEvent(completedRun.runId, 2, 'run-completed', completedRun.completedAt ?? completedRun.startedAt, {
-            nodeId: completedRun.startNodeId,
-          }),
-        });
-      },
     });
-  }, [dispatchEngine, document.id, edges, nodes, runtimeData, workspaceExecutionReadiness, workspaceLifecycle]);
+  }, [clearRuntimeFeedback, document.id, edges, nodes, reportDocumentFeedback, reportRuntimeFeedback, runtimeData, workspaceExecutionReadiness, workspaceLifecycle]);
 
   return useMemo(() => ({
     nodeStates,
     nodeSnapshots,
-    activeRun,
-    runHistory,
     canExecuteFlow: workspaceExecutionReadiness.canExecute,
     executionBlockedReason: workspaceExecutionReadiness.blockedReason,
     executeFlow,
-  }), [activeRun, executeFlow, nodeSnapshots, nodeStates, runHistory, workspaceExecutionReadiness]);
+  }), [executeFlow, nodeSnapshots, nodeStates, workspaceExecutionReadiness]);
 }

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
-import type { WorkspaceLifecycleState } from '@/shared/contracts';
-import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { onProcessSelected } from '@/infrastructure/tauri/TauriWorkspaceGateway';
+import { useWorkspaceLifecycleState } from './useWorkspaceLifecycleState';
 
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -28,36 +27,15 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
   const [attachError, setAttachError] = useState<string | null>(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
-  const [workspaceLifecycle, setWorkspaceLifecycle] = useState<WorkspaceLifecycleState>(EMPTY_WORKSPACE_LIFECYCLE);
-
-  const patchWorkspaceLifecycle = useCallback((patch: Partial<WorkspaceLifecycleState>) => {
-    setWorkspaceLifecycle((previous) => ({
-      ...previous,
-      ...patch,
-      runtimeSession: patch.runtimeSession ?? previous.runtimeSession,
-    }));
-  }, []);
-
-  const refreshWorkspaceLifecycle = useCallback(async (fallback?: Partial<WorkspaceLifecycleState>, reason = 'unspecified') => {
-    const startedAt = nowMs();
-    try {
-      const workspace = await repository.getWorkspaceLifecycle();
-      setWorkspaceLifecycle(workspace);
-      logPerf(`refreshWorkspaceLifecycle:${reason}`, startedAt, {
-        status: workspace.status,
-        runtimeStatus: workspace.runtimeSession.status,
-      });
-    } catch (error) {
-      if (fallback) {
-        setWorkspaceLifecycle((previous) => ({
-          ...previous,
-          ...fallback,
-          runtimeSession: fallback.runtimeSession ?? previous.runtimeSession,
-        }));
-      }
-      console.error(`Failed to refresh workspace lifecycle (${reason})`, error);
-    }
-  }, [repository]);
+  const {
+    workspaceLifecycle,
+    patchWorkspaceLifecycle,
+    refreshWorkspaceLifecycle,
+  } = useWorkspaceLifecycleState({
+    repository,
+    processSession,
+    loadingImages,
+  });
 
   const fetchMetadata = useCallback(async (session: ProcessSession | null) => {
     const startedAt = nowMs();
@@ -97,36 +75,6 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
       }, 'after-metadata-load');
     }
   }, [patchWorkspaceLifecycle, refreshWorkspaceLifecycle, repository]);
-
-  useEffect(() => {
-    refreshWorkspaceLifecycle(undefined, 'initial-mount');
-  }, [refreshWorkspaceLifecycle]);
-
-  useEffect(() => {
-    const refreshOnFocus = () => {
-      if (!processSession || loadingImages || document.visibilityState !== 'visible') {
-        return;
-      }
-
-      refreshWorkspaceLifecycle(undefined, 'window-focus').catch(() => undefined);
-    };
-
-    const refreshOnVisible = () => {
-      if (!processSession || loadingImages || document.visibilityState !== 'visible') {
-        return;
-      }
-
-      refreshWorkspaceLifecycle(undefined, 'document-visible').catch(() => undefined);
-    };
-
-    window.addEventListener('focus', refreshOnFocus);
-    document.addEventListener('visibilitychange', refreshOnVisible);
-
-    return () => {
-      window.removeEventListener('focus', refreshOnFocus);
-      document.removeEventListener('visibilitychange', refreshOnVisible);
-    };
-  }, [loadingImages, processSession, refreshWorkspaceLifecycle]);
 
   useEffect(() => {
     const unlisten = onProcessSelected(async (process) => {

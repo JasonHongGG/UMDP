@@ -16,6 +16,11 @@ export interface LoadedSceneGraph {
   recordByAddress: Map<string, LoadedSceneNodeRecord>;
 }
 
+export const EMPTY_LOADED_SCENE_GRAPH: LoadedSceneGraph = {
+  records: [],
+  recordByAddress: new Map<string, LoadedSceneNodeRecord>(),
+};
+
 export interface LoadedSceneSearchProjection {
   matchCount: number;
   matchingNodeAddresses: Set<string>;

@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
-import { createTauriAnalysisRepository } from '@/infrastructure/tauri/TauriAnalysisRepository';
+import { useAppInfrastructure } from '@/app/AppInfrastructureContext';
 
 export function useAnalysisRepository() {
-  return useMemo(() => createTauriAnalysisRepository(), []);
+  return useAppInfrastructure().analysisRepository;
 }

@@ -41,6 +41,7 @@ export type WorkspaceLifecycleStatus =
   | 'recovering';
 
 export interface WorkspaceLifecycleState {
+  resourceRevision: number;
   status: WorkspaceLifecycleStatus;
   processSession: ProcessSession | null;
   runtime: RuntimeFlavor | 'unknown';

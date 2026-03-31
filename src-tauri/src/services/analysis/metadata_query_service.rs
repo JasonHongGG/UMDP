@@ -17,7 +17,7 @@ fn same_metadata_source(left: &crate::domain::analysis_models::ProcessSession, r
 pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<AnalysisSnapshot, String> {
     let attached = ensure_attached_session(state)?;
 
-    if let Some(mut cached) = state.analysis.metadata_snapshot() {
+    if let Some(mut cached) = state.workspace_session.analysis.metadata_snapshot() {
         if cached
             .process
             .as_ref()
@@ -56,7 +56,7 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<AnalysisSn
             response.images.len()
         );
 
-        state.analysis.set_metadata_snapshot(response.clone());
+        state.workspace_session.analysis.set_metadata_snapshot(response.clone());
         Ok(response)
     })
 }

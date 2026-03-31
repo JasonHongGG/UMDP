@@ -67,6 +67,7 @@ type ItemMetric = {
 };
 
 export function SceneHierarchyPanel() {
+  const sceneTreeState = useSceneTreeState();
   const {
     sceneWorkspace,
     refreshSceneWorkspace,
@@ -78,31 +79,35 @@ export function SceneHierarchyPanel() {
     childErrorByParent,
     ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation,
-  } = useSceneTreeState();
+  } = sceneTreeState;
   const {
     createSceneRoot,
     loadSceneByBuildIndex,
     sceneMutationState,
   } = useSceneMutationState();
 
+  const [fallbackSearchQuery, setFallbackSearchQuery] = useState('');
+  const sceneHierarchySearchQuery = sceneTreeState.sceneHierarchySearchQuery ?? fallbackSearchQuery;
+  const setSceneHierarchySearchQuery = sceneTreeState.setSceneHierarchySearchQuery ?? setFallbackSearchQuery;
+
   const [expandedSceneHandles, setExpandedSceneHandles] = useState<Record<number, boolean>>({});
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
   const [rootNameBySceneHandle, setRootNameBySceneHandle] = useState<Record<number, string>>({});
-  const [searchQuery, setSearchQuery] = useState('');
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const scenes = sceneWorkspace.snapshot?.scenes ?? [];
-  const buildSettingsScenes = sceneWorkspace.snapshot?.buildSettingsScenes ?? [];
+  const scenes: RuntimeSceneDescriptor[] = sceneWorkspace.snapshot?.scenes ?? [];
+  const buildSettingsScenes: RuntimeSceneBuildSettingsEntry[] = sceneWorkspace.snapshot?.buildSettingsScenes ?? [];
   const summary = useMemo(() => {
     const sceneCount = scenes.length;
-    const rootCount = scenes.reduce((count, scene) => count + scene.roots.length, 0);
+    const rootCount = scenes.reduce((count: number, scene: RuntimeSceneDescriptor) => count + scene.roots.length, 0);
     return { sceneCount, rootCount };
   }, [scenes]);
-  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
-  const sceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
-  const searchState = useMemo(() => createLoadedSceneSearchProjection(sceneGraph, deferredSearchQuery), [deferredSearchQuery, sceneGraph]);
+  const deferredSearchQuery = useDeferredValue(sceneHierarchySearchQuery.trim().toLowerCase());
+  const fallbackSceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
+  const searchState = sceneTreeState.sceneHierarchySearch
+    ?? createLoadedSceneSearchProjection(fallbackSceneGraph, deferredSearchQuery);
   const searchActive = searchState != null;
 
   const toggleScene = (sceneHandle: number) => {
@@ -202,9 +207,9 @@ export function SceneHierarchyPanel() {
       visibleChildren.forEach((child) => appendNode(child, depth + 1));
     };
 
-    scenes.forEach((scene) => {
+    scenes.forEach((scene: RuntimeSceneDescriptor) => {
       const visibleRoots = searchState
-        ? scene.roots.filter((node) => searchState.visibleNodeAddresses.has(node.objectAddress))
+        ? scene.roots.filter((node: RuntimeSceneNodeSummary) => searchState.visibleNodeAddresses.has(node.objectAddress))
         : scene.roots;
 
       if (searchState && visibleRoots.length === 0) {
@@ -237,7 +242,7 @@ export function SceneHierarchyPanel() {
           });
         }
 
-        visibleRoots.forEach((node) => appendNode(node, 0));
+        visibleRoots.forEach((node: RuntimeSceneNodeSummary) => appendNode(node, 0));
       }
 
       items.push({
@@ -373,8 +378,8 @@ export function SceneHierarchyPanel() {
         <label className="rounded-2xl border border-[#142132] bg-[#09111a]/80 px-3 py-3 flex items-center gap-3">
           <Search size={15} className="text-cyan-300 shrink-0" />
           <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+                        value={sceneHierarchySearchQuery}
+                        onChange={(event) => setSceneHierarchySearchQuery(event.target.value)}
             className="flex-1 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
             placeholder="Search loaded objects"
           />
@@ -400,7 +405,7 @@ export function SceneHierarchyPanel() {
               Build Settings Scenes
             </div>
             <div className="max-h-48 overflow-y-auto slim-scrollbar p-2 space-y-2">
-              {buildSettingsScenes.map((scene) => (
+              {buildSettingsScenes.map((scene: RuntimeSceneBuildSettingsEntry) => (
                 <div key={scene.buildIndex} className="rounded-xl border border-[#1c2838] bg-[#0a0f16]/80 px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

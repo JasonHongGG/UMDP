@@ -33,18 +33,10 @@ export type {
 } from './boundary';
 
 export type {
-  ExecutionRun,
-  ExecutionTraceEvent,
-  ExecutionTraceState,
-  NodeTraceRecord,
-  NodeTraceStatus,
-  TraceEventKind,
-  TraceValueProvenance,
+  ExecutionState,
 } from './execution';
 export {
-  createExecutionTraceState,
-  createTraceEvent,
-  createTraceEventId,
+  createExecutionState,
 } from './execution';
 
 export type {

@@ -14,7 +14,7 @@ export function useStudioComposition(runtimeData: StudioRuntimeDataState, worksp
   const engine = useStudioEngineState();
   const { nodes, edges, document, connectPorts } = graph;
   const ui = useStudioUiState({ nodes, edges, connectPorts }, engine);
-  const runtime = useStudioRuntimeState(document, nodes, edges, runtimeData, workspaceLifecycle, engine);
+  const runtime = useStudioRuntimeState(document, nodes, edges, runtimeData, workspaceLifecycle);
   const query = useStudioQueryState(nodes, edges, runtime.nodeSnapshots, runtimeData);
 
   useStudioNodeLifecycle({ catalog, nodes, edges, runtimeData }, graph.updateNodeData);

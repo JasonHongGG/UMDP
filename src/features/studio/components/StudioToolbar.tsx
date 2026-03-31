@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, FolderOpen, History, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
 import { useStudioToolbarState } from '@/features/studio/application/useStudioToolbarState';
+import { useStudioFeedback } from '@/features/studio/application/feedback/StudioFeedbackContext';
 import { Tooltip } from '@/shared/ui/Tooltip';
 
 function formatTimestamp(timestamp: number | null) {
@@ -34,7 +35,35 @@ export function StudioToolbar() {
     loadSavedWorkflow,
     clearWorkflow,
   } = useStudioToolbarState();
+  const { documentFeedback } = useStudioFeedback();
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const shellFeedback = useMemo(() => {
+    if (statusMessage) {
+      return {
+        className: 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100',
+        icon: <Download size={12} />,
+        message: statusMessage,
+      };
+    }
+
+    if (!documentFeedback) {
+      return null;
+    }
+
+    const toneClassName = documentFeedback.tone === 'error'
+      ? 'border-rose-500/20 bg-rose-500/10 text-rose-100'
+      : documentFeedback.tone === 'warning'
+        ? 'border-amber-500/20 bg-amber-500/10 text-amber-100'
+        : documentFeedback.tone === 'success'
+          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+          : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100';
+
+    return {
+      className: toneClassName,
+      icon: <Download size={12} />,
+      message: `${documentFeedback.title}: ${documentFeedback.description}`,
+    };
+  }, [documentFeedback, statusMessage]);
 
   const handleSave = () => {
     setStatusMessage(saveWorkflow() ? 'Workflow saved to local draft slot.' : 'Save failed.');
@@ -144,10 +173,10 @@ export function StudioToolbar() {
           <History size={12} />
           <span>Shortcuts: Ctrl+S save, Ctrl+Z undo, Ctrl+Shift+Z redo</span>
         </div>
-        {statusMessage ? (
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-[11px] text-cyan-100 backdrop-blur-xl">
-            <Download size={12} />
-            <span>{statusMessage}</span>
+        {shellFeedback ? (
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] backdrop-blur-xl ${shellFeedback.className}`}>
+            {shellFeedback.icon}
+            <span>{shellFeedback.message}</span>
           </div>
         ) : null}
       </div>

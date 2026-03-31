@@ -16,12 +16,13 @@ import type {
   ClassDescriptor,
   RuntimeQuaternionSnapshot,
   RuntimeSceneComponentSummary,
+  RuntimeSceneNodeSummary,
   RuntimeSceneTransformSnapshot,
   RuntimeSceneTransformUpdate,
   RuntimeVector3Snapshot,
 } from '@/domain/analysis/contracts';
 import { useAnalysisWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
-import { buildLoadedSceneGraph, collectLoadedDescendantAddresses, filterLoadedSceneNodeRecords } from '../loadedSceneNodes';
+import { EMPTY_LOADED_SCENE_GRAPH, buildLoadedSceneGraph, collectLoadedDescendantAddresses, filterLoadedSceneNodeRecords } from '../loadedSceneNodes';
 import { useSceneInspectorState, useSceneMutationState, useSceneWorkspace } from '../SceneWorkspaceContext';
 import { ActionButton, EmptyNotice, ErrorNotice, KeyValue, ObjectLinkCard, SceneCard } from './SceneUiPrimitives';
 
@@ -30,7 +31,12 @@ type TransformAxis = keyof RuntimeVector3Snapshot;
 
 export function SceneInspectorView() {
   const { analysisSnapshot } = useAnalysisWorkspace();
-  const { sceneWorkspace, childrenByParent } = useSceneWorkspace();
+  const sceneWorkspaceState = useSceneWorkspace();
+  const sceneWorkspace = sceneWorkspaceState.sceneWorkspace;
+  const childrenByParent = sceneWorkspaceState.childrenByParent;
+  const loadedSceneGraph = sceneWorkspaceState.loadedSceneGraph
+    ?? buildLoadedSceneGraph(sceneWorkspace, childrenByParent)
+    ?? EMPTY_LOADED_SCENE_GRAPH;
   const {
     setSelectedObjectAddress,
     sceneInspector,
@@ -103,8 +109,6 @@ export function SceneInspectorView() {
 
     return Array.from(new Set(options));
   }, [analysisSnapshot?.classes]);
-  const loadedSceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
-  const loadedNodeRecords = loadedSceneGraph.records;
   const loadedNodeRecordByAddress = loadedSceneGraph.recordByAddress;
   const blockedReparentAddresses = useMemo(() => {
     if (!sceneInspector) {
@@ -509,7 +513,7 @@ export function SceneInspectorView() {
                   ) : null}
                   {!sceneInspectorChildrenLoading && sceneInspector.children.length === 0 ? (
                     <EmptyNotice message="No immediate children." />
-                  ) : sceneInspector.children.map((child) => (
+                  ) : sceneInspector.children.map((child: RuntimeSceneNodeSummary) => (
                     <ObjectLinkCard
                       key={child.objectAddress}
                       title={child.name}
@@ -554,7 +558,7 @@ export function SceneInspectorView() {
                   ) : null}
                   {!sceneInspectorComponentsLoading && sceneInspector.components.length === 0 ? (
                     <EmptyNotice message="No components returned by runtime." />
-                  ) : sceneInspector.components.map((component) => (
+                  ) : sceneInspector.components.map((component: RuntimeSceneComponentSummary) => (
                     <ComponentCard
                       key={component.componentAddress}
                       component={component}

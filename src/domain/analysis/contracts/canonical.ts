@@ -303,6 +303,8 @@ export type RuntimeSceneChildrenTaskStatus =
 
 export interface RuntimeSceneObjectChildrenTaskState {
   taskId: number;
+  resourceRevision: number;
+  sessionKey: string | null;
   parentObjectAddress: string;
   status: RuntimeSceneChildrenTaskStatus;
   mutationEpoch: number;
@@ -348,6 +350,8 @@ export type RuntimeSceneInspectorTaskStatus =
 
 export interface RuntimeSceneObjectInspectorTaskState {
   taskId: number;
+  resourceRevision: number;
+  sessionKey: string | null;
   objectAddress: string;
   status: RuntimeSceneInspectorTaskStatus;
   mutationEpoch: number;
@@ -421,6 +425,8 @@ export interface RuntimeSceneMutationResult {
 }
 
 export interface SceneWorkspaceState {
+  resourceRevision: number;
+  sessionKey: string | null;
   refreshStatus: SceneRefreshStatus;
   errorMessage: string | null;
   snapshot: RuntimeSceneCatalogSnapshot | null;
