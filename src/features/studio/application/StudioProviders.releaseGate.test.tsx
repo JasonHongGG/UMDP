@@ -55,7 +55,7 @@ function createReadyLifecycle(): WorkspaceLifecycleState {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'ready',
       runtime: 'mono',
-      bridgeConnected: true,
+      connected: true,
       sessionKey: 'session-1',
       capabilities: ['metadata', 'execution'],
     },
@@ -68,32 +68,32 @@ function createRecoveringLifecycle(): WorkspaceLifecycleState {
     status: 'recovering',
     hasSnapshot: true,
     runtime: 'mono',
-    errorMessage: 'bridge helper disconnected',
+    errorMessage: 'runtime session disconnected',
     runtimeSession: {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'recovering',
       runtime: 'mono',
-      bridgeConnected: false,
-      lastError: 'bridge helper disconnected',
+      connected: false,
+      lastError: 'runtime session disconnected',
       sessionKey: 'session-1',
       capabilities: ['metadata', 'execution'],
     },
   };
 }
 
-function createBridgeErrorLifecycle(): WorkspaceLifecycleState {
+function createRuntimeErrorLifecycle(): WorkspaceLifecycleState {
   return {
     ...EMPTY_WORKSPACE_LIFECYCLE,
-    status: 'bridge-error',
+    status: 'runtime-error',
     hasSnapshot: true,
     runtime: 'mono',
-    errorMessage: 'bridge launch failed',
+    errorMessage: 'runtime session failed to initialize',
     runtimeSession: {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'error',
       runtime: 'mono',
-      bridgeConnected: false,
-      lastError: 'bridge launch failed',
+      connected: false,
+      lastError: 'runtime session failed to initialize',
       sessionKey: 'session-9',
       capabilities: ['metadata', 'execution'],
     },
@@ -203,13 +203,13 @@ describe('StudioProviders release gates', () => {
     });
   });
 
-  it('reports blocked runtime feedback when execution is attempted during a bridge error', async () => {
+  it('reports blocked runtime feedback when execution is attempted during a runtime error', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await act(async () => {
       root.render(createElement(StudioProviders, {
         runtimeData: RUNTIME_DATA,
-        workspaceLifecycle: createBridgeErrorLifecycle(),
+        workspaceLifecycle: createRuntimeErrorLifecycle(),
         children: createElement(TestConsumer),
       }));
     });
@@ -217,17 +217,17 @@ describe('StudioProviders release gates', () => {
 
     expect(latestState).toMatchObject({
       canExecuteFlow: false,
-      executionBlockedReason: 'Workspace is not ready (bridge-error).',
+      executionBlockedReason: 'Workspace is not ready (runtime-error).',
     });
     expect(latestState?.documentFeedback).toMatchObject({
       tone: 'warning',
       title: 'Studio Runtime Locked',
-      description: 'Workspace is not ready (bridge-error).',
+      description: 'Workspace is not ready (runtime-error).',
     });
     expect(latestState?.runtimeFeedback).toBeNull();
 
     await act(async () => {
-      executeFlow?.('trigger-bridge-error');
+      executeFlow?.('trigger-runtime-error');
     });
     await flushEffects();
 
@@ -235,18 +235,18 @@ describe('StudioProviders release gates', () => {
     expect(latestState?.runtimeFeedback).toMatchObject({
       tone: 'error',
       title: 'Execution Blocked',
-      description: 'Workspace is not ready (bridge-error).',
+      description: 'Workspace is not ready (runtime-error).',
     });
     expect(consoleErrorSpy).toHaveBeenCalledWith('[StudioWorkspaceExecution]', expect.objectContaining({
       reason: 'blocked',
-      message: 'Workspace is not ready (bridge-error).',
+      message: 'Workspace is not ready (runtime-error).',
       workspace: expect.objectContaining({
-        status: 'bridge-error',
-        errorMessage: 'bridge launch failed',
+        status: 'runtime-error',
+        errorMessage: 'runtime session failed to initialize',
         runtimeSession: expect.objectContaining({
           status: 'error',
-          bridgeConnected: false,
-          lastError: 'bridge launch failed',
+          connected: false,
+          lastError: 'runtime session failed to initialize',
           sessionKey: 'session-9',
         }),
       }),

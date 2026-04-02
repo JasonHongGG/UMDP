@@ -24,7 +24,7 @@ export interface RuntimeSessionState {
   status: RuntimeSessionStatus;
   runtime: RuntimeFlavor | 'unknown';
   capabilities: RuntimeCapability[];
-  bridgeConnected: boolean;
+  connected: boolean;
   sessionKey: string | null;
   lastError: string | null;
   lastHeartbeatAt: string | null;
@@ -37,7 +37,7 @@ export type WorkspaceLifecycleStatus =
   | 'attached-without-snapshot'
   | 'snapshot-loading'
   | 'ready'
-  | 'bridge-error'
+  | 'runtime-error'
   | 'recovering';
 
 export interface WorkspaceLifecycleState {
@@ -52,7 +52,6 @@ export interface WorkspaceLifecycleState {
 
 export interface SystemContractVersions {
   tauriCommandVersion: number;
-  bridgeProtocolVersion: number;
   analysisSchemaVersion: number;
   workflowSchemaVersion: number;
 }

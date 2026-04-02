@@ -1,12 +1,4 @@
 use super::events::emit_scene_workspace_state;
-use super::mapping::{
-    map_hierarchy_path_entry, map_scene_build_settings_entry,
-    map_scene_component, map_scene_descriptor, map_scene_kind,
-    map_scene_node_summary, map_transform_snapshot,
-    HelperSceneCatalogResponse, HelperSceneChildrenPageResponse,
-    HelperSceneChildrenResponse, HelperSceneComponentsPageResponse,
-    HelperSceneInspectorHeaderResponse, HelperSceneInspectorResponse,
-};
 use super::{current_scene_session_key, log_scene_duration};
 use crate::domain::analysis_models::{
     RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenPageSnapshot,
@@ -14,37 +6,36 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorHeaderSnapshot,
     RuntimeSceneObjectInspectorSnapshot, SceneWorkspaceState,
 };
-use crate::domain::bridge_protocol::BridgeOperation;
-use crate::services::analysis::bridge_transport::{
-    execute_json_with, AppBridgeTransport, BridgeRequest,
-};
+use crate::kernel::runtime::access::current_runtime_session;
+use crate::kernel::runtime::session::RuntimeSession;
+use crate::kernel::scene::query as native_scene;
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_scene_bridge_session_started,
-    execute_runtime_operation,
+    ensure_attached_session, execute_runtime_operation,
 };
 use crate::state::AppState;
+use std::sync::Arc;
 use std::time::Instant;
 use tauri::AppHandle;
 
 pub fn start_scene_refresh(
-    app: &AppHandle,
+    _app: &AppHandle,
     state: &AppState,
 ) -> Result<SceneWorkspaceState, String> {
     let started_at = Instant::now();
     ensure_attached_session(state)?;
-    ensure_scene_bridge_session_started(app, state)?;
+    ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
     let workspace = state.scene_module.workspace.set_refreshing(session_key.clone());
-    emit_scene_workspace_state(app, &workspace);
+    emit_scene_workspace_state(_app, &workspace);
 
-    let snapshot = match execute_runtime_operation(state, || load_scene_catalog(app, state)) {
+    let snapshot = match execute_runtime_operation(state, || load_scene_catalog(state)) {
         Ok(snapshot) => snapshot,
         Err(error) => {
             let workspace = state
                 .scene_module
                 .workspace
                 .set_error(session_key.as_deref(), error.clone());
-            emit_scene_workspace_state(app, &workspace);
+            emit_scene_workspace_state(_app, &workspace);
             return Err(error);
         }
     };
@@ -59,7 +50,7 @@ pub fn start_scene_refresh(
         .scene_module
         .workspace
         .set_snapshot(session_key.as_deref(), snapshot);
-    emit_scene_workspace_state(app, &workspace);
+    emit_scene_workspace_state(_app, &workspace);
     if current_scene_session_key(state) == session_key {
         state.scene_module.children.reset();
         state.scene_module.inspector.reset();
@@ -73,16 +64,16 @@ pub fn start_scene_refresh(
 }
 
 pub fn get_scene_object_children(
-    app: &AppHandle,
+    _app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneChildrenSnapshot, String> {
     let started_at = Instant::now();
     ensure_attached_session(state)?;
-    ensure_scene_bridge_session_started(app, state)?;
+    ensure_scene_query_runtime_ready(state)?;
 
     let snapshot = execute_runtime_operation(state, || {
-        load_scene_children(app, state, object_address)
+        load_scene_children(state, object_address)
     })?;
     log_scene_duration(
         "get_scene_object_children",
@@ -96,16 +87,16 @@ pub fn get_scene_object_children(
 }
 
 pub fn get_scene_object_inspector(
-    app: &AppHandle,
+    _app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
     let started_at = Instant::now();
     ensure_attached_session(state)?;
-    ensure_scene_bridge_session_started(app, state)?;
+    ensure_scene_query_runtime_ready(state)?;
 
     let snapshot = execute_runtime_operation(state, || {
-        load_scene_inspector(app, state, object_address)
+        load_scene_inspector(state, object_address)
     })?;
     log_scene_duration(
         "get_scene_object_inspector",
@@ -120,35 +111,12 @@ pub fn get_scene_object_inspector(
 }
 
 pub(super) fn load_scene_catalog(
-    app: &AppHandle,
     state: &AppState,
 ) -> Result<RuntimeSceneCatalogSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneCatalogResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneCatalogLoad,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-catalog".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-            ],
-        },
-    )?;
-
-    let snapshot = RuntimeSceneCatalogSnapshot {
-        generated_at: helper.generated_at,
-        scenes: helper.scenes.into_iter().map(map_scene_descriptor).collect(),
-        build_settings_scenes: helper
-            .build_settings_scenes
-            .into_iter()
-            .map(map_scene_build_settings_entry)
-            .collect(),
-    };
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_catalog(runtime_session.as_ref())?;
     log_scene_duration(
         "load_scene_catalog",
         started_at,
@@ -158,33 +126,13 @@ pub(super) fn load_scene_catalog(
 }
 
 pub(super) fn load_scene_children(
-    app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneChildrenSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneChildrenResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneObjectChildrenLoad,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-children".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-                "--object-address".into(),
-                object_address.to_string(),
-            ],
-        },
-    )?;
-
-    let snapshot = RuntimeSceneChildrenSnapshot {
-        parent_object_address: helper.parent_object_address,
-        children: helper.children.into_iter().map(map_scene_node_summary).collect(),
-    };
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_children(runtime_session.as_ref(), object_address)?;
     log_scene_duration(
         "load_scene_children",
         started_at,
@@ -199,7 +147,6 @@ pub(super) fn load_scene_children(
 }
 
 pub(super) fn load_scene_children_page(
-    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     offset: usize,
@@ -207,35 +154,13 @@ pub(super) fn load_scene_children_page(
 ) -> Result<RuntimeSceneChildrenPageSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneChildrenPageResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneObjectChildrenPageLoad,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-children-page".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-                "--object-address".into(),
-                object_address.to_string(),
-                "--offset".into(),
-                offset.to_string(),
-                "--limit".into(),
-                limit.to_string(),
-            ],
-        },
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_children_page(
+        runtime_session.as_ref(),
+        object_address,
+        offset,
+        limit,
     )?;
-
-    let snapshot = RuntimeSceneChildrenPageSnapshot {
-        generated_at: helper.generated_at,
-        parent_object_address: helper.parent_object_address,
-        offset: helper.offset,
-        total_count: helper.total_count,
-        next_offset: helper.next_offset,
-        children: helper.children.into_iter().map(map_scene_node_summary).collect(),
-    };
     log_scene_duration(
         "load_scene_children_page",
         started_at,
@@ -252,45 +177,13 @@ pub(super) fn load_scene_children_page(
 }
 
 pub(super) fn load_scene_inspector(
-    app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneInspectorResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneObjectInspect,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-inspect".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-                "--object-address".into(),
-                object_address.to_string(),
-            ],
-        },
-    )?;
-
-    let snapshot = RuntimeSceneObjectInspectorSnapshot {
-        generated_at: helper.generated_at,
-        scene_handle: helper.scene_handle,
-        scene_name: helper.scene_name,
-        scene_kind: helper.scene_kind.map(map_scene_kind),
-        object: map_scene_node_summary(helper.object),
-        parent: helper.parent.map(map_scene_node_summary),
-        hierarchy_path: helper
-            .hierarchy_path
-            .into_iter()
-            .map(map_hierarchy_path_entry)
-            .collect(),
-        children: helper.children.into_iter().map(map_scene_node_summary).collect(),
-        components: helper.components.into_iter().map(map_scene_component).collect(),
-        transform: helper.transform.map(map_transform_snapshot),
-    };
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_inspector(runtime_session.as_ref(), object_address)?;
     log_scene_duration(
         "load_scene_inspector",
         started_at,
@@ -306,43 +199,13 @@ pub(super) fn load_scene_inspector(
 }
 
 pub(super) fn load_scene_inspector_header(
-    app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneObjectInspectorHeaderSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneInspectorHeaderResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneObjectInspectHeader,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-inspect-header".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-                "--object-address".into(),
-                object_address.to_string(),
-            ],
-        },
-    )?;
-
-    let snapshot = RuntimeSceneObjectInspectorHeaderSnapshot {
-        generated_at: helper.generated_at,
-        scene_handle: helper.scene_handle,
-        scene_name: helper.scene_name,
-        scene_kind: helper.scene_kind.map(map_scene_kind),
-        object: map_scene_node_summary(helper.object),
-        parent: helper.parent.map(map_scene_node_summary),
-        hierarchy_path: helper
-            .hierarchy_path
-            .into_iter()
-            .map(map_hierarchy_path_entry)
-            .collect(),
-        transform: helper.transform.map(map_transform_snapshot),
-    };
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_inspector_header(runtime_session.as_ref(), object_address)?;
     log_scene_duration(
         "load_scene_inspector_header",
         started_at,
@@ -352,7 +215,6 @@ pub(super) fn load_scene_inspector_header(
 }
 
 pub(super) fn load_scene_inspector_children_page(
-    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     offset: usize,
@@ -360,35 +222,13 @@ pub(super) fn load_scene_inspector_children_page(
 ) -> Result<RuntimeSceneChildrenPageSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneChildrenPageResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneObjectInspectChildrenPage,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-inspect-children-page".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-                "--object-address".into(),
-                object_address.to_string(),
-                "--offset".into(),
-                offset.to_string(),
-                "--limit".into(),
-                limit.to_string(),
-            ],
-        },
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_inspector_children_page(
+        runtime_session.as_ref(),
+        object_address,
+        offset,
+        limit,
     )?;
-
-    let snapshot = RuntimeSceneChildrenPageSnapshot {
-        generated_at: helper.generated_at,
-        parent_object_address: helper.parent_object_address,
-        offset: helper.offset,
-        total_count: helper.total_count,
-        next_offset: helper.next_offset,
-        children: helper.children.into_iter().map(map_scene_node_summary).collect(),
-    };
     log_scene_duration(
         "load_scene_inspector_children_page",
         started_at,
@@ -405,7 +245,6 @@ pub(super) fn load_scene_inspector_children_page(
 }
 
 pub(super) fn load_scene_inspector_components_page(
-    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     offset: usize,
@@ -413,35 +252,13 @@ pub(super) fn load_scene_inspector_components_page(
 ) -> Result<RuntimeSceneComponentsPageSnapshot, String> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
-    let helper: HelperSceneComponentsPageResponse = execute_json_with(
-        &AppBridgeTransport::new(state),
-        app,
-        BridgeRequest {
-            operation: BridgeOperation::SceneObjectInspectComponentsPage,
-            executable_name: "UnityMonoBridge.exe",
-            args: vec![
-                "--operation".into(),
-                "scene-inspect-components-page".into(),
-                "--pid".into(),
-                attached.pid.to_string(),
-                "--object-address".into(),
-                object_address.to_string(),
-                "--offset".into(),
-                offset.to_string(),
-                "--limit".into(),
-                limit.to_string(),
-            ],
-        },
+    let runtime_session = require_runtime_session(state)?;
+    let snapshot = native_scene::load_scene_inspector_components_page(
+        runtime_session.as_ref(),
+        object_address,
+        offset,
+        limit,
     )?;
-
-    let snapshot = RuntimeSceneComponentsPageSnapshot {
-        generated_at: helper.generated_at,
-        object_address: helper.object_address,
-        offset: helper.offset,
-        total_count: helper.total_count,
-        next_offset: helper.next_offset,
-        components: helper.components.into_iter().map(map_scene_component).collect(),
-    };
     log_scene_duration(
         "load_scene_inspector_components_page",
         started_at,
@@ -455,4 +272,19 @@ pub(super) fn load_scene_inspector_components_page(
         ),
     );
     Ok(snapshot)
+}
+
+pub(super) fn ensure_scene_query_runtime_ready(
+    state: &AppState,
+) -> Result<(), String> {
+    let runtime_session = require_runtime_session(state)?;
+    if runtime_session.runtime_api().is_none() {
+        return Err("Native runtime session is missing its runtime API".to_string());
+    }
+    Ok(())
+}
+
+fn require_runtime_session(state: &AppState) -> Result<Arc<RuntimeSession>, String> {
+    current_runtime_session(state)
+        .ok_or_else(|| "Native runtime session is unavailable".to_string())
 }

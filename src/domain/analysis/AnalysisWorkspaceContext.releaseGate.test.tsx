@@ -79,7 +79,7 @@ function createAttachedLifecycle(
       status: 'starting',
       runtime: session.runtime,
       capabilities: ['metadata', 'execution', 'scene-read'],
-      bridgeConnected: false,
+        connected: false,
       sessionKey,
       lastError: null,
       lastHeartbeatAt: null,
@@ -102,7 +102,7 @@ function createReadyLifecycle(
       status: 'ready',
       runtime: session.runtime,
       capabilities: ['metadata', 'execution', 'scene-read'],
-      bridgeConnected: true,
+        connected: true,
       sessionKey,
       lastError: null,
       lastHeartbeatAt: '2026-03-31T10:00:00.000Z',
@@ -228,7 +228,6 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     };
     const contractVersions: SystemContractVersions = {
       tauriCommandVersion: 1,
-      bridgeProtocolVersion: 2,
       analysisSchemaVersion: 2,
       workflowSchemaVersion: 1,
     };

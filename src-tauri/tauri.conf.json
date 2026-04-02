@@ -42,8 +42,7 @@
   "bundle": {
     "active": false,
     "resources": [
-      "bin/ManagedMetadataReader.exe",
-      "bin/UnityMonoBridge.exe"
+      "bin/ManagedMetadataReader.exe"
     ],
     "targets": "all"
   }

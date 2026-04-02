@@ -1,4 +1,5 @@
 use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
+use crate::kernel::workspace;
 use crate::state::AppState;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
@@ -12,10 +13,7 @@ fn same_metadata_source(left: &ProcessSession, right: &ProcessSession) -> bool {
 }
 
 pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
-    state.runtime_infra.bridge.reset();
-    state.scene_module.workspace.reset();
-    state.scene_module.children.reset();
-    state.scene_module.inspector.reset();
+    workspace::reset_for_new_attachment(state);
 
     let mut sys = System::new_all();
     sys.refresh_processes();

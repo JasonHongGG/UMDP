@@ -1,10 +1,10 @@
 pub mod analysis_store;
-pub mod bridge_client;
+pub mod runtime_kernel_store;
 pub mod scene_store;
 pub mod workspace_store;
 
 pub use analysis_store::AnalysisState;
-pub use bridge_client::BridgeClientState;
+pub use runtime_kernel_store::RuntimeKernelState;
 pub use scene_store::{
     SceneChildrenState, SceneInspectorState, SceneState,
 };
@@ -16,8 +16,8 @@ pub struct WorkspaceSessionState {
 }
 
 #[derive(Default)]
-pub struct RuntimeInfrastructureState {
-    pub bridge: BridgeClientState,
+pub struct RuntimeKernelModuleState {
+    pub runtime: RuntimeKernelState,
 }
 
 #[derive(Default)]
@@ -30,7 +30,7 @@ pub struct SceneModuleState {
 #[derive(Default)]
 pub struct AppState {
     pub workspace_session: WorkspaceSessionState,
-    pub runtime_infra: RuntimeInfrastructureState,
+    pub runtime_kernel: RuntimeKernelModuleState,
     pub scene_module: SceneModuleState,
 }
 
@@ -43,7 +43,6 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::bridge_client::should_retry_runtime_request;
     use crate::domain::analysis_models::{
         ProcessSession, RuntimeFlavor, RuntimeSceneChildrenTaskStatus,
         RuntimeSceneInspectorTaskStatus,
@@ -95,37 +94,30 @@ mod tests {
     }
 
     #[test]
-    fn workspace_marks_recovering_after_bridge_error_when_attached() {
+    fn workspace_marks_recovering_after_runtime_error_when_attached() {
         let workspace = WorkspaceState::default();
         workspace.set_attached_without_snapshot(sample_session());
-        workspace.set_bridge_error("bridge dropped");
+        workspace.set_runtime_error("runtime session dropped");
 
         let current = workspace.current();
         assert_eq!(current.resource_revision, 2);
         assert_eq!(current.status, WorkspaceLifecycleStatus::Recovering);
         assert_eq!(current.runtime_session.status, RuntimeSessionStatus::Recovering);
-        assert!(!current.runtime_session.bridge_connected);
-        assert_eq!(current.runtime_session.last_error.as_deref(), Some("bridge dropped"));
+        assert!(!current.runtime_session.connected);
+        assert_eq!(current.runtime_session.last_error.as_deref(), Some("runtime session dropped"));
     }
 
     #[test]
-    fn workspace_marks_bridge_connected_and_heartbeats() {
+    fn workspace_touch_promotes_runtime_session_and_heartbeats() {
         let workspace = WorkspaceState::default();
         workspace.set_attached_without_snapshot(sample_session());
+        workspace.set_ready(Some(sample_session()));
 
-        let connected = workspace.mark_runtime_bridge_connected();
-        assert!(connected.bridge_connected);
+        let connected = workspace.touch_runtime_session();
+        assert!(connected.connected);
         assert!(connected.last_heartbeat_at.is_some());
         assert_eq!(connected.session_key.as_deref(), Some("777:Unity.exe:Mono"));
-        assert_eq!(workspace.current().resource_revision, 2);
-    }
-
-    #[test]
-    fn runtime_request_retry_only_triggers_for_transport_failures() {
-        assert!(should_retry_runtime_request("Failed to read bridge response payload"));
-        assert!(should_retry_runtime_request("Persistent bridge session closed unexpectedly"));
-        assert!(!should_retry_runtime_request("runtime exception"));
-        assert!(!should_retry_runtime_request("method invocation failed"));
+        assert_eq!(workspace.current().resource_revision, 3);
     }
 
     #[test]

@@ -5,6 +5,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneObjectInspectorTaskState,
     SceneRefreshStatus, SceneWorkspaceState,
 };
+use crate::infrastructure::clock::current_timestamp;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 
@@ -239,7 +240,7 @@ impl SceneChildrenState {
             }
         }
 
-        let now = crate::services::analysis::bridge_gateway::current_timestamp();
+        let now = current_timestamp();
         let mut state = RuntimeSceneObjectChildrenTaskState {
             session_key: store.active_session_key.clone(),
             parent_object_address: parent_object_address.clone(),
@@ -299,7 +300,7 @@ impl SceneChildrenState {
         current.resource_revision = next_revision;
         current.status = RuntimeSceneChildrenTaskStatus::Cancelled;
         current.is_stale = true;
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -339,7 +340,7 @@ impl SceneChildrenState {
         } else {
             RuntimeSceneChildrenTaskStatus::Ready
         };
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -369,7 +370,7 @@ impl SceneChildrenState {
         current.resource_revision = next_revision;
         current.status = RuntimeSceneChildrenTaskStatus::Ready;
         current.next_offset = None;
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
 
         let ready_state = current.clone();
         store.cache.insert(
@@ -410,7 +411,7 @@ impl SceneChildrenState {
         current.resource_revision = next_revision;
         current.status = RuntimeSceneChildrenTaskStatus::Error;
         current.error_message = Some(error_message);
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -449,7 +450,7 @@ impl SceneChildrenState {
                 ) {
                     task.status = RuntimeSceneChildrenTaskStatus::Cancelled;
                 }
-                task.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+                task.updated_at = current_timestamp();
             }
         }
     }
@@ -474,7 +475,7 @@ impl SceneInspectorState {
         ensure_inspector_session(&mut store, session_key.as_deref());
         store.next_task_id += 1;
         let task_id = store.next_task_id;
-        let now = crate::services::analysis::bridge_gateway::current_timestamp();
+        let now = current_timestamp();
 
         let mut state = RuntimeSceneObjectInspectorTaskState {
             task_id,
@@ -527,7 +528,7 @@ impl SceneInspectorState {
         current.resource_revision = next_revision;
         current.status = RuntimeSceneInspectorTaskStatus::Cancelled;
         current.is_stale = true;
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -557,7 +558,7 @@ impl SceneInspectorState {
         current.resource_revision = next_revision;
         current.header = Some(header);
         current.status = RuntimeSceneInspectorTaskStatus::ChildrenLoading;
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -596,7 +597,7 @@ impl SceneInspectorState {
         } else {
             RuntimeSceneInspectorTaskStatus::ComponentsLoading
         };
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -635,7 +636,7 @@ impl SceneInspectorState {
         } else {
             RuntimeSceneInspectorTaskStatus::Ready
         };
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -665,7 +666,7 @@ impl SceneInspectorState {
         current.status = RuntimeSceneInspectorTaskStatus::Ready;
         current.children_next_offset = None;
         current.components_next_offset = None;
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
 
         let ready_state = current.clone();
         let cache_entry = ready_state.header.clone().map(|header| {
@@ -713,7 +714,7 @@ impl SceneInspectorState {
         current.resource_revision = next_revision;
         current.status = RuntimeSceneInspectorTaskStatus::Error;
         current.error_message = Some(error_message);
-        current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+        current.updated_at = current_timestamp();
         Some(current.clone())
     }
 
@@ -745,7 +746,7 @@ impl SceneInspectorState {
             ) {
                 current.status = RuntimeSceneInspectorTaskStatus::Cancelled;
             }
-            current.updated_at = crate::services::analysis::bridge_gateway::current_timestamp();
+            current.updated_at = current_timestamp();
         }
     }
 

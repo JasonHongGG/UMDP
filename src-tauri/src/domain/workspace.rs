@@ -37,7 +37,7 @@ pub struct RuntimeSessionState {
     pub status: RuntimeSessionStatus,
     pub runtime: RuntimeFlavor,
     pub capabilities: Vec<RuntimeCapability>,
-    pub bridge_connected: bool,
+    pub connected: bool,
     pub session_key: Option<String>,
     pub last_error: Option<String>,
     pub last_heartbeat_at: Option<String>,
@@ -49,7 +49,7 @@ impl Default for RuntimeSessionState {
             status: RuntimeSessionStatus::Idle,
             runtime: RuntimeFlavor::Unknown,
             capabilities: Vec::new(),
-            bridge_connected: false,
+            connected: false,
             session_key: None,
             last_error: None,
             last_heartbeat_at: None,
@@ -66,7 +66,7 @@ pub enum WorkspaceLifecycleStatus {
     AttachedWithoutSnapshot,
     SnapshotLoading,
     Ready,
-    BridgeError,
+    RuntimeError,
     Recovering,
 }
 
@@ -106,7 +106,6 @@ impl Default for WorkspaceLifecycleState {
 #[serde(rename_all = "camelCase")]
 pub struct SystemContractVersions {
     pub tauri_command_version: u32,
-    pub bridge_protocol_version: u32,
     pub analysis_schema_version: u32,
     pub workflow_schema_version: u32,
 }
@@ -114,7 +113,6 @@ pub struct SystemContractVersions {
 pub fn current_contract_versions() -> SystemContractVersions {
     SystemContractVersions {
         tauri_command_version: 1,
-        bridge_protocol_version: 2,
         analysis_schema_version: 2,
         workflow_schema_version: 1,
     }

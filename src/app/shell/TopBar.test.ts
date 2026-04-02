@@ -57,7 +57,7 @@ describe('TopBar', () => {
             ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
             status: 'ready',
             runtime: 'mono',
-            bridgeConnected: true,
+            connected: true,
           },
         },
       }));

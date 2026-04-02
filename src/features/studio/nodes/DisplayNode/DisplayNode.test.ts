@@ -8,7 +8,7 @@ import DisplayNodeDef from './DisplayNode';
 const getRuntimeInstanceFieldsMock = vi.fn();
 const getRuntimeStaticFieldsMock = vi.fn();
 
-vi.mock('@/features/studio/application/runtime/StudioRuntimeBridge', () => ({
+vi.mock('@/features/studio/application/runtime/StudioRuntimeGateway', () => ({
   getStudioRuntimeInstanceFields: (...args: unknown[]) => getRuntimeInstanceFieldsMock(...args),
   getStudioRuntimeStaticFields: (...args: unknown[]) => getRuntimeStaticFieldsMock(...args),
 }));

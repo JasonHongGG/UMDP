@@ -13,7 +13,7 @@ export interface WorkspacePageReadiness {
 }
 
 export interface WorkspaceResetNotice {
-  kind: 'session-changed' | 'detached' | 'recovering' | 'bridge-error' | 'snapshot-loading';
+  kind: 'session-changed' | 'detached' | 'recovering' | 'runtime-error' | 'snapshot-loading';
   tone: WorkspaceSignalTone;
   title: string;
   message: string;
@@ -28,7 +28,7 @@ function hasSceneCapability(workspace: WorkspaceLifecycleState) {
 }
 
 function hasInteractiveRuntime(workspace: WorkspaceLifecycleState) {
-  return workspace.runtimeSession.bridgeConnected
+  return workspace.runtimeSession.connected
     && (workspace.runtimeSession.status === 'ready' || workspace.runtimeSession.status === 'degraded');
 }
 
@@ -87,7 +87,7 @@ export function getWorkspacePageReadiness(
       sessionReady: true,
       catalogReady: true,
       selectionReady: false,
-      tone: workspace.status === 'recovering' || workspace.status === 'bridge-error' ? 'error' : 'loading',
+      tone: workspace.status === 'recovering' || workspace.status === 'runtime-error' ? 'error' : 'loading',
       title: page === 'scene' ? 'Selection Locked' : 'Runtime Locked',
       description: page === 'scene'
         ? 'Scene catalog is loaded, but runtime selection and mutations stay gated until the runtime session is healthy.'
@@ -160,14 +160,14 @@ export function describeWorkspaceResetNotice(
     };
   }
 
-  if (workspace.status === 'bridge-error') {
+  if (workspace.status === 'runtime-error') {
     return {
-      kind: 'bridge-error',
+      kind: 'runtime-error',
       tone: 'error',
-      title: 'Bridge Error',
+      title: 'Runtime Error',
       message: workspace.errorMessage
         ?? workspace.runtimeSession.lastError
-        ?? 'The runtime bridge is unavailable. Resource actions remain blocked until the bridge is healthy again.',
+        ?? 'The runtime session is unavailable. Resource actions remain blocked until the runtime is healthy again.',
     };
   }
 

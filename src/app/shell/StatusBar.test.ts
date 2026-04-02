@@ -46,8 +46,8 @@ describe('StatusBar', () => {
             ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
             status: 'recovering',
             runtime: 'il2cpp',
-            bridgeConnected: false,
-            lastError: 'bridge helper disconnected',
+            connected: false,
+            lastError: 'runtime session disconnected',
           },
         },
       }));
@@ -56,7 +56,7 @@ describe('StatusBar', () => {
     expect(container.textContent).toContain('Recovering');
     expect(container.textContent).toContain('il2cpp Runtime');
     expect(container.textContent).toContain('Runtime Recovering');
-    expect(container.textContent).toContain('bridge helper disconnected');
+    expect(container.textContent).toContain('runtime session disconnected');
   });
 
   it('prefers the active workspace task message over the runtime error', async () => {
@@ -102,15 +102,15 @@ describe('StatusBar', () => {
             ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
             status: 'recovering',
             runtime: 'il2cpp',
-            bridgeConnected: false,
-            lastError: 'bridge helper disconnected',
+            connected: false,
+            lastError: 'runtime session disconnected',
           },
         },
       }));
     });
 
     expect(container.textContent).toContain('Refreshing scene workspace (2/5)');
-    expect(container.textContent).not.toContain('bridge helper disconnected');
+    expect(container.textContent).not.toContain('runtime session disconnected');
     expect(container.textContent).not.toContain('Resource state is rebuilding.');
   });
 
@@ -141,7 +141,7 @@ describe('StatusBar', () => {
             ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
             status: 'ready',
             runtime: 'mono',
-            bridgeConnected: true,
+            connected: true,
             sessionKey: 'session-2',
           },
         },

@@ -42,7 +42,7 @@ describe('workspace page readiness', () => {
       runtimeSession: {
         ...base.runtimeSession,
         status: 'starting',
-        bridgeConnected: false,
+        connected: false,
       },
     });
     expect(catalogLoaded.inspector.selectionReady).toBe(true);
@@ -56,7 +56,7 @@ describe('workspace page readiness', () => {
       runtimeSession: {
         ...base.runtimeSession,
         status: 'ready',
-        bridgeConnected: true,
+        connected: true,
       },
     });
     expect(fullyReady.scene.selectionReady).toBe(true);
@@ -81,7 +81,7 @@ describe('workspace page readiness', () => {
         ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
         status: 'ready' as const,
         runtime: 'mono' as const,
-        bridgeConnected: true,
+        connected: true,
         sessionKey: 'session-2',
       },
     };
@@ -90,7 +90,7 @@ describe('workspace page readiness', () => {
     expect(describeWorkspaceResetNotice({
       ...nextReady,
       status: 'recovering',
-      errorMessage: 'bridge dropped',
+      errorMessage: 'runtime session dropped',
     }, 'session-2')?.kind).toBe('recovering');
   });
 });

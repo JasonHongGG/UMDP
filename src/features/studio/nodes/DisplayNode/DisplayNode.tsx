@@ -36,7 +36,7 @@ import {
   type DisplayNodeData,
 } from './displayNodeModel';
 import { getClassInfoPayloadFromValue } from '../CallFunctionNode/callFunctionNodeModel';
-import { getStudioRuntimeInstanceFields, getStudioRuntimeStaticFields } from '@/features/studio/application/runtime/StudioRuntimeBridge';
+import { getStudioRuntimeInstanceFields, getStudioRuntimeStaticFields } from '@/features/studio/application/runtime/StudioRuntimeGateway';
 
 function createResolvedMemberValueMap(snapshot: RuntimeInstanceFieldSnapshot): Record<string, ResolvedMemberRuntimeValue> {
   return Object.fromEntries(

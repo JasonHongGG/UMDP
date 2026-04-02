@@ -31,9 +31,9 @@ export function useAnalysisRuntimeState({ repository, processSession, analysisSn
   const shouldClearRuntimeState = !processSession
     || !analysisSnapshot
     || !workspaceLifecycle.hasSnapshot
-    || workspaceLifecycle.status === 'bridge-error'
+    || workspaceLifecycle.status === 'runtime-error'
     || workspaceLifecycle.status === 'recovering'
-    || !workspaceLifecycle.runtimeSession.bridgeConnected
+    || !workspaceLifecycle.runtimeSession.connected
     || workspaceLifecycle.runtimeSession.status === 'recovering'
     || workspaceLifecycle.runtimeSession.status === 'error';
 

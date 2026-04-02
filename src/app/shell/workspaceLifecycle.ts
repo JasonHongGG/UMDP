@@ -11,7 +11,7 @@ export const EMPTY_WORKSPACE_LIFECYCLE: WorkspaceLifecycleState = {
     status: 'idle',
     runtime: 'unknown',
     capabilities: ['metadata'],
-    bridgeConnected: false,
+    connected: false,
     sessionKey: null,
     lastError: null,
     lastHeartbeatAt: null,
@@ -32,8 +32,8 @@ export function getWorkspaceLifecycleLabel(state: WorkspaceLifecycleState) {
       return 'Loading Snapshot';
     case 'ready':
       return 'Ready';
-    case 'bridge-error':
-      return 'Bridge Error';
+    case 'runtime-error':
+      return 'Runtime Error';
     case 'recovering':
       return 'Recovering';
     default:
@@ -50,7 +50,7 @@ export function getWorkspaceLifecycleTone(state: WorkspaceLifecycleState) {
     case 'selecting-process':
     case 'recovering':
       return 'loading';
-    case 'bridge-error':
+    case 'runtime-error':
       return 'error';
     case 'attached-without-snapshot':
       return 'warning';

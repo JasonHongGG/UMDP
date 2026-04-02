@@ -7,7 +7,7 @@ export interface AnalysisSession {
 
 export interface RuntimeSession {
   status: 'idle' | 'starting' | 'ready' | 'degraded' | 'recovering' | 'error';
-  bridgeConnected: boolean;
+  connected: boolean;
   capabilityKeys: string[];
   lastError: string | null;
 }
@@ -24,7 +24,7 @@ export function createInitialAnalysisSession(): AnalysisSession {
 export function createInitialRuntimeSession(): RuntimeSession {
   return {
     status: 'idle',
-    bridgeConnected: false,
+    connected: false,
     capabilityKeys: [],
     lastError: null,
   };

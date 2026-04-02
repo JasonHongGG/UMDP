@@ -42,7 +42,7 @@ function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): Work
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'ready',
       runtime: 'mono',
-      bridgeConnected: true,
+      connected: true,
       sessionKey: 'session-1',
       ...overrides.runtimeSession,
     },

@@ -1,8 +1,8 @@
 use crate::domain::analysis_models::{AnalysisSnapshot, ProcessInfo, ProcessSession};
 use crate::domain::workspace::{current_contract_versions, SystemContractVersions, WorkspaceLifecycleState};
+use crate::kernel::runtime::access as runtime_access;
 use crate::services::analysis::{
-    metadata_query_service, process_catalog_service, runtime_session_service,
-    session_service,
+    metadata_query_service, process_catalog_service, session_service,
 };
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -16,7 +16,7 @@ pub fn get_contract_versions() -> SystemContractVersions {
 }
 
 pub fn attach_to_process(
-    app: &AppHandle,
+    _app: &AppHandle,
     state: &AppState,
     pid: u32,
     name: String,
@@ -29,11 +29,17 @@ pub fn attach_to_process(
                 .workspace_session
                 .lifecycle
                 .set_attached_without_snapshot(session.clone());
-            runtime_session_service::ensure_bridge_session_started(app, state)?;
+            if let Err(error) = runtime_access::refresh_runtime_session(state, &session) {
+                eprintln!(
+                    "[runtime][session] failed to initialize native runtime session for pid={} error={}",
+                    session.pid,
+                    error
+                );
+            }
             Ok(session)
         }
         Err(error) => {
-            state.workspace_session.lifecycle.set_bridge_error(error.clone());
+            state.workspace_session.lifecycle.set_runtime_error(error.clone());
             Err(error)
         }
     }
@@ -52,17 +58,13 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<AnalysisSn
             Ok(snapshot)
         }
         Err(error) => {
-            state.workspace_session.lifecycle.set_bridge_error(error.clone());
+            state.workspace_session.lifecycle.set_runtime_error(error.clone());
             Err(error)
         }
     }
 }
 
 pub fn get_workspace_lifecycle(state: &AppState) -> WorkspaceLifecycleState {
-    if state.runtime_infra.bridge.is_connected() {
-        state.workspace_session.lifecycle.mark_runtime_bridge_connected();
-    }
-
     state.workspace_session.lifecycle.touch_runtime_session();
     state.workspace_session.lifecycle.current()
 }

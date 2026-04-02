@@ -1,10 +1,7 @@
-use crate::services::analysis::executable_resolver::find_bundled_executable;
 use crate::domain::analysis_models::{
-    AnalysisSnapshot, ClassDescriptor, ProcessSession, RuntimeFieldSetFailureKind,
-    RuntimeInvokeFailureKind,
+    AnalysisSnapshot, ClassDescriptor, ProcessSession,
 };
 use crate::state::AppState;
-use tauri::AppHandle;
 
 pub fn ensure_attached_session(state: &AppState) -> Result<ProcessSession, String> {
     state
@@ -42,67 +39,9 @@ where
             state.workspace_session.lifecycle.touch_runtime_session();
         }
         Err(error) => {
-            state.workspace_session.lifecycle.set_bridge_error(error.clone());
+            state.workspace_session.lifecycle.set_runtime_error(error.clone());
         }
     }
 
     result
-}
-
-pub fn ensure_bridge_session_started(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    let executable = find_bundled_executable(app, "UnityMonoBridge.exe")?;
-    state.runtime_infra.bridge.ensure_runtime_session(executable)?;
-    state.workspace_session.lifecycle.mark_runtime_bridge_connected();
-    Ok(())
-}
-
-pub fn ensure_scene_bridge_session_started(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    ensure_bridge_session_started(app, state)
-}
-
-fn is_bridge_parse_error(error: &str) -> bool {
-    error.contains("parse")
-}
-
-fn is_bridge_launch_error(error: &str) -> bool {
-    error.contains("resolve") || error.contains("launch")
-}
-
-pub fn classify_invoke_bridge_error(error: &str) -> RuntimeInvokeFailureKind {
-    if is_bridge_parse_error(error) {
-        RuntimeInvokeFailureKind::BridgeParseFailed
-    } else if is_bridge_launch_error(error) {
-        RuntimeInvokeFailureKind::BridgeLaunchFailed
-    } else {
-        RuntimeInvokeFailureKind::BridgeFailed
-    }
-}
-
-pub fn classify_field_set_bridge_error(error: &str) -> RuntimeFieldSetFailureKind {
-    if is_bridge_parse_error(error) {
-        RuntimeFieldSetFailureKind::BridgeParseFailed
-    } else if is_bridge_launch_error(error) {
-        RuntimeFieldSetFailureKind::BridgeLaunchFailed
-    } else {
-        RuntimeFieldSetFailureKind::BridgeFailed
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn classify_invoke_bridge_errors_is_stable() {
-        assert!(matches!(classify_invoke_bridge_error("Failed to parse response"), RuntimeInvokeFailureKind::BridgeParseFailed));
-        assert!(matches!(classify_invoke_bridge_error("Failed to launch helper"), RuntimeInvokeFailureKind::BridgeLaunchFailed));
-        assert!(matches!(classify_invoke_bridge_error("runtime exception"), RuntimeInvokeFailureKind::BridgeFailed));
-    }
-
-    #[test]
-    fn classify_field_set_bridge_errors_is_stable() {
-        assert!(matches!(classify_field_set_bridge_error("parse error"), RuntimeFieldSetFailureKind::BridgeParseFailed));
-        assert!(matches!(classify_field_set_bridge_error("resolve executable"), RuntimeFieldSetFailureKind::BridgeLaunchFailed));
-        assert!(matches!(classify_field_set_bridge_error("write failed"), RuntimeFieldSetFailureKind::BridgeFailed));
-    }
 }

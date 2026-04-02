@@ -51,7 +51,7 @@ function createReadyLifecycle() {
     runtimeSession: {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'ready' as const,
-      bridgeConnected: true,
+      connected: true,
     },
   };
 }
@@ -118,7 +118,7 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', bridgeConnected: false } },
+        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', connected: false } },
       }));
     });
 
@@ -148,7 +148,7 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', bridgeConnected: false } },
+        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', connected: false } },
       }));
     });
 
@@ -164,14 +164,14 @@ describe('useStudioRuntimeState', () => {
           ...EMPTY_WORKSPACE_LIFECYCLE,
           status: 'recovering',
           hasSnapshot: true,
-          errorMessage: 'bridge helper disconnected',
+          errorMessage: 'runtime session disconnected',
           runtime: 'mono',
           runtimeSession: {
             ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
             status: 'recovering',
             runtime: 'mono',
-            bridgeConnected: false,
-            lastError: 'bridge helper disconnected',
+            connected: false,
+            lastError: 'runtime session disconnected',
             sessionKey: 'session-1',
           },
         },
@@ -191,11 +191,11 @@ describe('useStudioRuntimeState', () => {
       workspace: expect.objectContaining({
         status: 'recovering',
         hasSnapshot: true,
-        errorMessage: 'bridge helper disconnected',
+        errorMessage: 'runtime session disconnected',
         runtimeSession: expect.objectContaining({
           status: 'recovering',
-          bridgeConnected: false,
-          lastError: 'bridge helper disconnected',
+          connected: false,
+          lastError: 'runtime session disconnected',
           sessionKey: 'session-1',
         }),
       }),

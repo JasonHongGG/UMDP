@@ -21,7 +21,7 @@ import type {
 import type { RuntimeMethodInvokeRequest, RuntimeMethodInvokeResult } from '@/domain/analysis/contracts';
 import { parseCallFunctionNodeDocumentState, type CallFunctionClassInfoQueryState, type ValidationIssue, type WorkflowJsonValue } from '@/domain/studio/contracts';
 import type { StableId } from '@/domain/contracts/shared-identity';
-import { invokeStudioRuntimeMethod } from '@/features/studio/application/runtime/StudioRuntimeBridge';
+import { invokeStudioRuntimeMethod } from '@/features/studio/application/runtime/StudioRuntimeGateway';
 import type { StudioNodeQueryContext } from '@/features/studio/core/queryTypes';
 import { materializeNodeQuerySnapshot } from '@/features/studio/core/graphInterpreter';
 import { CallFunctionNodeCanvas } from './CallFunctionNodeCanvas';

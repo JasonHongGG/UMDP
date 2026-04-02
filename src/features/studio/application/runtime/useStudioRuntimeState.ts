@@ -14,7 +14,7 @@ interface StudioExecutionWorkspaceDiagnostics {
   errorMessage: string | null;
   runtimeSession: {
     status: WorkspaceLifecycleState['runtimeSession']['status'];
-    bridgeConnected: boolean;
+    connected: boolean;
     lastError: string | null;
     sessionKey: string | null;
   };
@@ -44,7 +44,7 @@ function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleSt
     errorMessage: workspaceLifecycle.errorMessage,
     runtimeSession: {
       status: workspaceLifecycle.runtimeSession.status,
-      bridgeConnected: workspaceLifecycle.runtimeSession.bridgeConnected,
+      connected: workspaceLifecycle.runtimeSession.connected,
       lastError: workspaceLifecycle.runtimeSession.lastError,
       sessionKey: workspaceLifecycle.runtimeSession.sessionKey,
     },
@@ -66,10 +66,10 @@ function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleSt
     };
   }
 
-  if (!workspaceLifecycle.runtimeSession.bridgeConnected) {
+  if (!workspaceLifecycle.runtimeSession.connected) {
     return {
       canExecute: false,
-      blockedReason: 'Runtime bridge is disconnected.',
+      blockedReason: 'Runtime session is disconnected.',
       diagnostics,
     };
   }
@@ -154,7 +154,7 @@ export function useStudioRuntimeState(
     setNodeStates({});
     setNodeSnapshots({});
     reportDocumentFeedback({
-      tone: workspaceLifecycle.status === 'recovering' || workspaceLifecycle.status === 'bridge-error' ? 'warning' : 'info',
+      tone: workspaceLifecycle.status === 'recovering' || workspaceLifecycle.status === 'runtime-error' ? 'warning' : 'info',
       title: 'Studio Runtime Locked',
       description: workspaceExecutionReadiness.blockedReason ?? 'Studio runtime execution is currently unavailable.',
     });

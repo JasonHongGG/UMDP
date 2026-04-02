@@ -77,7 +77,7 @@ export function StatusBar({ workspace, tasks, resetNotice = null }: StatusBarPro
             {workspace.runtime} Runtime
           </span>
         ) : null}
-        <span className={`flex items-center gap-1 ${workspace.runtimeSession.bridgeConnected ? 'text-emerald-400' : 'text-amber-300'}`}>
+        <span className={`flex items-center gap-1 ${workspace.runtimeSession.connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-current" />
           {runtimeLabel}
         </span>

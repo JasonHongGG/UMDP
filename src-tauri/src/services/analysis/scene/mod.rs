@@ -1,5 +1,4 @@
 mod events;
-mod mapping;
 mod mutation;
 mod query;
 mod tasks;

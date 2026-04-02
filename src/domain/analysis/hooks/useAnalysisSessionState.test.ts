@@ -164,7 +164,7 @@ describe('useAnalysisSessionState', () => {
           status: 'ready',
           runtime: 'mono',
           capabilities: ['metadata', 'execution', 'method-invoke'],
-          bridgeConnected: true,
+            connected: true,
           sessionKey: 'session-1',
           lastError: null,
           lastHeartbeatAt: '2026-03-22T12:00:01.000Z',
@@ -202,9 +202,9 @@ describe('useAnalysisSessionState', () => {
     });
   });
 
-  it('falls back to a bridge-error lifecycle when attach fails', async () => {
+  it('falls back to a runtime-error lifecycle when attach fails', async () => {
     const repository = createRepository({
-      attachToProcess: vi.fn().mockRejectedValue(new Error('bridge failed to attach')),
+      attachToProcess: vi.fn().mockRejectedValue(new Error('runtime session failed to attach')),
       getWorkspaceLifecycle: vi.fn().mockRejectedValue(new Error('workspace unavailable')),
     });
     const onResetWorkspace = vi.fn();
@@ -224,12 +224,12 @@ describe('useAnalysisSessionState', () => {
       processSession: null,
       analysisSnapshot: null,
       loadingImages: false,
-      attachError: 'bridge failed to attach',
+      attachError: 'runtime session failed to attach',
       workspaceLifecycle: {
-        status: 'bridge-error',
+        status: 'runtime-error',
         runtime: 'unknown',
         hasSnapshot: false,
-        errorMessage: 'bridge failed to attach',
+        errorMessage: 'runtime session failed to attach',
       },
     });
   });
@@ -296,7 +296,7 @@ describe('useAnalysisSessionState', () => {
             status: 'ready',
             runtime: 'mono',
             capabilities: ['metadata', 'execution'],
-            bridgeConnected: true,
+            connected: true,
             sessionKey: 'session-focus',
             lastError: null,
             lastHeartbeatAt: '2026-03-22T12:04:00.000Z',
@@ -305,28 +305,28 @@ describe('useAnalysisSessionState', () => {
         .mockResolvedValueOnce(createLifecycle({
           status: 'recovering',
           runtime: 'mono',
-          errorMessage: 'bridge heartbeat missed',
+          errorMessage: 'runtime heartbeat missed',
           runtimeSession: {
             status: 'recovering',
             runtime: 'mono',
             capabilities: ['metadata', 'execution'],
-            bridgeConnected: false,
+            connected: false,
             sessionKey: 'session-2',
-            lastError: 'bridge heartbeat missed',
+            lastError: 'runtime heartbeat missed',
             lastHeartbeatAt: '2026-03-22T12:05:00.000Z',
           },
         }))
         .mockResolvedValue(createLifecycle({
           status: 'recovering',
           runtime: 'mono',
-          errorMessage: 'bridge heartbeat missed',
+          errorMessage: 'runtime heartbeat missed',
           runtimeSession: {
             status: 'recovering',
             runtime: 'mono',
             capabilities: ['metadata', 'execution'],
-            bridgeConnected: false,
+            connected: false,
             sessionKey: 'session-2',
-            lastError: 'bridge heartbeat missed',
+            lastError: 'runtime heartbeat missed',
             lastHeartbeatAt: '2026-03-22T12:05:00.000Z',
           },
         })),
@@ -351,11 +351,11 @@ describe('useAnalysisSessionState', () => {
     expect(repository.getWorkspaceLifecycle).toHaveBeenCalledTimes(4);
     expect(latestState?.workspaceLifecycle).toMatchObject({
       status: 'recovering',
-      errorMessage: 'bridge heartbeat missed',
+      errorMessage: 'runtime heartbeat missed',
       runtimeSession: {
         status: 'recovering',
-        bridgeConnected: false,
-        lastError: 'bridge heartbeat missed',
+        connected: false,
+        lastError: 'runtime heartbeat missed',
       },
     });
   });

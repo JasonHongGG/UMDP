@@ -110,7 +110,7 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
         setAttachError(toErrorMessage(error));
         setLoadingImages(false);
         await refreshWorkspaceLifecycle({
-          status: 'bridge-error',
+          status: 'runtime-error',
           processSession: null,
           runtime: 'unknown',
           hasSnapshot: false,

@@ -2,6 +2,7 @@ use super::events::{
     emit_scene_children_task_state, emit_scene_inspector_task_state,
 };
 use super::query::{
+    ensure_scene_query_runtime_ready,
     load_scene_children_page, load_scene_inspector_children_page,
     load_scene_inspector_components_page, load_scene_inspector_header,
 };
@@ -11,8 +12,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorTaskState,
 };
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_scene_bridge_session_started,
-    execute_runtime_operation,
+    ensure_attached_session, execute_runtime_operation,
 };
 use crate::state::AppState;
 use std::time::Instant;
@@ -29,7 +29,7 @@ pub fn start_scene_object_children_analysis(
 ) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
     let started_at = Instant::now();
     ensure_attached_session(state)?;
-    ensure_scene_bridge_session_started(app, state)?;
+    ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
 
     let task_start = state
@@ -98,7 +98,7 @@ pub fn start_scene_object_inspector_analysis(
 ) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
     let started_at = Instant::now();
     ensure_attached_session(state)?;
-    ensure_scene_bridge_session_started(app, state)?;
+    ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
 
     let task_start = state
@@ -167,7 +167,6 @@ fn run_scene_object_children_task(
     loop {
         let page = match execute_runtime_operation(state, || {
             load_scene_children_page(
-                app,
                 state,
                 object_address,
                 child_offset,
@@ -227,7 +226,7 @@ fn run_scene_object_inspector_task(
     session_key: Option<&str>,
 ) {
     let header = match execute_runtime_operation(state, || {
-        load_scene_inspector_header(app, state, object_address)
+        load_scene_inspector_header(state, object_address)
     }) {
         Ok(snapshot) => snapshot,
         Err(error) => {
@@ -254,7 +253,6 @@ fn run_scene_object_inspector_task(
     loop {
         let page = match execute_runtime_operation(state, || {
             load_scene_inspector_children_page(
-                app,
                 state,
                 object_address,
                 child_offset,
@@ -297,7 +295,6 @@ fn run_scene_object_inspector_task(
     loop {
         let page = match execute_runtime_operation(state, || {
             load_scene_inspector_components_page(
-                app,
                 state,
                 object_address,
                 component_offset,

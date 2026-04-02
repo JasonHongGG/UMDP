@@ -9,8 +9,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:contracts": "vitest run src/shared/contracts/contractFixtures.test.ts src/shared/contracts/workspace.test.ts && cargo test --manifest-path src-tauri/Cargo.toml domain::contract_fixtures -- --nocapture",
-    "test:native-contracts": "node scripts/run-native-contract-fixtures.mjs",
-    "test:release-gate": "npm run test:contracts && npm run test:native-contracts && npm run test:run && cargo test --manifest-path src-tauri/Cargo.toml && dotnet test tools/ManagedMetadataReader.Tests/ManagedMetadataReader.Tests.csproj",
+    "test:release-gate": "npm run test:contracts && npm run test:run && cargo test --manifest-path src-tauri/Cargo.toml && dotnet test tools/ManagedMetadataReader.Tests/ManagedMetadataReader.Tests.csproj",
     "test:performance-gate": "vitest run src/core/studio/releaseGate.integration.test.ts",
     "preview": "vite preview",
     "tauri": "tauri"

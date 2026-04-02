@@ -29,7 +29,7 @@ import type { StudioNodeQueryContext } from '@/features/studio/core/queryTypes';
 import { materializeNodeQuerySnapshot } from '@/features/studio/core/graphInterpreter';
 import type { StableId } from '@/domain/contracts/shared-identity';
 import { getClassInfoPayloadFromValue } from '../CallFunctionNode/callFunctionNodeModel';
-import { setStudioRuntimeFieldValue } from '@/features/studio/application/runtime/StudioRuntimeBridge';
+import { setStudioRuntimeFieldValue } from '@/features/studio/application/runtime/StudioRuntimeGateway';
 import { EditorNodeCanvas } from './EditorNodeCanvas';
 import { EditorNodeEditor } from './EditorNodeEditor';
 import {

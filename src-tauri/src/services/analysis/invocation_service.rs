@@ -1,12 +1,11 @@
 use crate::domain::analysis_models::{
     MethodDescriptor, RuntimeInvokeFailureKind, RuntimeMethodInvokeRequest,
-    RuntimeMethodInvokeResult, RuntimeMethodInvokeValue,
+    RuntimeMethodInvokeResult,
 };
-use crate::services::analysis::bridge_gateway::{BridgeGateway, ProcessBridgeGateway};
-use crate::services::analysis::bridge_transport::AppBridgeTransport;
+use crate::kernel::runtime::access::current_runtime_session;
+use crate::kernel::runtime::invoke as native_invoke;
 use crate::services::analysis::runtime_session_service::{
-    classify_invoke_bridge_error, ensure_attached_session, ensure_metadata_snapshot,
-    execute_runtime_operation,
+    ensure_attached_session, ensure_metadata_snapshot, execute_runtime_operation,
 };
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -33,7 +32,7 @@ fn build_failure_result(
 }
 
 pub fn invoke_runtime_method(
-    app: &AppHandle,
+    _app: &AppHandle,
     state: &AppState,
     request: RuntimeMethodInvokeRequest,
 ) -> RuntimeMethodInvokeResult {
@@ -111,49 +110,41 @@ pub fn invoke_runtime_method(
         );
     }
 
-    let response = match execute_runtime_operation(state, || {
-        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
-        gateway.invoke_runtime_method(
-            app,
-            attached.pid,
-            &descriptor,
-            &method,
-            request.instance_address.as_deref(),
-            &request.arguments,
-        )
-    }) {
-        Ok(response) => response,
-        Err(error) => {
+    let runtime_session = match current_runtime_session(state) {
+        Some(runtime_session) => runtime_session,
+        None => {
             return build_failure_result(
                 &request,
-                classify_invoke_bridge_error(&error),
-                error,
+                RuntimeInvokeFailureKind::Unknown,
+                "Native runtime session is unavailable",
+                None,
+                Some(&method),
+            )
+        }
+    };
+    let runtime_api = match runtime_session.runtime_api() {
+        Some(runtime_api) => runtime_api,
+        None => {
+            return build_failure_result(
+                &request,
+                RuntimeInvokeFailureKind::Unknown,
+                "Native runtime session is missing its runtime API",
                 None,
                 Some(&method),
             );
         }
     };
 
-    RuntimeMethodInvokeResult {
-        class_stable_id: request.class_stable_id,
-        method_stable_id: request.method_stable_id,
-        method_name: response.method_name,
-        method_signature: response.method_signature,
-        return_type: response.return_type,
-        success: response.success,
-        failure_kind: if response.success {
-            RuntimeInvokeFailureKind::None
-        } else if response.exception.is_some() {
-            RuntimeInvokeFailureKind::RuntimeException
-        } else {
-            RuntimeInvokeFailureKind::Unknown
-        },
-        error: response.error,
-        exception: response.exception,
-        result: response.result.map(|value| RuntimeMethodInvokeValue {
-            kind: value.kind,
-            value: value.value,
-            object_address: value.object_address,
-        }),
+    match execute_runtime_operation(state, || {
+        native_invoke::invoke_runtime_method(runtime_api, attached.pid, &descriptor, &method, &request)
+    }) {
+        Ok(result) => result,
+        Err(error) => build_failure_result(
+            &request,
+            RuntimeInvokeFailureKind::Unknown,
+            error,
+            None,
+            Some(&method),
+        ),
     }
 }

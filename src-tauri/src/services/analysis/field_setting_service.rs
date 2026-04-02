@@ -1,11 +1,10 @@
 use crate::domain::analysis_models::{
     RuntimeFieldSetFailureKind, RuntimeFieldSetRequest, RuntimeFieldSetResult,
 };
-use crate::services::analysis::bridge_gateway::{BridgeGateway, ProcessBridgeGateway};
-use crate::services::analysis::bridge_transport::AppBridgeTransport;
+use crate::kernel::runtime::access::current_runtime_session;
+use crate::kernel::runtime::field_set as native_field_set;
 use crate::services::analysis::runtime_session_service::{
-    classify_field_set_bridge_error, ensure_attached_session, execute_runtime_operation,
-    resolve_class_descriptor,
+    ensure_attached_session, execute_runtime_operation, resolve_class_descriptor,
 };
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -30,21 +29,8 @@ fn build_failure_result(
     }
 }
 
-fn decode_failure_kind(raw: &str) -> RuntimeFieldSetFailureKind {
-    match raw {
-        "none" => RuntimeFieldSetFailureKind::None,
-        "field-not-found" => RuntimeFieldSetFailureKind::FieldNotFound,
-        "instance-required" => RuntimeFieldSetFailureKind::InstanceRequired,
-        "address-mismatch" => RuntimeFieldSetFailureKind::AddressMismatch,
-        "unsupported-type" => RuntimeFieldSetFailureKind::UnsupportedType,
-        "invalid-value" => RuntimeFieldSetFailureKind::InvalidValue,
-        "write-failed" => RuntimeFieldSetFailureKind::WriteFailed,
-        _ => RuntimeFieldSetFailureKind::Unknown,
-    }
-}
-
 pub fn set_runtime_field_value(
-    app: &AppHandle,
+    _app: &AppHandle,
     state: &AppState,
     request: RuntimeFieldSetRequest,
 ) -> RuntimeFieldSetResult {
@@ -82,35 +68,21 @@ pub fn set_runtime_field_value(
         );
     }
 
-    let response = match execute_runtime_operation(state, || {
-        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
-        gateway.set_runtime_field_value(app, attached.pid, &descriptor, &request)
+    match execute_runtime_operation(state, || {
+        let runtime_session = current_runtime_session(state)
+            .ok_or_else(|| "Native runtime session is unavailable".to_string())?;
+        let runtime_api = runtime_session
+            .runtime_api()
+            .ok_or_else(|| "Native runtime session is missing its runtime API".to_string())?;
+        native_field_set::set_runtime_field_value(runtime_api, attached.pid, &descriptor, &request)
     }) {
         Ok(response) => response,
         Err(error) => {
             return build_failure_result(
                 &request,
-                classify_field_set_bridge_error(&error),
+                RuntimeFieldSetFailureKind::Unknown,
                 error,
             );
         }
-    };
-
-    RuntimeFieldSetResult {
-        class_stable_id: request.class_stable_id,
-        member_stable_id: request.member_stable_id,
-        field_name: response.field_name,
-        field_type_name: response.field_type,
-        is_static: response.is_static,
-        address: response.address,
-        success: response.success,
-        failure_kind: if response.success {
-            RuntimeFieldSetFailureKind::None
-        } else {
-            decode_failure_kind(&response.failure_kind)
-        },
-        error: response.error,
-        previous_value: response.previous_value,
-        applied_value: response.applied_value,
     }
 }

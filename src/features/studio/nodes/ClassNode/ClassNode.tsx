@@ -26,7 +26,7 @@ import type { RuntimeInstanceFieldSnapshot } from '@/domain/analysis/contracts';
 import type { ValidationIssue, WorkflowJsonValue } from '@/domain/studio/contracts';
 import { parseClassNodeDocumentState } from '@/domain/studio/contracts';
 import { reconcileClassInfoSelection } from '@/domain/studio/editor';
-import { getStudioRuntimeInstanceFields } from '@/features/studio/application/runtime/StudioRuntimeBridge';
+import { getStudioRuntimeInstanceFields } from '@/features/studio/application/runtime/StudioRuntimeGateway';
 import type { StudioNodeQueryContext } from '@/features/studio/core/queryTypes';
 import { ClassNodeBindingEditor } from './ClassNodeBindingEditor';
 import { ClassNodeCanvas } from './ClassNodeCanvas';

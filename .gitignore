@@ -40,13 +40,8 @@ src-tauri/bin/
 Cargo.lock
 
 # ============================
-# C++ / MSBuild (UnityMonoBridge)
+# C++ / MSBuild
 # ============================
-tools/UnityMonoBridge/build/
-tools/UnityMonoBridge/x64/
-tools/UnityMonoBridge/.vs/
-tools/UnityMonoBridge/Debug/
-tools/UnityMonoBridge/Release/
 *.ncb
 *.sdf
 *.opensdf

@@ -14,14 +14,14 @@ describe('workspace contracts', () => {
         status: 'ready',
         runtime: 'unknown',
         capabilities: ['metadata', 'preview-query', 'execution'],
-        bridgeConnected: true,
+        connected: true,
         sessionKey: 'session-1',
         lastError: null,
         lastHeartbeatAt: '12345',
       },
     };
 
-    expect(state.runtimeSession.bridgeConnected).toBe(true);
+    expect(state.runtimeSession.connected).toBe(true);
     expect(state.runtimeSession.capabilities).toContain('preview-query');
     expect(state.runtimeSession.sessionKey).toBe('session-1');
     expect(state.resourceRevision).toBe(3);

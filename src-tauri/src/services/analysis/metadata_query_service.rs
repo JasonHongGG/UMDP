@@ -1,10 +1,10 @@
 use crate::domain::analysis_models::AnalysisSnapshot;
-use crate::services::analysis::bridge_gateway::{current_timestamp, BridgeGateway, ProcessBridgeGateway};
-use crate::services::analysis::bridge_transport::AppBridgeTransport;
+use crate::infrastructure::clock::current_timestamp;
+use crate::infrastructure::tooling::managed_metadata_reader;
 use crate::services::analysis::runtime_session_service::{ensure_attached_session, execute_runtime_operation};
-use crate::state::AppState;
-use tauri::AppHandle;
 use std::time::Instant;
+use tauri::AppHandle;
+use crate::state::AppState;
 
 fn same_metadata_source(left: &crate::domain::analysis_models::ProcessSession, right: &crate::domain::analysis_models::ProcessSession) -> bool {
     left.pid == right.pid
@@ -36,14 +36,13 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<AnalysisSn
 
     execute_runtime_operation(state, || {
         let started_at = Instant::now();
-        let gateway = ProcessBridgeGateway::new(AppBridgeTransport::new(state));
         let metadata_input = attached
             .data_dir
             .clone()
             .or(attached.managed_dir.clone())
             .ok_or_else(|| "Attached process has no Unity data directory or managed directory".to_string())?;
 
-        let mut response = gateway.load_all_metadata(app, &metadata_input)?;
+        let mut response = managed_metadata_reader::dump_all_metadata(app, &metadata_input)?;
 
         response.process = Some(attached.clone());
         response.generated_at = current_timestamp();
