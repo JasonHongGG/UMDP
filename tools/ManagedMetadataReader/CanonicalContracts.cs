@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ManagedMetadataReader;
 
 internal sealed class CanonicalAnalysisSnapshot
@@ -13,6 +15,7 @@ internal sealed class CanonicalAnalysisSnapshot
 internal sealed class CanonicalImageDescriptor
 {
     public string StableId { get; init; } = string.Empty;
+    [JsonIgnore]
     public string LegacyImageId { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public string Path { get; init; } = string.Empty;
@@ -21,6 +24,7 @@ internal sealed class CanonicalImageDescriptor
 internal class CanonicalFieldDescriptor
 {
     public string StableId { get; init; } = string.Empty;
+    [JsonIgnore]
     public string LegacyFieldName { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public string FieldType { get; init; } = string.Empty;
@@ -54,8 +58,9 @@ internal sealed class CanonicalMethodParameterDescriptor
 internal sealed class CanonicalClassDescriptor
 {
     public string StableId { get; init; } = string.Empty;
+    [JsonIgnore]
     public string LegacyClassId { get; init; } = string.Empty;
-    public string LegacyImageId { get; init; } = string.Empty;
+    public string BridgeImageName { get; init; } = string.Empty;
     public string ImageStableId { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public string Namespace { get; init; } = string.Empty;

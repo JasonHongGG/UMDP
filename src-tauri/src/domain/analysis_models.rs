@@ -115,6 +115,7 @@ pub struct RuntimeResolvedFieldDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct ClassDescriptor {
     pub stable_id: StableId,
+    #[serde(skip_serializing)]
     pub bridge_image_name: String,
     pub image_stable_id: StableId,
     pub name: String,

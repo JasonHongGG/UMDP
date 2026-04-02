@@ -245,7 +245,7 @@ internal sealed class ManagedMetadataCatalog : IDisposable
         {
             StableId = classStableId,
             LegacyClassId = classDetails.Id,
-            LegacyImageId = image.LegacyImageId,
+            BridgeImageName = image.LegacyImageId,
             ImageStableId = image.StableId,
             Name = classDetails.Name,
             Namespace = classDetails.Namespace,
