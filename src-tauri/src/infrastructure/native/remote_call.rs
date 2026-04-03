@@ -29,7 +29,12 @@ impl RemoteCallInvoker {
         }
     }
 
-    pub fn invoke(&self, function_address: usize, arguments: &[usize], attach_thread: bool) -> Result<usize, String> {
+    pub fn invoke(
+        &self,
+        function_address: usize,
+        arguments: &[usize],
+        attach_thread: bool,
+    ) -> Result<usize, String> {
         let block = self.memory.allocate(4096, PAGE_EXECUTE_READWRITE.0)?;
         let code_address = block.address;
         let return_address = code_address + 0x300;
@@ -76,7 +81,8 @@ impl RemoteCallInvoker {
         self.memory.write_value(return_address, &0usize)?;
         self.memory.write_value(thread_address, &0usize)?;
         self.memory.write_bytes(code_address, &code)?;
-        self.memory.protect(code_address, block.size, PAGE_EXECUTE_READWRITE.0)?;
+        self.memory
+            .protect(code_address, block.size, PAGE_EXECUTE_READWRITE.0)?;
         self.memory.execute(code_address)?;
         self.memory.read_value(return_address)
     }

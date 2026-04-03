@@ -1,5 +1,7 @@
 use crate::application::{metadata as metadata_application, workspace as workspace_application};
-use crate::domain::analysis_models::{AnalysisSnapshot, RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot};
+use crate::domain::analysis_models::{
+    AnalysisSnapshot, RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot,
+};
 use crate::infrastructure::logging::{self, DiagnosticsField};
 use crate::state::AppState;
 use std::fmt::Display;
@@ -15,7 +17,10 @@ fn field(name: &'static str, value: impl ToString) -> DiagnosticsField {
 }
 
 #[tauri::command]
-pub async fn load_all_metadata(app: AppHandle, _state: State<'_, AppState>) -> Result<AnalysisSnapshot, String> {
+pub async fn load_all_metadata(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+) -> Result<AnalysisSnapshot, String> {
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();

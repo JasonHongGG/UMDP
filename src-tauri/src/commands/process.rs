@@ -1,6 +1,6 @@
+use crate::application::workspace as workspace_application;
 use crate::domain::analysis_models::{ProcessInfo, ProcessSession};
 use crate::domain::workspace::{SystemContractVersions, WorkspaceLifecycleState};
-use crate::application::workspace as workspace_application;
 use crate::state::AppState;
 use tauri::{AppHandle, State};
 
@@ -15,7 +15,12 @@ pub fn get_contract_versions() -> SystemContractVersions {
 }
 
 #[tauri::command]
-pub fn attach_to_process(app: AppHandle, state: State<'_, AppState>, pid: u32, name: String) -> Result<ProcessSession, String> {
+pub fn attach_to_process(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    pid: u32,
+    name: String,
+) -> Result<ProcessSession, String> {
     workspace_application::attach_to_process(&app, &state, pid, name)
 }
 

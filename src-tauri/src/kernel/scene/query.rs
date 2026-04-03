@@ -1,14 +1,11 @@
 use crate::domain::analysis_models::{
-    RuntimeQuaternionSnapshot, RuntimeSceneBuildSettingsEntry,
-    RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenPageSnapshot,
-    RuntimeSceneChildrenSnapshot, RuntimeSceneComponentSummary,
-    RuntimeSceneComponentsPageSnapshot, RuntimeSceneDescriptor,
-    RuntimeSceneHierarchyPathEntry, RuntimeSceneKind,
-    RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
+    RuntimeQuaternionSnapshot, RuntimeSceneBuildSettingsEntry, RuntimeSceneCatalogSnapshot,
+    RuntimeSceneChildrenPageSnapshot, RuntimeSceneChildrenSnapshot, RuntimeSceneComponentSummary,
+    RuntimeSceneComponentsPageSnapshot, RuntimeSceneDescriptor, RuntimeSceneHierarchyPathEntry,
+    RuntimeSceneKind, RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
     RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
-    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneTransformSnapshot,
-    RuntimeSceneSelectionHint, RuntimeSceneTransformUpdate,
-    RuntimeVector3Snapshot,
+    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneSelectionHint, RuntimeSceneTransformSnapshot,
+    RuntimeSceneTransformUpdate, RuntimeVector3Snapshot,
 };
 use crate::infrastructure::clock::current_timestamp;
 use crate::infrastructure::native::memory::{RemoteAllocation, RemoteMemory};
@@ -269,10 +266,8 @@ impl<'a> SceneQueryKernel<'a> {
     }
 
     fn load_scene_catalog(&mut self) -> Result<RuntimeSceneCatalogSnapshot, String> {
-        let scene_manager_class = self.resolve_unity_class(
-            "UnityEngine.SceneManagement",
-            "SceneManager",
-        )?;
+        let scene_manager_class =
+            self.resolve_unity_class("UnityEngine.SceneManagement", "SceneManager")?;
         let scene_class = self.resolve_unity_class("UnityEngine.SceneManagement", "Scene")?;
         let scene_utility_class = self
             .resolve_unity_class("UnityEngine.SceneManagement", "SceneUtility")
@@ -297,11 +292,8 @@ impl<'a> SceneQueryKernel<'a> {
         let scene_count = self.invoke_int(&get_scene_count, None, &[])?;
         let mut scenes = Vec::new();
         for index in 0..scene_count {
-            let scene_boxed = self.invoke_object(
-                &get_scene_at,
-                None,
-                &[SceneInvokeArgument::Number(index)],
-            )?;
+            let scene_boxed =
+                self.invoke_object(&get_scene_at, None, &[SceneInvokeArgument::Number(index)])?;
             if scene_boxed == 0 {
                 continue;
             }
@@ -323,7 +315,8 @@ impl<'a> SceneQueryKernel<'a> {
                 continue;
             };
 
-            let root_array = match self.invoke_object(&get_root_game_objects, Some(raw_scene), &[]) {
+            let root_array = match self.invoke_object(&get_root_game_objects, Some(raw_scene), &[])
+            {
                 Ok(root_array) => root_array,
                 Err(error) => {
                     if error.contains("scene is invalid") {
@@ -377,7 +370,11 @@ impl<'a> SceneQueryKernel<'a> {
         }
 
         let mut build_settings_scenes = Vec::new();
-        if let (Some(scene_utility_class), Some(get_scene_count_in_build_settings), Some(get_scene_path_by_build_index)) = (
+        if let (
+            Some(scene_utility_class),
+            Some(get_scene_count_in_build_settings),
+            Some(get_scene_path_by_build_index),
+        ) = (
             scene_utility_class,
             get_scene_count_in_build_settings,
             get_scene_path_by_build_index,
@@ -396,7 +393,9 @@ impl<'a> SceneQueryKernel<'a> {
                 build_settings_scenes.push(RuntimeSceneBuildSettingsEntry {
                     build_index,
                     name: scene_name_from_path(&path),
-                    is_loaded: scenes.iter().any(|scene| scene.build_index == Some(build_index)),
+                    is_loaded: scenes
+                        .iter()
+                        .any(|scene| scene.build_index == Some(build_index)),
                     path,
                 });
             }
@@ -452,7 +451,9 @@ impl<'a> SceneQueryKernel<'a> {
         let children = self
             .load_children_for_object(object_address, NodeSummaryFlavor::InspectorChild, 0, None)?
             .items;
-        let components = self.load_components_for_object(object_address, 0, None)?.items;
+        let components = self
+            .load_components_for_object(object_address, 0, None)?
+            .items;
 
         Ok(RuntimeSceneObjectInspectorSnapshot {
             generated_at: header.generated_at,
@@ -481,7 +482,8 @@ impl<'a> SceneQueryKernel<'a> {
         let scene_object = self.invoke_object(&get_scene, Some(object_address), &[])?;
         let (scene_handle, scene_name) = self.read_scene_identity(scene_object)?;
         let scene_kind = if scene_handle.is_some() {
-            let raw_scene = self.require_unboxed(scene_object, "UnityEngine.SceneManagement.Scene")?;
+            let raw_scene =
+                self.require_unboxed(scene_object, "UnityEngine.SceneManagement.Scene")?;
             let get_build_index = self.try_find_method(scene_class, "get_buildIndex", 0)?;
             let get_path = self.try_find_method(scene_class, "get_path", 0)?;
             let build_index = match &get_build_index {
@@ -489,7 +491,7 @@ impl<'a> SceneQueryKernel<'a> {
                 None => None,
             };
             let path = match &get_path {
-                Some(method) => self.try_invoke_string(method, Some(raw_scene), &[] )?,
+                Some(method) => self.try_invoke_string(method, Some(raw_scene), &[])?,
                 None => None,
             };
             Some(infer_scene_kind(build_index, path, scene_name.clone()))
@@ -585,12 +587,11 @@ impl<'a> SceneQueryKernel<'a> {
         let transform_class = self.resolve_unity_class("UnityEngine", "Transform")?;
         let get_transform = self.require_method(game_object_class, "get_transform", 0)?;
 
-        let child_object = self.create_managed_object(game_object_class, "UnityEngine.GameObject")?;
-        if let Some(ctor_with_name) = self.try_find_method_by_parameter_types(
-            game_object_class,
-            ".ctor",
-            &["System.String"],
-        )? {
+        let child_object =
+            self.create_managed_object(game_object_class, "UnityEngine.GameObject")?;
+        if let Some(ctor_with_name) =
+            self.try_find_method_by_parameter_types(game_object_class, ".ctor", &["System.String"])?
+        {
             self.invoke_void(
                 &ctor_with_name,
                 Some(child_object),
@@ -612,7 +613,8 @@ impl<'a> SceneQueryKernel<'a> {
             }
         }
 
-        let parent_transform = self.invoke_object(&get_transform, Some(parent_object_address), &[])?;
+        let parent_transform =
+            self.invoke_object(&get_transform, Some(parent_object_address), &[])?;
         let child_transform = self.invoke_object(&get_transform, Some(child_object), &[])?;
         if parent_transform != 0 && child_transform != 0 {
             if let Some(set_parent) = self.try_find_method_by_parameter_types(
@@ -668,17 +670,14 @@ impl<'a> SceneQueryKernel<'a> {
         name: &str,
     ) -> Result<RuntimeSceneMutationResult, String> {
         let game_object_class = self.resolve_unity_class("UnityEngine", "GameObject")?;
-        let scene_manager_class = self.resolve_unity_class(
-            "UnityEngine.SceneManagement",
-            "SceneManager",
-        )?;
+        let scene_manager_class =
+            self.resolve_unity_class("UnityEngine.SceneManagement", "SceneManager")?;
 
-        let root_object = self.create_managed_object(game_object_class, "UnityEngine.GameObject")?;
-        if let Some(ctor_with_name) = self.try_find_method_by_parameter_types(
-            game_object_class,
-            ".ctor",
-            &["System.String"],
-        )? {
+        let root_object =
+            self.create_managed_object(game_object_class, "UnityEngine.GameObject")?;
+        if let Some(ctor_with_name) =
+            self.try_find_method_by_parameter_types(game_object_class, ".ctor", &["System.String"])?
+        {
             self.invoke_void(
                 &ctor_with_name,
                 Some(root_object),
@@ -705,13 +704,14 @@ impl<'a> SceneQueryKernel<'a> {
             let move_to_scene = self.try_find_method_by_parameter_types(
                 scene_manager_class,
                 "MoveGameObjectToScene",
-                &["UnityEngine.GameObject", "UnityEngine.SceneManagement.Scene"],
+                &[
+                    "UnityEngine.GameObject",
+                    "UnityEngine.SceneManagement.Scene",
+                ],
             )?;
             if let (Some(scene_boxed), Some(move_to_scene)) = (scene_boxed, move_to_scene) {
-                let raw_scene = self.require_unboxed(
-                    scene_boxed,
-                    "UnityEngine.SceneManagement.Scene",
-                )?;
+                let raw_scene =
+                    self.require_unboxed(scene_boxed, "UnityEngine.SceneManagement.Scene")?;
                 self.invoke_void(
                     &move_to_scene,
                     None,
@@ -767,7 +767,8 @@ impl<'a> SceneQueryKernel<'a> {
         let parent_object_address = self
             .try_read_parent_object_address(duplicated_object)?
             .map(format_address);
-        let object = self.build_node_summary(duplicated_object, NodeSummaryFlavor::Inspector, None)?;
+        let object =
+            self.build_node_summary(duplicated_object, NodeSummaryFlavor::Inspector, None)?;
 
         Ok(RuntimeSceneMutationResult {
             operation: RuntimeSceneMutationOperation::Duplicate,
@@ -968,10 +969,8 @@ impl<'a> SceneQueryKernel<'a> {
         hide_flags: &str,
     ) -> Result<RuntimeSceneMutationResult, String> {
         let object_class = self.resolve_unity_class("UnityEngine", "Object")?;
-        let enum_type = self.resolve_managed_type_object(
-            "UnityEngine.HideFlags",
-            "UnityEngine.CoreModule",
-        )?;
+        let enum_type =
+            self.resolve_managed_type_object("UnityEngine.HideFlags", "UnityEngine.CoreModule")?;
         let enum_class = self.resolve_managed_class_any_image("System", "Enum")?;
         let parse_enum = self.require_method_by_parameter_types(
             enum_class,
@@ -1001,7 +1000,9 @@ impl<'a> SceneQueryKernel<'a> {
         self.invoke_void(
             &set_hide_flags,
             Some(object_address),
-            &[SceneInvokeArgument::Bytes(hide_flags_value.to_ne_bytes().to_vec())],
+            &[SceneInvokeArgument::Bytes(
+                hide_flags_value.to_ne_bytes().to_vec(),
+            )],
         )?;
 
         let parent_object_address = self
@@ -1043,11 +1044,8 @@ impl<'a> SceneQueryKernel<'a> {
         }
 
         let parent_transform = if let Some(parent_object_address) = parent_object_address {
-            let resolved_parent_transform = self.invoke_object(
-                &get_transform,
-                Some(parent_object_address),
-                &[],
-            )?;
+            let resolved_parent_transform =
+                self.invoke_object(&get_transform, Some(parent_object_address), &[])?;
             if resolved_parent_transform == 0 {
                 return Err("failed to resolve target parent transform".to_string());
             }
@@ -1179,7 +1177,9 @@ impl<'a> SceneQueryKernel<'a> {
             self.invoke_void(
                 &set_position,
                 Some(transform_address),
-                &[SceneInvokeArgument::Bytes(pack_vector3(world_position).to_vec())],
+                &[SceneInvokeArgument::Bytes(
+                    pack_vector3(world_position).to_vec(),
+                )],
             )?;
         }
         if let Some(local_position) = &transform_update.local_position {
@@ -1191,7 +1191,9 @@ impl<'a> SceneQueryKernel<'a> {
             self.invoke_void(
                 &set_local_position,
                 Some(transform_address),
-                &[SceneInvokeArgument::Bytes(pack_vector3(local_position).to_vec())],
+                &[SceneInvokeArgument::Bytes(
+                    pack_vector3(local_position).to_vec(),
+                )],
             )?;
         }
         if let Some(local_rotation) = &transform_update.local_rotation {
@@ -1203,7 +1205,9 @@ impl<'a> SceneQueryKernel<'a> {
             self.invoke_void(
                 &set_local_rotation,
                 Some(transform_address),
-                &[SceneInvokeArgument::Bytes(pack_quaternion(local_rotation).to_vec())],
+                &[SceneInvokeArgument::Bytes(
+                    pack_quaternion(local_rotation).to_vec(),
+                )],
             )?;
         }
         if let Some(local_euler_angles) = &transform_update.local_euler_angles {
@@ -1221,7 +1225,9 @@ impl<'a> SceneQueryKernel<'a> {
             self.invoke_void(
                 &set_local_euler,
                 Some(transform_address),
-                &[SceneInvokeArgument::Bytes(pack_vector3(local_euler_angles).to_vec())],
+                &[SceneInvokeArgument::Bytes(
+                    pack_vector3(local_euler_angles).to_vec(),
+                )],
             )?;
         }
         if let Some(local_scale) = &transform_update.local_scale {
@@ -1233,7 +1239,9 @@ impl<'a> SceneQueryKernel<'a> {
             self.invoke_void(
                 &set_local_scale,
                 Some(transform_address),
-                &[SceneInvokeArgument::Bytes(pack_vector3(local_scale).to_vec())],
+                &[SceneInvokeArgument::Bytes(
+                    pack_vector3(local_scale).to_vec(),
+                )],
             )?;
         }
 
@@ -1333,8 +1341,13 @@ impl<'a> SceneQueryKernel<'a> {
             )?);
 
         let component_address = if normalize_scene_type_name(
-            add_component.parameter_types.first().map(String::as_str).unwrap_or_default(),
-        ) == "System.Type" {
+            add_component
+                .parameter_types
+                .first()
+                .map(String::as_str)
+                .unwrap_or_default(),
+        ) == "System.Type"
+        {
             self.invoke_object(
                 &add_component,
                 Some(object_address),
@@ -1439,10 +1452,8 @@ impl<'a> SceneQueryKernel<'a> {
         &mut self,
         build_index: i32,
     ) -> Result<RuntimeSceneMutationResult, String> {
-        let scene_manager_class = self.resolve_unity_class(
-            "UnityEngine.SceneManagement",
-            "SceneManager",
-        )?;
+        let scene_manager_class =
+            self.resolve_unity_class("UnityEngine.SceneManagement", "SceneManager")?;
         let scene_class = self.resolve_unity_class("UnityEngine.SceneManagement", "Scene")?;
         let load_scene = self.require_method_by_parameter_types(
             scene_manager_class,
@@ -1453,7 +1464,11 @@ impl<'a> SceneQueryKernel<'a> {
         let get_scene_at = self.require_method(scene_manager_class, "GetSceneAt", 1)?;
         let get_build_index = self.try_find_method(scene_class, "get_buildIndex", 0)?;
 
-        self.invoke_void(&load_scene, None, &[SceneInvokeArgument::Number(build_index)])?;
+        self.invoke_void(
+            &load_scene,
+            None,
+            &[SceneInvokeArgument::Number(build_index)],
+        )?;
 
         let mut result = RuntimeSceneMutationResult {
             operation: RuntimeSceneMutationOperation::LoadScene,
@@ -1475,20 +1490,15 @@ impl<'a> SceneQueryKernel<'a> {
 
         let scene_count = self.invoke_int(&get_scene_count, None, &[])?;
         for index in 0..scene_count {
-            let scene_boxed = self.invoke_object(
-                &get_scene_at,
-                None,
-                &[SceneInvokeArgument::Number(index)],
-            )?;
+            let scene_boxed =
+                self.invoke_object(&get_scene_at, None, &[SceneInvokeArgument::Number(index)])?;
             if scene_boxed == 0 {
                 continue;
             }
 
             if let Some(method) = &get_build_index {
-                let raw_scene = self.require_unboxed(
-                    scene_boxed,
-                    "UnityEngine.SceneManagement.Scene",
-                )?;
+                let raw_scene =
+                    self.require_unboxed(scene_boxed, "UnityEngine.SceneManagement.Scene")?;
                 if self.invoke_int(method, Some(raw_scene), &[])? != build_index {
                     continue;
                 }
@@ -1514,9 +1524,9 @@ impl<'a> SceneQueryKernel<'a> {
 
         for image_name in ["UnityEngine.CoreModule", "UnityEngine"] {
             if let Ok(image) = self.resolve_image(image_name) {
-                if let Ok(class_handle) = self
-                    .runtime_api
-                    .resolve_class(image, class_namespace, class_name)
+                if let Ok(class_handle) =
+                    self.runtime_api
+                        .resolve_class(image, class_namespace, class_name)
                 {
                     self.class_cache.insert(cache_key, class_handle);
                     return Ok(class_handle);
@@ -1538,9 +1548,7 @@ impl<'a> SceneQueryKernel<'a> {
                 continue;
             }
             let actual_name = self.runtime_api.get_image_name(image)?.to_ascii_lowercase();
-            let actual_without_extension = actual_name
-                .strip_suffix(".dll")
-                .unwrap_or(&actual_name);
+            let actual_without_extension = actual_name.strip_suffix(".dll").unwrap_or(&actual_name);
             if actual_name == expected || actual_without_extension == expected_without_extension {
                 return Ok(image);
             }
@@ -1549,10 +1557,7 @@ impl<'a> SceneQueryKernel<'a> {
         Err(format!("image not found: {image_name}"))
     }
 
-    fn resolve_cached_type_name(
-        &mut self,
-        class_handle: NativeAddress,
-    ) -> Result<String, String> {
+    fn resolve_cached_type_name(&mut self, class_handle: NativeAddress) -> Result<String, String> {
         if let Some(type_name) = self.type_name_cache.get(&class_handle) {
             return Ok(type_name.clone());
         }
@@ -1717,11 +1722,8 @@ impl<'a> SceneQueryKernel<'a> {
         let mut _argument_storage: Vec<RemoteAllocation> = Vec::new();
 
         for (parameter_type, argument) in method.parameter_types.iter().zip(arguments.iter()) {
-            let argument_pointer = self.marshal_argument(
-                parameter_type,
-                argument,
-                &mut _argument_storage,
-            )?;
+            let argument_pointer =
+                self.marshal_argument(parameter_type, argument, &mut _argument_storage)?;
             argument_pointers.push(argument_pointer);
         }
 
@@ -1746,7 +1748,8 @@ impl<'a> SceneQueryKernel<'a> {
             std::mem::size_of::<NativeAddress>(),
             windows::Win32::System::Memory::PAGE_READWRITE.0,
         )?;
-        self.memory.write_value(exception_storage.address, &0usize)?;
+        self.memory
+            .write_value(exception_storage.address, &0usize)?;
 
         let result = self.runtime_api.invoke_method(
             method.handle,
@@ -1768,7 +1771,10 @@ impl<'a> SceneQueryKernel<'a> {
                 .runtime_api
                 .describe_exception(exception_object)?
                 .unwrap_or_else(|| "runtime exception".to_string());
-            return Err(format!("{} [{}]: {exception}", method.name, method.signature));
+            return Err(format!(
+                "{} [{}]: {exception}",
+                method.name, method.signature
+            ));
         }
 
         Ok(result)
@@ -1877,7 +1883,9 @@ impl<'a> SceneQueryKernel<'a> {
             ));
         }
         Ok(i32::from_ne_bytes(
-            bytes.try_into().map_err(|_| "invalid integer payload".to_string())?,
+            bytes
+                .try_into()
+                .map_err(|_| "invalid integer payload".to_string())?,
         ))
     }
 
@@ -1897,10 +1905,12 @@ impl<'a> SceneQueryKernel<'a> {
                     method.name, method.signature
                 )
             })?;
-        let value = bytes
-            .first()
-            .copied()
-            .ok_or_else(|| format!("{} [{}]: invalid bool payload", method.name, method.signature))?;
+        let value = bytes.first().copied().ok_or_else(|| {
+            format!(
+                "{} [{}]: invalid bool payload",
+                method.name, method.signature
+            )
+        })?;
         Ok(value != 0)
     }
 
@@ -1932,21 +1942,25 @@ impl<'a> SceneQueryKernel<'a> {
         instance_address: NativeAddress,
         field_name: &str,
     ) -> Result<Option<i32>, String> {
-        let Some(field) = self.try_find_instance_field(class_handle, field_name, "System.Int32")? else {
+        let Some(field) = self.try_find_instance_field(class_handle, field_name, "System.Int32")?
+        else {
             return Ok(None);
         };
         let Some(bytes) = self.runtime_api.try_read_instance_field_bytes(
             instance_address,
             &field,
             std::mem::size_of::<i32>(),
-        )? else {
+        )?
+        else {
             return Ok(None);
         };
         if bytes.len() != std::mem::size_of::<i32>() {
             return Err(format!("invalid Int32 field payload for {field_name}"));
         }
         Ok(Some(i32::from_ne_bytes(
-            bytes.try_into().map_err(|_| "invalid Int32 field payload".to_string())?,
+            bytes
+                .try_into()
+                .map_err(|_| "invalid Int32 field payload".to_string())?,
         )))
     }
 
@@ -1956,22 +1970,25 @@ impl<'a> SceneQueryKernel<'a> {
         instance_address: NativeAddress,
         field_name: &str,
     ) -> Result<Option<f32>, String> {
-        let Some(field) = self.try_find_instance_field(class_handle, field_name, "System.Single")? else {
+        let Some(field) =
+            self.try_find_instance_field(class_handle, field_name, "System.Single")?
+        else {
             return Ok(None);
         };
         let Some(bytes) = self.runtime_api.try_read_instance_field_bytes(
             instance_address,
             &field,
             std::mem::size_of::<f32>(),
-        )? else {
+        )?
+        else {
             return Ok(None);
         };
         if bytes.len() != std::mem::size_of::<f32>() {
             return Err(format!("invalid Single field payload for {field_name}"));
         }
-        Ok(Some(f32::from_ne_bytes(
-            bytes.try_into().map_err(|_| "invalid Single field payload".to_string())?,
-        )))
+        Ok(Some(f32::from_ne_bytes(bytes.try_into().map_err(
+            |_| "invalid Single field payload".to_string(),
+        )?)))
     }
 
     fn try_read_parent_object_address(
@@ -1984,7 +2001,8 @@ impl<'a> SceneQueryKernel<'a> {
         let get_parent = self.require_method(transform_class, "get_parent", 0)?;
         let get_game_object = self.require_method(transform_class, "get_gameObject", 0)?;
 
-        let transform_address = self.invoke_object(&get_transform, Some(game_object_address), &[])?;
+        let transform_address =
+            self.invoke_object(&get_transform, Some(game_object_address), &[])?;
         if transform_address == 0 {
             return Ok(None);
         }
@@ -2030,10 +2048,8 @@ impl<'a> SceneQueryKernel<'a> {
         &mut self,
         scene_handle: i32,
     ) -> Result<Option<NativeAddress>, String> {
-        let scene_manager_class = self.resolve_unity_class(
-            "UnityEngine.SceneManagement",
-            "SceneManager",
-        )?;
+        let scene_manager_class =
+            self.resolve_unity_class("UnityEngine.SceneManagement", "SceneManager")?;
         let scene_class = self.resolve_unity_class("UnityEngine.SceneManagement", "Scene")?;
         let get_scene_count = self.require_method(scene_manager_class, "get_sceneCount", 0)?;
         let get_scene_at = self.require_method(scene_manager_class, "GetSceneAt", 1)?;
@@ -2041,19 +2057,14 @@ impl<'a> SceneQueryKernel<'a> {
 
         let scene_count = self.invoke_int(&get_scene_count, None, &[])?;
         for index in 0..scene_count {
-            let scene_boxed = self.invoke_object(
-                &get_scene_at,
-                None,
-                &[SceneInvokeArgument::Number(index)],
-            )?;
+            let scene_boxed =
+                self.invoke_object(&get_scene_at, None, &[SceneInvokeArgument::Number(index)])?;
             if scene_boxed == 0 {
                 continue;
             }
 
-            let raw_scene = self.require_unboxed(
-                scene_boxed,
-                "UnityEngine.SceneManagement.Scene",
-            )?;
+            let raw_scene =
+                self.require_unboxed(scene_boxed, "UnityEngine.SceneManagement.Scene")?;
             if let Some(method) = &is_valid {
                 if !self.invoke_bool(method, Some(raw_scene), &[])? {
                     continue;
@@ -2161,9 +2172,9 @@ impl<'a> SceneQueryKernel<'a> {
             }
 
             for (class_namespace, class_name) in &candidates {
-                if let Ok(class_handle) = self
-                    .runtime_api
-                    .resolve_class(image, class_namespace, class_name)
+                if let Ok(class_handle) =
+                    self.runtime_api
+                        .resolve_class(image, class_namespace, class_name)
                 {
                     if class_handle != 0 {
                         let resolved_type_name = if class_namespace.is_empty() {
@@ -2210,11 +2221,8 @@ impl<'a> SceneQueryKernel<'a> {
             }
         }
 
-        let get_type = self.require_method_by_parameter_types(
-            type_class,
-            "GetType",
-            &["System.String"],
-        )?;
+        let get_type =
+            self.require_method_by_parameter_types(type_class, "GetType", &["System.String"])?;
         let type_object = self.invoke_object(
             &get_type,
             None,
@@ -2290,11 +2298,8 @@ impl<'a> SceneQueryKernel<'a> {
             if let Some(method) = &get_parent {
                 let parent_transform = self.invoke_object(method, Some(transform_address), &[])?;
                 if parent_transform != 0 {
-                    let parent_object = self.invoke_object(
-                        &get_game_object,
-                        Some(parent_transform),
-                        &[],
-                    )?;
+                    let parent_object =
+                        self.invoke_object(&get_game_object, Some(parent_transform), &[])?;
                     if parent_object != 0 {
                         node.parent_object_address = Some(format_address(parent_object));
                     }
@@ -2305,7 +2310,8 @@ impl<'a> SceneQueryKernel<'a> {
         if flavor != NodeSummaryFlavor::Catalog {
             let get_active_self = self.require_method(game_object_class, "get_activeSelf", 0)?;
             let get_layer = self.require_method(game_object_class, "get_layer", 0)?;
-            node.active_self = self.invoke_bool(&get_active_self, Some(game_object_address), &[])?;
+            node.active_self =
+                self.invoke_bool(&get_active_self, Some(game_object_address), &[])?;
             node.layer = Some(self.invoke_int(&get_layer, Some(game_object_address), &[])?);
 
             if let Some(method) = self.try_find_method(game_object_class, "get_isStatic", 0)? {
@@ -2353,7 +2359,8 @@ impl<'a> SceneQueryKernel<'a> {
         let get_child = self.require_method(transform_class, "GetChild", 1)?;
         let get_game_object = self.require_method(transform_class, "get_gameObject", 0)?;
 
-        let transform_address = self.invoke_object(&get_transform, Some(game_object_address), &[])?;
+        let transform_address =
+            self.invoke_object(&get_transform, Some(game_object_address), &[])?;
         if transform_address == 0 {
             return Ok(ScenePage {
                 items: Vec::new(),
@@ -2410,7 +2417,9 @@ impl<'a> SceneQueryKernel<'a> {
     ) -> Result<ScenePage<RuntimeSceneComponentSummary>, String> {
         let game_object_class = self.resolve_unity_class("UnityEngine", "GameObject")?;
         let behaviour_class = self.resolve_unity_class("UnityEngine", "Behaviour")?;
-        let Some(get_component_count) = self.try_find_method(game_object_class, "GetComponentCount", 0)? else {
+        let Some(get_component_count) =
+            self.try_find_method(game_object_class, "GetComponentCount", 0)?
+        else {
             return Ok(ScenePage {
                 items: Vec::new(),
                 total_count: 0,
@@ -2418,10 +2427,11 @@ impl<'a> SceneQueryKernel<'a> {
             });
         };
 
-        let query_component = match self.try_find_method(game_object_class, "QueryComponentAtIndex", 1)? {
-            Some(method) => Some(method),
-            None => self.try_find_method(game_object_class, "GetComponentAtIndex", 1)?,
-        };
+        let query_component =
+            match self.try_find_method(game_object_class, "QueryComponentAtIndex", 1)? {
+                Some(method) => Some(method),
+                None => self.try_find_method(game_object_class, "GetComponentAtIndex", 1)?,
+            };
         let Some(query_component) = query_component else {
             return Ok(ScenePage {
                 items: Vec::new(),
@@ -2430,7 +2440,8 @@ impl<'a> SceneQueryKernel<'a> {
             });
         };
 
-        let component_count = self.invoke_int(&get_component_count, Some(game_object_address), &[])?;
+        let component_count =
+            self.invoke_int(&get_component_count, Some(game_object_address), &[])?;
         let total_count = component_count.max(0) as usize;
         let start_index = offset.min(total_count);
         let end_index = match limit {
@@ -2468,7 +2479,7 @@ impl<'a> SceneQueryKernel<'a> {
             }
 
             let behaviour_enabled = if is_behaviour {
-                Some(self.invoke_bool(&get_enabled, Some(component_address), &[])? )
+                Some(self.invoke_bool(&get_enabled, Some(component_address), &[])?)
             } else {
                 None
             };
@@ -2503,8 +2514,10 @@ impl<'a> SceneQueryKernel<'a> {
         let get_position = self.try_find_method(transform_class, "get_position", 0)?;
         let get_local_position = self.require_method(transform_class, "get_localPosition", 0)?;
         let get_local_rotation = self.require_method(transform_class, "get_localRotation", 0)?;
-        let get_local_euler_angles = self.try_find_method(transform_class, "get_localEulerAngles", 0)?;
-        let get_local_euler_angles_raw = self.try_find_method(transform_class, "get_localEulerAnglesRaw", 0)?;
+        let get_local_euler_angles =
+            self.try_find_method(transform_class, "get_localEulerAngles", 0)?;
+        let get_local_euler_angles_raw =
+            self.try_find_method(transform_class, "get_localEulerAnglesRaw", 0)?;
         let get_local_scale = self.require_method(transform_class, "get_localScale", 0)?;
 
         let child_count = self.invoke_int(&get_child_count, Some(transform_address), &[])?;
@@ -2517,7 +2530,8 @@ impl<'a> SceneQueryKernel<'a> {
         let parent_object_address = if parent_transform == 0 {
             None
         } else {
-            let parent_object = self.invoke_object(&get_game_object, Some(parent_transform), &[])?;
+            let parent_object =
+                self.invoke_object(&get_game_object, Some(parent_transform), &[])?;
             if parent_object == 0 {
                 None
             } else {
@@ -2526,19 +2540,37 @@ impl<'a> SceneQueryKernel<'a> {
         };
 
         let world_position = match &get_position {
-            Some(method) => self.read_vector3(self.invoke_object(method, Some(transform_address), &[] )?)?,
+            Some(method) => {
+                self.read_vector3(self.invoke_object(method, Some(transform_address), &[])?)?
+            }
             None => None,
         };
-        let local_position = self.read_vector3(self.invoke_object(&get_local_position, Some(transform_address), &[] )?)?;
-        let local_rotation = self.read_quaternion(self.invoke_object(&get_local_rotation, Some(transform_address), &[] )?)?;
+        let local_position = self.read_vector3(self.invoke_object(
+            &get_local_position,
+            Some(transform_address),
+            &[],
+        )?)?;
+        let local_rotation = self.read_quaternion(self.invoke_object(
+            &get_local_rotation,
+            Some(transform_address),
+            &[],
+        )?)?;
         let local_euler_angles = match &get_local_euler_angles_raw {
-            Some(method) => self.read_vector3(self.invoke_object(method, Some(transform_address), &[] )?)?,
+            Some(method) => {
+                self.read_vector3(self.invoke_object(method, Some(transform_address), &[])?)?
+            }
             None => match &get_local_euler_angles {
-                Some(method) => self.read_vector3(self.invoke_object(method, Some(transform_address), &[] )?)?,
+                Some(method) => {
+                    self.read_vector3(self.invoke_object(method, Some(transform_address), &[])?)?
+                }
                 None => None,
             },
         };
-        let local_scale = self.read_vector3(self.invoke_object(&get_local_scale, Some(transform_address), &[] )?)?;
+        let local_scale = self.read_vector3(self.invoke_object(
+            &get_local_scale,
+            Some(transform_address),
+            &[],
+        )?)?;
 
         Ok(Some(RuntimeSceneTransformSnapshot {
             transform_address: format_address(transform_address),
@@ -2562,9 +2594,10 @@ impl<'a> SceneQueryKernel<'a> {
         }
 
         let scene_class = self.resolve_unity_class("UnityEngine.SceneManagement", "Scene")?;
-        let raw_scene = self.require_unboxed(scene_boxed_address, "UnityEngine.SceneManagement.Scene")?;
+        let raw_scene =
+            self.require_unboxed(scene_boxed_address, "UnityEngine.SceneManagement.Scene")?;
         let scene_name = match self.try_find_method(scene_class, "get_name", 0)? {
-            Some(method) => self.try_invoke_string(&method, Some(raw_scene), &[] )?,
+            Some(method) => self.try_invoke_string(&method, Some(raw_scene), &[])?,
             None => None,
         };
         let scene_handle = self.read_int_field(scene_class, raw_scene, "m_Handle")?;
@@ -2595,7 +2628,8 @@ impl<'a> SceneQueryKernel<'a> {
         }
 
         path.reverse();
-        self.hierarchy_cache.insert(game_object_address, path.clone());
+        self.hierarchy_cache
+            .insert(game_object_address, path.clone());
         Ok(path)
     }
 
@@ -2606,9 +2640,7 @@ impl<'a> SceneQueryKernel<'a> {
     ) -> Result<NativeAddress, String> {
         let raw_value = self.runtime_api.unbox_object(boxed_object_address)?;
         if raw_value == 0 {
-            return Err(format!(
-                "{context}: failed to unbox value-type instance"
-            ));
+            return Err(format!("{context}: failed to unbox value-type instance"));
         }
         Ok(raw_value)
     }
@@ -2623,9 +2655,9 @@ impl<'a> SceneQueryKernel<'a> {
             if image == 0 {
                 continue;
             }
-            if let Ok(class_handle) = self
-                .runtime_api
-                .resolve_class(image, class_namespace, class_name)
+            if let Ok(class_handle) =
+                self.runtime_api
+                    .resolve_class(image, class_namespace, class_name)
             {
                 if class_handle != 0 {
                     return Ok(class_handle);
@@ -2758,10 +2790,7 @@ fn parse_address(value: &str) -> Result<NativeAddress, String> {
 }
 
 fn scene_name_from_path(path: &str) -> String {
-    let file_name = path
-        .rsplit(['\\', '/'])
-        .next()
-        .unwrap_or(path);
+    let file_name = path.rsplit(['\\', '/']).next().unwrap_or(path);
     match file_name.rsplit_once('.') {
         Some((name, _)) => name.to_string(),
         None => file_name.to_string(),

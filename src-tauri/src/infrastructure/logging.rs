@@ -140,13 +140,25 @@ pub fn log_timed_result<T, E, F>(
     }
 }
 
-fn emit(level: DiagnosticsLevel, channel: &str, origin: &str, message: &str, fields: Vec<DiagnosticsField>) {
+fn emit(
+    level: DiagnosticsLevel,
+    channel: &str,
+    origin: &str,
+    message: &str,
+    fields: Vec<DiagnosticsField>,
+) {
     let active_policy = policy();
     if !active_policy.allows(level, channel, origin) {
         return;
     }
 
-    let mut line = format!("[diag][{}][{}][{}] {}", level.as_str(), channel, origin, message);
+    let mut line = format!(
+        "[diag][{}][{}][{}] {}",
+        level.as_str(),
+        channel,
+        origin,
+        message
+    );
     for (key, value) in fields {
         if value.is_empty() {
             continue;

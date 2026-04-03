@@ -9,7 +9,10 @@ pub fn refresh_runtime_session(
     process_session: &ProcessSession,
 ) -> OperationResult<Arc<RuntimeSession>> {
     let session = Arc::new(RuntimeSession::create(process_session).map_err(OperationError::from)?);
-    state.runtime_kernel().session().set_session(session.clone());
+    state
+        .runtime_kernel()
+        .session()
+        .set_session(session.clone());
     Ok(session)
 }
 

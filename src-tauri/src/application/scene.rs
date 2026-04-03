@@ -1,20 +1,30 @@
 use crate::domain::analysis_models::{
-    RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult,
-    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorSnapshot,
-    RuntimeSceneObjectInspectorTaskState, RuntimeSceneTransformUpdate,
-    SceneWorkspaceState,
+    RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
+    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
+    RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
 use crate::services::analysis::scene;
 use crate::state::AppState;
 use tauri::AppHandle;
 
-pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWorkspaceState, String> {
+pub fn start_scene_refresh(
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<SceneWorkspaceState, String> {
     scene::start_scene_refresh(app, state)
 }
 
 pub fn get_scene_workspace_state(state: &AppState) -> SceneWorkspaceState {
-    let session_key = state.workspace().lifecycle().current().runtime_session.session_key;
-    state.scene().workspace().current_for(session_key.as_deref())
+    let session_key = state
+        .workspace()
+        .lifecycle()
+        .current()
+        .runtime_session
+        .session_key;
+    state
+        .scene()
+        .workspace()
+        .current_for(session_key.as_deref())
 }
 
 pub fn start_scene_object_children_analysis(
@@ -48,7 +58,9 @@ pub fn start_scene_object_inspector_analysis(
     scene::start_scene_object_inspector_analysis(app, state, object_address)
 }
 
-pub fn get_scene_object_inspector_state(state: &AppState) -> Option<RuntimeSceneObjectInspectorTaskState> {
+pub fn get_scene_object_inspector_state(
+    state: &AppState,
+) -> Option<RuntimeSceneObjectInspectorTaskState> {
     scene::get_scene_object_inspector_state(state)
 }
 
@@ -152,7 +164,13 @@ pub fn reparent_scene_object(
     parent_object_address: Option<&str>,
     parent_path: Option<&str>,
 ) -> Result<RuntimeSceneMutationResult, String> {
-    scene::reparent_scene_object(app, state, object_address, parent_object_address, parent_path)
+    scene::reparent_scene_object(
+        app,
+        state,
+        object_address,
+        parent_object_address,
+        parent_path,
+    )
 }
 
 pub fn set_scene_object_active(

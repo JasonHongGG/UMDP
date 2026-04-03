@@ -36,7 +36,14 @@ pub fn invoke_runtime_method(
             argument,
             &mut primitive_argument_storage,
         )
-        .map_err(|error| build_error_result(request, method, RuntimeInvokeFailureKind::ArgumentMismatch, error))?;
+        .map_err(|error| {
+            build_error_result(
+                request,
+                method,
+                RuntimeInvokeFailureKind::ArgumentMismatch,
+                error,
+            )
+        })?;
         argument_pointers.push(argument_pointer);
     }
 
@@ -65,8 +72,15 @@ pub fn invoke_runtime_method(
 
     let result_object = runtime_api.invoke_method(
         runtime_method.handle,
-        if runtime_method.is_static { 0 } else { instance_address },
-        parameter_array.as_ref().map(|allocation| allocation.address).unwrap_or(0),
+        if runtime_method.is_static {
+            0
+        } else {
+            instance_address
+        },
+        parameter_array
+            .as_ref()
+            .map(|allocation| allocation.address)
+            .unwrap_or(0),
         exception_storage.address,
     )?;
 
@@ -164,7 +178,10 @@ fn marshal_argument(
 
     if is_string_type(&normalized_parameter_type) {
         if matches!(argument.value_kind, RuntimeInvokeArgumentKind::Address) {
-            return Err(format!("address argument is not valid for parameter type: {}", parameter_type));
+            return Err(format!(
+                "address argument is not valid for parameter type: {}",
+                parameter_type
+            ));
         }
         return runtime_api.create_managed_string(argument.value.as_deref().unwrap_or_default());
     }
@@ -172,19 +189,31 @@ fn marshal_argument(
     let primitive_size = primitive_size_for_type(&normalized_parameter_type);
     if primitive_size == 0 {
         if !matches!(argument.value_kind, RuntimeInvokeArgumentKind::Address) {
-            return Err(format!("reference-type parameter requires address argument: {}", parameter_type));
+            return Err(format!(
+                "reference-type parameter requires address argument: {}",
+                parameter_type
+            ));
         }
         if !supports_managed_reference_address_argument(&normalized_parameter_type) {
-            return Err(format!("unsupported address parameter type: {}", parameter_type));
+            return Err(format!(
+                "unsupported address parameter type: {}",
+                parameter_type
+            ));
         }
         return parse_address(argument.value.as_deref().unwrap_or_default());
     }
 
     if matches!(argument.value_kind, RuntimeInvokeArgumentKind::Address) {
-        return Err(format!("address argument is not valid for parameter type: {}", parameter_type));
+        return Err(format!(
+            "address argument is not valid for parameter type: {}",
+            parameter_type
+        ));
     }
 
-    let allocation = memory.allocate(primitive_size, windows::Win32::System::Memory::PAGE_READWRITE.0)?;
+    let allocation = memory.allocate(
+        primitive_size,
+        windows::Win32::System::Memory::PAGE_READWRITE.0,
+    )?;
     let storage_address = allocation.address;
     let raw_value = argument.value.as_deref().unwrap_or_default();
 
@@ -196,15 +225,38 @@ fn marshal_argument(
         "System.Byte" => memory.write_value(storage_address, &parse_unsigned::<u8>(raw_value)?)?,
         "System.SByte" => memory.write_value(storage_address, &parse_signed::<i8>(raw_value)?)?,
         "System.Int16" => memory.write_value(storage_address, &parse_signed::<i16>(raw_value)?)?,
-        "System.UInt16" => memory.write_value(storage_address, &parse_unsigned::<u16>(raw_value)?)?,
+        "System.UInt16" => {
+            memory.write_value(storage_address, &parse_unsigned::<u16>(raw_value)?)?
+        }
         "System.Int32" => memory.write_value(storage_address, &parse_signed::<i32>(raw_value)?)?,
-        "System.UInt32" => memory.write_value(storage_address, &parse_unsigned::<u32>(raw_value)?)?,
+        "System.UInt32" => {
+            memory.write_value(storage_address, &parse_unsigned::<u32>(raw_value)?)?
+        }
         "System.Int64" => memory.write_value(storage_address, &parse_signed::<i64>(raw_value)?)?,
-        "System.UInt64" => memory.write_value(storage_address, &parse_unsigned::<u64>(raw_value)?)?,
-        "System.Single" => memory.write_value(storage_address, &raw_value.parse::<f32>().map_err(|error| error.to_string())?)?,
-        "System.Double" => memory.write_value(storage_address, &raw_value.parse::<f64>().map_err(|error| error.to_string())?)?,
-        "System.IntPtr" | "System.UIntPtr" => memory.write_value(storage_address, &parse_address(raw_value)?)?,
-        _ => return Err(format!("unsupported argument parameter type: {}", parameter_type)),
+        "System.UInt64" => {
+            memory.write_value(storage_address, &parse_unsigned::<u64>(raw_value)?)?
+        }
+        "System.Single" => memory.write_value(
+            storage_address,
+            &raw_value
+                .parse::<f32>()
+                .map_err(|error| error.to_string())?,
+        )?,
+        "System.Double" => memory.write_value(
+            storage_address,
+            &raw_value
+                .parse::<f64>()
+                .map_err(|error| error.to_string())?,
+        )?,
+        "System.IntPtr" | "System.UIntPtr" => {
+            memory.write_value(storage_address, &parse_address(raw_value)?)?
+        }
+        _ => {
+            return Err(format!(
+                "unsupported argument parameter type: {}",
+                parameter_type
+            ))
+        }
     }
 
     primitive_argument_storage.push(allocation);
@@ -291,7 +343,9 @@ fn number_result_size(type_name: &str) -> Option<usize> {
         "System.Byte" | "System.SByte" => Some(1),
         "System.Int16" | "System.UInt16" => Some(2),
         "System.Int32" | "System.UInt32" | "System.Single" => Some(4),
-        "System.Int64" | "System.UInt64" | "System.Double" | "System.IntPtr" | "System.UIntPtr" => Some(8),
+        "System.Int64" | "System.UInt64" | "System.Double" | "System.IntPtr" | "System.UIntPtr" => {
+            Some(8)
+        }
         _ => None,
     }
 }
@@ -300,15 +354,59 @@ fn format_numeric_result(type_name: &str, bytes: &[u8]) -> Result<String, String
     match type_name {
         "System.Byte" => Ok(bytes[0].to_string()),
         "System.SByte" => Ok(i8::from_ne_bytes([bytes[0]]).to_string()),
-        "System.Int16" => Ok(i16::from_ne_bytes(bytes.try_into().map_err(|_| "invalid Int16 return payload".to_string())?).to_string()),
-        "System.UInt16" => Ok(u16::from_ne_bytes(bytes.try_into().map_err(|_| "invalid UInt16 return payload".to_string())?).to_string()),
-        "System.Int32" => Ok(i32::from_ne_bytes(bytes.try_into().map_err(|_| "invalid Int32 return payload".to_string())?).to_string()),
-        "System.UInt32" => Ok(u32::from_ne_bytes(bytes.try_into().map_err(|_| "invalid UInt32 return payload".to_string())?).to_string()),
-        "System.Int64" => Ok(i64::from_ne_bytes(bytes.try_into().map_err(|_| "invalid Int64 return payload".to_string())?).to_string()),
-        "System.UInt64" => Ok(u64::from_ne_bytes(bytes.try_into().map_err(|_| "invalid UInt64 return payload".to_string())?).to_string()),
-        "System.Single" => Ok(f32::from_ne_bytes(bytes.try_into().map_err(|_| "invalid Single return payload".to_string())?).to_string()),
-        "System.Double" => Ok(f64::from_ne_bytes(bytes.try_into().map_err(|_| "invalid Double return payload".to_string())?).to_string()),
-        "System.IntPtr" | "System.UIntPtr" => Ok(format_object_address(usize::from_ne_bytes(bytes.try_into().map_err(|_| "invalid pointer return payload".to_string())?))),
+        "System.Int16" => Ok(i16::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid Int16 return payload".to_string())?,
+        )
+        .to_string()),
+        "System.UInt16" => Ok(u16::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid UInt16 return payload".to_string())?,
+        )
+        .to_string()),
+        "System.Int32" => Ok(i32::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid Int32 return payload".to_string())?,
+        )
+        .to_string()),
+        "System.UInt32" => Ok(u32::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid UInt32 return payload".to_string())?,
+        )
+        .to_string()),
+        "System.Int64" => Ok(i64::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid Int64 return payload".to_string())?,
+        )
+        .to_string()),
+        "System.UInt64" => Ok(u64::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid UInt64 return payload".to_string())?,
+        )
+        .to_string()),
+        "System.Single" => Ok(f32::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid Single return payload".to_string())?,
+        )
+        .to_string()),
+        "System.Double" => Ok(f64::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid Double return payload".to_string())?,
+        )
+        .to_string()),
+        "System.IntPtr" | "System.UIntPtr" => Ok(format_object_address(usize::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid pointer return payload".to_string())?,
+        ))),
         _ => Err(format!("unsupported numeric return type: {}", type_name)),
     }
 }
@@ -318,7 +416,9 @@ fn primitive_size_for_type(type_name: &str) -> usize {
         "System.Boolean" | "System.Byte" | "System.SByte" => 1,
         "System.Int16" | "System.UInt16" => 2,
         "System.Int32" | "System.UInt32" | "System.Single" => 4,
-        "System.Int64" | "System.UInt64" | "System.Double" | "System.IntPtr" | "System.UIntPtr" => 8,
+        "System.Int64" | "System.UInt64" | "System.Double" | "System.IntPtr" | "System.UIntPtr" => {
+            8
+        }
         _ => 0,
     }
 }
@@ -358,7 +458,10 @@ fn is_out_of_scope_address_parameter_type(type_name: &str) -> bool {
         return true;
     }
 
-    type_name.contains('<') || type_name.ends_with("[]") || type_name.ends_with('&') || type_name.ends_with('*')
+    type_name.contains('<')
+        || type_name.ends_with("[]")
+        || type_name.ends_with('&')
+        || type_name.ends_with('*')
 }
 
 fn normalize_type_name(value: &str) -> String {

@@ -19,11 +19,26 @@ fn build_managed_metadata_reader() {
         .expect("managed metadata reader directory missing");
 
     println!("cargo:rerun-if-changed={}", project_path.display());
-    println!("cargo:rerun-if-changed={}", project_dir.join("Program.cs").display());
-    println!("cargo:rerun-if-changed={}", project_dir.join("CommandLine.cs").display());
-    println!("cargo:rerun-if-changed={}", project_dir.join("Contracts.cs").display());
-    println!("cargo:rerun-if-changed={}", project_dir.join("ManagedMetadataCatalog.cs").display());
-    println!("cargo:rerun-if-changed={}", project_dir.join("MetadataSource.cs").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        project_dir.join("Program.cs").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        project_dir.join("CommandLine.cs").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        project_dir.join("Contracts.cs").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        project_dir.join("ManagedMetadataCatalog.cs").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        project_dir.join("MetadataSource.cs").display()
+    );
 
     if !cfg!(target_os = "windows") {
         println!("cargo:warning=Skipping ManagedMetadataReader publish because the current build host is not Windows.");

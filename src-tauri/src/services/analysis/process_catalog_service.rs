@@ -2,7 +2,9 @@ use crate::domain::analysis_models::ProcessInfo;
 use std::collections::HashSet;
 use sysinfo::System;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
+};
 
 pub fn fetch_system_processes() -> Vec<ProcessInfo> {
     let mut app_pids = HashSet::new();
@@ -26,7 +28,9 @@ pub fn fetch_system_processes() -> Vec<ProcessInfo> {
         BOOL(1)
     }
 
-    let mut state = EnumState { pids: &mut app_pids };
+    let mut state = EnumState {
+        pids: &mut app_pids,
+    };
     unsafe {
         let _ = EnumWindows(Some(enum_window), LPARAM(&mut state as *mut _ as isize));
     }

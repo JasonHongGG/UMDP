@@ -38,8 +38,10 @@ mod tests {
 
     #[test]
     fn workflow_fixture_matches_current_schema() {
-        let fixture: WorkflowEnvelope = serde_json::from_str(include_str!("../../../contract-fixtures/workflow-envelope.json"))
-            .expect("workflow fixture should deserialize");
+        let fixture: WorkflowEnvelope = serde_json::from_str(include_str!(
+            "../../../contract-fixtures/workflow-envelope.json"
+        ))
+        .expect("workflow fixture should deserialize");
 
         assert_eq!(fixture.format, "studio-graph");
         assert_eq!(fixture.schema_version, 1);
@@ -55,8 +57,10 @@ mod tests {
 
     #[test]
     fn workspace_versions_fixture_matches_exposed_versions() {
-        let fixture: WorkspaceContractVersions = serde_json::from_str(include_str!("../../../contract-fixtures/workspace-contract-versions.json"))
-            .expect("workspace versions fixture should deserialize");
+        let fixture: WorkspaceContractVersions = serde_json::from_str(include_str!(
+            "../../../contract-fixtures/workspace-contract-versions.json"
+        ))
+        .expect("workspace versions fixture should deserialize");
 
         assert_eq!(fixture.tauri_command_version, 1);
         assert_eq!(fixture.analysis_schema_version, 2);

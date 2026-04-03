@@ -5,9 +5,7 @@ pub mod workspace_store;
 
 pub use analysis_store::AnalysisState;
 pub use runtime_kernel_store::RuntimeKernelState;
-pub use scene_store::{
-    SceneChildrenState, SceneInspectorState, SceneState,
-};
+pub use scene_store::{SceneChildrenState, SceneInspectorState, SceneState};
 pub use workspace_store::WorkspaceState;
 
 #[derive(Default)]
@@ -88,9 +86,8 @@ mod tests {
     use super::*;
     use crate::domain::analysis_models::{
         ProcessSession, RuntimeFlavor, RuntimeSceneChildrenTaskStatus,
-        RuntimeSceneInspectorTaskStatus,
-        RuntimeSceneComponentSummary, RuntimeSceneKind, SceneRefreshStatus,
-        RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
+        RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus, RuntimeSceneKind,
+        RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot, SceneRefreshStatus,
     };
     use crate::domain::workspace::{RuntimeSessionStatus, WorkspaceLifecycleStatus};
 
@@ -145,9 +142,15 @@ mod tests {
         let current = workspace.current();
         assert_eq!(current.resource_revision, 2);
         assert_eq!(current.status, WorkspaceLifecycleStatus::Recovering);
-        assert_eq!(current.runtime_session.status, RuntimeSessionStatus::Recovering);
+        assert_eq!(
+            current.runtime_session.status,
+            RuntimeSessionStatus::Recovering
+        );
         assert!(!current.runtime_session.connected);
-        assert_eq!(current.runtime_session.last_error.as_deref(), Some("runtime session dropped"));
+        assert_eq!(
+            current.runtime_session.last_error.as_deref(),
+            Some("runtime session dropped")
+        );
     }
 
     #[test]
@@ -197,7 +200,11 @@ mod tests {
             1,
             None,
         );
-        inspector.complete(started.state.task_id, started.state.mutation_epoch, Some("session-1"));
+        inspector.complete(
+            started.state.task_id,
+            started.state.mutation_epoch,
+            Some("session-1"),
+        );
 
         let cached = inspector.start_task("0x10".to_string(), Some("session-1".to_string()));
         assert!(cached.use_cached);
@@ -215,7 +222,9 @@ mod tests {
 
         inspector.invalidate_related(&["0x10".to_string()], Some("session-1"));
 
-        let current = inspector.current(Some("session-1")).expect("expected current inspector task");
+        let current = inspector
+            .current(Some("session-1"))
+            .expect("expected current inspector task");
         assert_eq!(current.task_id, started.state.task_id);
         assert!(current.is_stale);
         assert_eq!(current.status, RuntimeSceneInspectorTaskStatus::Cancelled);
@@ -237,7 +246,12 @@ mod tests {
             1,
             None,
         );
-        children_state.complete("0x10", started.state.task_id, started.state.mutation_epoch, Some("session-1"));
+        children_state.complete(
+            "0x10",
+            started.state.task_id,
+            started.state.mutation_epoch,
+            Some("session-1"),
+        );
 
         let cached = children_state.start_task("0x10".to_string(), Some("session-1".to_string()));
         assert!(!cached.should_spawn);
@@ -268,8 +282,12 @@ mod tests {
         let children_state = SceneChildrenState::default();
         let started = children_state.start_task("0x10".to_string(), Some("session-1".to_string()));
 
-        let restarted = children_state.start_task("0x10".to_string(), Some("session-2".to_string()));
-        assert_ne!(restarted.state.session_key.as_deref(), started.state.session_key.as_deref());
+        let restarted =
+            children_state.start_task("0x10".to_string(), Some("session-2".to_string()));
+        assert_ne!(
+            restarted.state.session_key.as_deref(),
+            started.state.session_key.as_deref()
+        );
 
         let stale = children_state.apply_children(
             "0x10",

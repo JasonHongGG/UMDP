@@ -1,12 +1,11 @@
 use crate::domain::analysis_models::RuntimeFlavor;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W,
-    TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+    CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W, TH32CS_SNAPMODULE,
+    TH32CS_SNAPMODULE32,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ,
-    PROCESS_VM_WRITE,
+    OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
 };
 
 #[derive(Debug, Clone)]
@@ -46,7 +45,8 @@ impl Drop for ProcessHandle {
 }
 
 pub fn open_process(pid: u32) -> Result<ProcessHandle, String> {
-    let desired_access = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION;
+    let desired_access =
+        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION;
     let handle = unsafe { OpenProcess(desired_access, false, pid) }
         .map_err(|error| format!("Failed to open process {}: {}", pid, error.message()))?;
 
@@ -54,8 +54,16 @@ pub fn open_process(pid: u32) -> Result<ProcessHandle, String> {
 }
 
 pub fn enumerate_modules(pid: u32) -> Result<Vec<NativeModuleInfo>, String> {
-    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
-        .map_err(|error| format!("Failed to create module snapshot for process {}: {}", pid, error.message()))?;
+    let snapshot =
+        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }.map_err(
+            |error| {
+                format!(
+                    "Failed to create module snapshot for process {}: {}",
+                    pid,
+                    error.message()
+                )
+            },
+        )?;
 
     let mut modules = Vec::new();
     let mut entry = MODULEENTRY32W {
@@ -96,6 +104,9 @@ pub fn detect_runtime_flavor(pid: u32) -> Result<RuntimeFlavor, String> {
 }
 
 fn wide_string(buffer: &[u16]) -> String {
-    let len = buffer.iter().position(|value| *value == 0).unwrap_or(buffer.len());
+    let len = buffer
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(buffer.len());
     String::from_utf16_lossy(&buffer[..len])
 }

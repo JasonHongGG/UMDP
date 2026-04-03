@@ -40,6 +40,14 @@ impl RuntimeSession {
     pub fn runtime_api(&self) -> Option<&dyn RuntimeApi> {
         self.runtime_api.as_deref()
     }
+
+    #[cfg(test)]
+    pub fn for_tests(pid: u32) -> Self {
+        Self {
+            pid,
+            runtime_api: None,
+        }
+    }
 }
 
 fn prefer_detected_runtime(existing: &RuntimeFlavor, detected: RuntimeFlavor) -> RuntimeFlavor {

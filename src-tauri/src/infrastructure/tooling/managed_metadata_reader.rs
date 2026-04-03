@@ -31,7 +31,10 @@ pub fn find_managed_metadata_reader(app: &AppHandle) -> Result<PathBuf, String> 
         })
 }
 
-pub fn dump_all_metadata(app: &AppHandle, metadata_input: &str) -> Result<AnalysisSnapshot, String> {
+pub fn dump_all_metadata(
+    app: &AppHandle,
+    metadata_input: &str,
+) -> Result<AnalysisSnapshot, String> {
     let executable = find_managed_metadata_reader(app)?;
     let output = Command::new(&executable)
         .arg("dump-all")
@@ -41,10 +44,7 @@ pub fn dump_all_metadata(app: &AppHandle, metadata_input: &str) -> Result<Analys
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "Managed metadata reader failed: {}",
-            stderr.trim()
-        ));
+        return Err(format!("Managed metadata reader failed: {}", stderr.trim()));
     }
 
     serde_json::from_slice(&output.stdout)

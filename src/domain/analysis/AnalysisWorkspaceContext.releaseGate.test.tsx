@@ -41,6 +41,7 @@ interface WorkflowSnapshot {
   processPid: number | null;
   sessionKey: string | null;
   hasSnapshot: boolean;
+  runtimeLabel: string;
   sceneSelectionReady: boolean;
   studioSelectionReady: boolean;
   resetNoticeKind: string | null;
@@ -91,6 +92,7 @@ function createReadyLifecycle(
   session: ProcessSession,
   sessionKey: string,
   resourceRevision: number,
+  runtimeSessionOverrides: Partial<WorkspaceLifecycleState['runtimeSession']> = {},
 ): WorkspaceLifecycleState {
   return createLifecycle({
     resourceRevision,
@@ -102,10 +104,11 @@ function createReadyLifecycle(
       status: 'ready',
       runtime: session.runtime,
       capabilities: ['metadata', 'execution', 'scene-read'],
-        connected: true,
+      connected: true,
       sessionKey,
       lastError: null,
       lastHeartbeatAt: '2026-03-31T10:00:00.000Z',
+      ...runtimeSessionOverrides,
     },
   });
 }
@@ -153,6 +156,7 @@ function TestConsumer() {
     processPid: shell.processSession?.pid ?? null,
     sessionKey: shell.workspaceLifecycle.runtimeSession.sessionKey,
     hasSnapshot: shell.workspaceLifecycle.hasSnapshot,
+    runtimeLabel: shell.workspacePresentation.runtimeLabel,
     sceneSelectionReady: shell.workspacePresentation.pages.scene.selectionReady,
     studioSelectionReady: shell.workspacePresentation.pages.studio.selectionReady,
     resetNoticeKind: shell.workspacePresentation.notice?.kind ?? null,
@@ -167,6 +171,7 @@ function TestConsumer() {
       processPid: shell.processSession?.pid ?? null,
       sessionKey: shell.workspaceLifecycle.runtimeSession.sessionKey,
       hasSnapshot: shell.workspaceLifecycle.hasSnapshot,
+      runtimeLabel: shell.workspacePresentation.runtimeLabel,
       sceneSelectionReady: shell.workspacePresentation.pages.scene.selectionReady,
       studioSelectionReady: shell.workspacePresentation.pages.studio.selectionReady,
       resetNoticeKind: shell.workspacePresentation.notice?.kind ?? null,
@@ -366,5 +371,91 @@ describe('AnalysisWorkspaceProvider release gates', () => {
       taskCount: 0,
     });
     expect(history.some((entry) => entry.resetNoticeKind === 'session-changed')).toBe(true);
+  });
+
+  it('keeps scene and studio gated until runtime becomes interactive after metadata is loaded', async () => {
+    const session: ProcessSession = {
+      pid: 3003,
+      processName: 'UnityGamma.exe',
+      exePath: 'C:/Games/UnityGamma.exe',
+      dataDir: 'C:/Games/UnityGamma_Data',
+      managedDir: 'C:/Games/UnityGamma_Data/Managed',
+      runtime: 'mono',
+    };
+    const contractVersions: SystemContractVersions = {
+      tauriCommandVersion: 1,
+      analysisSchemaVersion: 2,
+      workflowSchemaVersion: 1,
+    };
+    const metadataLoad = createDeferred<AnalysisSnapshot>();
+    const repository = createRepository({
+      attachToProcess: vi.fn().mockResolvedValue(session),
+      getContractVersions: vi.fn().mockResolvedValue(contractVersions),
+      getWorkspaceLifecycle: vi.fn()
+        .mockResolvedValueOnce(createLifecycle())
+        .mockResolvedValueOnce(createAttachedLifecycle(session, 'session-3', 1))
+        .mockResolvedValueOnce(createReadyLifecycle(session, 'session-3', 2, {
+          status: 'starting',
+          connected: false,
+          lastHeartbeatAt: null,
+        }))
+        .mockResolvedValueOnce(createReadyLifecycle(session, 'session-3', 3)),
+      loadAllMetadata: vi.fn().mockImplementationOnce(() => metadataLoad.promise),
+      getRuntimeStaticFields: vi.fn(),
+      getRuntimeInstanceFields: vi.fn(),
+    });
+
+    mocks.createTauriAnalysisRepository.mockReturnValue(repository);
+    mocks.createTauriSceneGateway.mockReturnValue({});
+
+    await act(async () => {
+      root.render(
+        createElement(AppInfrastructureProvider, null,
+          createElement(AnalysisWorkspaceProvider, null,
+            createElement(TestConsumer),
+          ),
+        ),
+      );
+    });
+    await flushEffects();
+
+    let attach: Promise<void> | void;
+    await act(async () => {
+      attach = processSelectedHandler?.({ pid: session.pid, name: session.processName });
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    await act(async () => {
+      metadataLoad.resolve(createSnapshot(session, '2026-03-31T10:10:00.000Z'));
+      await attach;
+    });
+    await flushEffects();
+
+    expect(latestState).toMatchObject({
+      status: 'ready',
+      processPid: 3003,
+      sessionKey: 'session-3',
+      hasSnapshot: true,
+      runtimeLabel: 'Runtime Starting',
+      sceneSelectionReady: false,
+      studioSelectionReady: false,
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(latestState).toMatchObject({
+      status: 'ready',
+      processPid: 3003,
+      sessionKey: 'session-3',
+      hasSnapshot: true,
+      runtimeLabel: 'Runtime Ready',
+      sceneSelectionReady: true,
+      studioSelectionReady: true,
+    });
   });
 });

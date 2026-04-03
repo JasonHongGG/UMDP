@@ -102,8 +102,14 @@ impl RemoteMemory {
     }
 
     pub fn free_address(&self, address: usize) -> Result<(), String> {
-        unsafe { VirtualFreeEx(self.process.raw(), address as _, 0, MEM_RELEASE) }
-            .map_err(|error| format!("Failed to free remote allocation at 0x{address:X}: {}", error.message()))?;
+        unsafe { VirtualFreeEx(self.process.raw(), address as _, 0, MEM_RELEASE) }.map_err(
+            |error| {
+                format!(
+                    "Failed to free remote allocation at 0x{address:X}: {}",
+                    error.message()
+                )
+            },
+        )?;
         Ok(())
     }
 
@@ -119,7 +125,12 @@ impl RemoteMemory {
                 Some(&mut bytes_read),
             )
         }
-        .map_err(|error| format!("Failed to read process memory at 0x{address:X}: {}", error.message()))?;
+        .map_err(|error| {
+            format!(
+                "Failed to read process memory at 0x{address:X}: {}",
+                error.message()
+            )
+        })?;
         buffer.truncate(bytes_read);
         Ok(buffer)
     }
@@ -136,7 +147,11 @@ impl RemoteMemory {
 
         let mut value = std::mem::MaybeUninit::<T>::uninit();
         unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), value.as_mut_ptr() as *mut u8, bytes.len());
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                value.as_mut_ptr() as *mut u8,
+                bytes.len(),
+            );
             Ok(value.assume_init())
         }
     }
@@ -152,7 +167,12 @@ impl RemoteMemory {
                 Some(&mut bytes_written),
             )
         }
-        .map_err(|error| format!("Failed to write process memory at 0x{address:X}: {}", error.message()))?;
+        .map_err(|error| {
+            format!(
+                "Failed to write process memory at 0x{address:X}: {}",
+                error.message()
+            )
+        })?;
 
         if bytes_written != data.len() {
             return Err(format!(
@@ -195,7 +215,10 @@ impl RemoteMemory {
 
         let bytes = self.read_bytes(address, char_count * std::mem::size_of::<u16>())?;
         if bytes.len() % 2 != 0 {
-            return Err(format!("Invalid UTF-16 byte length {} at 0x{address:X}", bytes.len()));
+            return Err(format!(
+                "Invalid UTF-16 byte length {} at 0x{address:X}",
+                bytes.len()
+            ));
         }
 
         Ok(bytes
@@ -216,7 +239,12 @@ impl RemoteMemory {
                 None,
             )
         }
-        .map_err(|error| format!("Failed to create remote thread at 0x{entry_point:X}: {}", error.message()))?;
+        .map_err(|error| {
+            format!(
+                "Failed to create remote thread at 0x{entry_point:X}: {}",
+                error.message()
+            )
+        })?;
 
         unsafe {
             WaitForSingleObject(thread, INFINITE);

@@ -1,17 +1,15 @@
 use super::events::emit_scene_workspace_state;
 use super::{current_scene_session_key, log_scene_duration};
 use crate::domain::analysis_models::{
-    RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenPageSnapshot,
-    RuntimeSceneChildrenSnapshot, RuntimeSceneComponentsPageSnapshot,
-    RuntimeSceneObjectInspectorHeaderSnapshot,
+    RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenPageSnapshot, RuntimeSceneChildrenSnapshot,
+    RuntimeSceneComponentsPageSnapshot, RuntimeSceneObjectInspectorHeaderSnapshot,
     RuntimeSceneObjectInspectorSnapshot, SceneWorkspaceState,
 };
 use crate::domain::operation::{OperationError, OperationResult};
 use crate::kernel::runtime::session::RuntimeSession;
 use crate::kernel::scene::query as native_scene;
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_runtime_session_ready,
-    execute_runtime_operation, present,
+    ensure_attached_session, ensure_runtime_session_ready, execute_runtime_operation, present,
 };
 use crate::state::AppState;
 use std::sync::Arc;
@@ -26,7 +24,10 @@ pub fn start_scene_refresh(
     present(ensure_attached_session(state).map(|_| ()))?;
     present(ensure_scene_query_runtime_ready(state))?;
     let session_key = current_scene_session_key(state);
-    let workspace = state.scene().workspace().set_refreshing(session_key.clone());
+    let workspace = state
+        .scene()
+        .workspace()
+        .set_refreshing(session_key.clone());
     emit_scene_workspace_state(_app, &workspace);
 
     let snapshot = match execute_runtime_operation(state, || load_scene_catalog(state)) {
@@ -111,14 +112,12 @@ pub fn get_scene_object_inspector(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_catalog(
-    state: &AppState,
-) -> OperationResult<RuntimeSceneCatalogSnapshot> {
+pub(super) fn load_scene_catalog(state: &AppState) -> OperationResult<RuntimeSceneCatalogSnapshot> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
     let runtime_session = require_runtime_session(state)?;
-    let snapshot = native_scene::load_scene_catalog(runtime_session.as_ref())
-        .map_err(OperationError::from)?;
+    let snapshot =
+        native_scene::load_scene_catalog(runtime_session.as_ref()).map_err(OperationError::from)?;
     log_scene_duration(
         "load_scene_catalog",
         started_at,
@@ -210,8 +209,9 @@ pub(super) fn load_scene_inspector_header(
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
     let runtime_session = require_runtime_session(state)?;
-    let snapshot = native_scene::load_scene_inspector_header(runtime_session.as_ref(), object_address)
-        .map_err(OperationError::from)?;
+    let snapshot =
+        native_scene::load_scene_inspector_header(runtime_session.as_ref(), object_address)
+            .map_err(OperationError::from)?;
     log_scene_duration(
         "load_scene_inspector_header",
         started_at,
@@ -282,9 +282,7 @@ pub(super) fn load_scene_inspector_components_page(
     Ok(snapshot)
 }
 
-pub(super) fn ensure_scene_query_runtime_ready(
-    state: &AppState,
-) -> OperationResult<()> {
+pub(super) fn ensure_scene_query_runtime_ready(state: &AppState) -> OperationResult<()> {
     require_runtime_session(state)?;
     Ok(())
 }

@@ -1,15 +1,11 @@
-use super::events::{
-    emit_scene_children_task_state, emit_scene_inspector_task_state,
-};
+use super::events::{emit_scene_children_task_state, emit_scene_inspector_task_state};
 use super::query::{
-    ensure_scene_query_runtime_ready,
-    load_scene_children_page, load_scene_inspector_children_page,
+    ensure_scene_query_runtime_ready, load_scene_children_page, load_scene_inspector_children_page,
     load_scene_inspector_components_page, load_scene_inspector_header,
 };
 use super::{current_scene_session_key, log_scene_duration};
 use crate::domain::analysis_models::{
-    RuntimeSceneObjectChildrenTaskState,
-    RuntimeSceneObjectInspectorTaskState,
+    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorTaskState,
 };
 use crate::services::analysis::runtime_session_service::{
     ensure_attached_session, execute_runtime_operation, present,
@@ -61,8 +57,7 @@ pub fn start_scene_object_children_analysis(
         started_at,
         &format!(
             "object_address={object_address} task_id={} spawn={}",
-            task_start.state.task_id,
-            task_start.should_spawn
+            task_start.state.task_id, task_start.should_spawn
         ),
     );
     Ok(task_start.state)
@@ -86,8 +81,8 @@ pub fn cancel_scene_object_children_analysis(
 ) -> Option<RuntimeSceneObjectChildrenTaskState> {
     let session_key = current_scene_session_key(state);
     state
-    .scene()
-    .children()
+        .scene()
+        .children()
         .cancel(object_address, task_id, session_key.as_deref())
 }
 
@@ -130,8 +125,7 @@ pub fn start_scene_object_inspector_analysis(
         started_at,
         &format!(
             "object_address={object_address} task_id={} cached={}",
-            task_start.state.task_id,
-            task_start.use_cached
+            task_start.state.task_id, task_start.use_cached
         ),
     );
     Ok(task_start.state)
@@ -150,8 +144,8 @@ pub fn cancel_scene_object_inspector_analysis(
 ) -> Option<RuntimeSceneObjectInspectorTaskState> {
     let session_key = current_scene_session_key(state);
     state
-    .scene()
-    .inspector()
+        .scene()
+        .inspector()
         .cancel(task_id, session_key.as_deref())
 }
 
@@ -166,12 +160,7 @@ fn run_scene_object_children_task(
     let mut child_offset = 0usize;
     loop {
         let page = match execute_runtime_operation(state, || {
-            load_scene_children_page(
-                state,
-                object_address,
-                child_offset,
-                TREE_CHILDREN_PAGE_SIZE,
-            )
+            load_scene_children_page(state, object_address, child_offset, TREE_CHILDREN_PAGE_SIZE)
         }) {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -208,10 +197,11 @@ fn run_scene_object_children_task(
         }
     }
 
-    if let Some(task_state) = state
-        .scene()
-        .children()
-        .complete(object_address, task_id, mutation_epoch, session_key)
+    if let Some(task_state) =
+        state
+            .scene()
+            .children()
+            .complete(object_address, task_id, mutation_epoch, session_key)
     {
         emit_scene_children_task_state(app, &task_state);
     }
@@ -230,20 +220,22 @@ fn run_scene_object_inspector_task(
     }) {
         Ok(snapshot) => snapshot,
         Err(error) => {
-            if let Some(task_state) = state
-                .scene()
-                .inspector()
-                .fail(task_id, mutation_epoch, session_key, error.to_string())
-            {
+            if let Some(task_state) = state.scene().inspector().fail(
+                task_id,
+                mutation_epoch,
+                session_key,
+                error.to_string(),
+            ) {
                 emit_scene_inspector_task_state(app, &task_state);
             }
             return;
         }
     };
-    let Some(task_state) = state
-        .scene()
-        .inspector()
-        .apply_header(task_id, mutation_epoch, session_key, header)
+    let Some(task_state) =
+        state
+            .scene()
+            .inspector()
+            .apply_header(task_id, mutation_epoch, session_key, header)
     else {
         return;
     };
@@ -261,11 +253,12 @@ fn run_scene_object_inspector_task(
         }) {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                if let Some(task_state) = state
-                    .scene()
-                    .inspector()
-                    .fail(task_id, mutation_epoch, session_key, error.to_string())
-                {
+                if let Some(task_state) = state.scene().inspector().fail(
+                    task_id,
+                    mutation_epoch,
+                    session_key,
+                    error.to_string(),
+                ) {
                     emit_scene_inspector_task_state(app, &task_state);
                 }
                 return;
@@ -303,11 +296,12 @@ fn run_scene_object_inspector_task(
         }) {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                if let Some(task_state) = state
-                    .scene()
-                    .inspector()
-                    .fail(task_id, mutation_epoch, session_key, error.to_string())
-                {
+                if let Some(task_state) = state.scene().inspector().fail(
+                    task_id,
+                    mutation_epoch,
+                    session_key,
+                    error.to_string(),
+                ) {
                     emit_scene_inspector_task_state(app, &task_state);
                 }
                 return;
@@ -333,10 +327,11 @@ fn run_scene_object_inspector_task(
         }
     }
 
-    if let Some(task_state) = state
-        .scene()
-        .inspector()
-        .complete(task_id, mutation_epoch, session_key)
+    if let Some(task_state) =
+        state
+            .scene()
+            .inspector()
+            .complete(task_id, mutation_epoch, session_key)
     {
         emit_scene_inspector_task_state(app, &task_state);
     }

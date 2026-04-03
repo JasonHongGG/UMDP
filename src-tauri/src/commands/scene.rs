@@ -1,11 +1,9 @@
-use crate::domain::analysis_models::{
-    RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult,
-    RuntimeSceneObjectChildrenTaskState,
-    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
-    RuntimeSceneTransformUpdate,
-    SceneWorkspaceState,
-};
 use crate::application::scene as scene_application;
+use crate::domain::analysis_models::{
+    RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
+    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
+    RuntimeSceneTransformUpdate, SceneWorkspaceState,
+};
 use crate::infrastructure::logging::{self, DiagnosticsField};
 use crate::state::AppState;
 use std::fmt::Display;
@@ -50,9 +48,18 @@ pub async fn start_scene_refresh(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::start_scene_refresh(&app_handle, &state);
-        log_scene_command_result("start_scene_refresh", started_at, &result, Vec::new(), |workspace| {
-            vec![field("refreshStatus", format!("{:?}", workspace.refresh_status))]
-        });
+        log_scene_command_result(
+            "start_scene_refresh",
+            started_at,
+            &result,
+            Vec::new(),
+            |workspace| {
+                vec![field(
+                    "refreshStatus",
+                    format!("{:?}", workspace.refresh_status),
+                )]
+            },
+        );
         result
     })
     .await
@@ -71,7 +78,8 @@ pub fn start_scene_object_children_analysis(
     object_address: String,
 ) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
     let started_at = Instant::now();
-    let result = scene_application::start_scene_object_children_analysis(&app, &state, &object_address);
+    let result =
+        scene_application::start_scene_object_children_analysis(&app, &state, &object_address);
     log_scene_command_result(
         "start_scene_object_children_analysis",
         started_at,
@@ -111,7 +119,8 @@ pub fn start_scene_object_inspector_analysis(
     object_address: String,
 ) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
     let started_at = Instant::now();
-    let result = scene_application::start_scene_object_inspector_analysis(&app, &state, &object_address);
+    let result =
+        scene_application::start_scene_object_inspector_analysis(&app, &state, &object_address);
     log_scene_command_result(
         "start_scene_object_inspector_analysis",
         started_at,
@@ -128,7 +137,9 @@ pub fn start_scene_object_inspector_analysis(
 }
 
 #[tauri::command]
-pub fn get_scene_object_inspector_state(state: State<'_, AppState>) -> Option<RuntimeSceneObjectInspectorTaskState> {
+pub fn get_scene_object_inspector_state(
+    state: State<'_, AppState>,
+) -> Option<RuntimeSceneObjectInspectorTaskState> {
     scene_application::get_scene_object_inspector_state(&state)
 }
 
@@ -150,7 +161,8 @@ pub async fn get_scene_object_children(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::get_scene_object_children(&app_handle, &state, &object_address);
+        let result =
+            scene_application::get_scene_object_children(&app_handle, &state, &object_address);
         log_scene_command_result(
             "get_scene_object_children",
             started_at,
@@ -174,7 +186,8 @@ pub async fn get_scene_object_inspector(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::get_scene_object_inspector(&app_handle, &state, &object_address);
+        let result =
+            scene_application::get_scene_object_inspector(&app_handle, &state, &object_address);
         log_scene_command_result(
             "get_scene_object_inspector",
             started_at,
@@ -204,7 +217,12 @@ pub async fn create_scene_child(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::create_scene_child(&app_handle, &state, &parent_object_address, &name);
+        let result = scene_application::create_scene_child(
+            &app_handle,
+            &state,
+            &parent_object_address,
+            &name,
+        );
         log_scene_command_result(
             "create_scene_child",
             started_at,
@@ -263,7 +281,8 @@ pub async fn duplicate_scene_object(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::duplicate_scene_object(&app_handle, &state, &object_address);
+        let result =
+            scene_application::duplicate_scene_object(&app_handle, &state, &object_address);
         log_scene_command_result(
             "duplicate_scene_object",
             started_at,
@@ -322,7 +341,8 @@ pub async fn rename_scene_object(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::rename_scene_object(&app_handle, &state, &object_address, &name);
+        let result =
+            scene_application::rename_scene_object(&app_handle, &state, &object_address, &name);
         log_scene_command_result(
             "rename_scene_object",
             started_at,
@@ -352,7 +372,8 @@ pub async fn set_scene_object_tag(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::set_scene_object_tag(&app_handle, &state, &object_address, &tag);
+        let result =
+            scene_application::set_scene_object_tag(&app_handle, &state, &object_address, &tag);
         log_scene_command_result(
             "set_scene_object_tag",
             started_at,
@@ -382,7 +403,8 @@ pub async fn set_scene_object_layer(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::set_scene_object_layer(&app_handle, &state, &object_address, layer);
+        let result =
+            scene_application::set_scene_object_layer(&app_handle, &state, &object_address, layer);
         log_scene_command_result(
             "set_scene_object_layer",
             started_at,
@@ -412,7 +434,12 @@ pub async fn set_scene_object_hide_flags(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::set_scene_object_hide_flags(&app_handle, &state, &object_address, &hide_flags);
+        let result = scene_application::set_scene_object_hide_flags(
+            &app_handle,
+            &state,
+            &object_address,
+            &hide_flags,
+        );
         log_scene_command_result(
             "set_scene_object_hide_flags",
             started_at,
@@ -486,7 +513,12 @@ pub async fn set_scene_object_active(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::set_scene_object_active(&app_handle, &state, &object_address, active_self);
+        let result = scene_application::set_scene_object_active(
+            &app_handle,
+            &state,
+            &object_address,
+            active_self,
+        );
         log_scene_command_result(
             "set_scene_object_active",
             started_at,
@@ -519,7 +551,12 @@ pub async fn set_scene_object_transform(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::set_scene_object_transform(&app_handle, &state, &object_address, &transform_update);
+        let result = scene_application::set_scene_object_transform(
+            &app_handle,
+            &state,
+            &object_address,
+            &transform_update,
+        );
         log_scene_command_result(
             "set_scene_object_transform",
             started_at,
@@ -549,7 +586,12 @@ pub async fn set_scene_behaviour_enabled(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::set_scene_behaviour_enabled(&app_handle, &state, &component_address, enabled);
+        let result = scene_application::set_scene_behaviour_enabled(
+            &app_handle,
+            &state,
+            &component_address,
+            enabled,
+        );
         log_scene_command_result(
             "set_scene_behaviour_enabled",
             started_at,
@@ -582,7 +624,12 @@ pub async fn create_scene_component(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::create_scene_component(&app_handle, &state, &object_address, &component_type_name);
+        let result = scene_application::create_scene_component(
+            &app_handle,
+            &state,
+            &object_address,
+            &component_type_name,
+        );
         log_scene_command_result(
             "create_scene_component",
             started_at,
@@ -614,7 +661,8 @@ pub async fn delete_scene_component(
     tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
-        let result = scene_application::delete_scene_component(&app_handle, &state, &component_address);
+        let result =
+            scene_application::delete_scene_component(&app_handle, &state, &component_address);
         log_scene_command_result(
             "delete_scene_component",
             started_at,

@@ -72,7 +72,10 @@ impl WorkspaceState {
             runtime: lifecycle.runtime.clone(),
             capabilities: runtime_capabilities_for(&lifecycle.runtime),
             connected: false,
-            session_key: lifecycle.process_session.as_ref().map(runtime_session_key_for),
+            session_key: lifecycle
+                .process_session
+                .as_ref()
+                .map(runtime_session_key_for),
             last_error: None,
             last_heartbeat_at: None,
         };
@@ -92,7 +95,10 @@ impl WorkspaceState {
         lifecycle.runtime_session.runtime = lifecycle.runtime.clone();
         lifecycle.runtime_session.capabilities = runtime_capabilities_for(&lifecycle.runtime);
         lifecycle.runtime_session.connected = false;
-        lifecycle.runtime_session.session_key = lifecycle.process_session.as_ref().map(runtime_session_key_for);
+        lifecycle.runtime_session.session_key = lifecycle
+            .process_session
+            .as_ref()
+            .map(runtime_session_key_for);
         lifecycle.runtime_session.last_error = None;
         lifecycle.runtime_session.last_heartbeat_at = None;
         bump_resource_revision(&mut lifecycle);
@@ -180,7 +186,10 @@ fn sync_runtime_context(lifecycle: &mut WorkspaceLifecycleState) -> bool {
         .map(|session| session.runtime.clone())
         .unwrap_or_else(|| lifecycle.runtime.clone());
     let capabilities = runtime_capabilities_for(&runtime);
-    let session_key = lifecycle.process_session.as_ref().map(runtime_session_key_for);
+    let session_key = lifecycle
+        .process_session
+        .as_ref()
+        .map(runtime_session_key_for);
 
     let mut changed = false;
     if lifecycle.runtime_session.runtime != runtime {
@@ -200,7 +209,10 @@ fn sync_runtime_context(lifecycle: &mut WorkspaceLifecycleState) -> bool {
 }
 
 fn runtime_session_key_for(process_session: &ProcessSession) -> String {
-    format!("{}:{}:{:?}", process_session.pid, process_session.process_name, process_session.runtime)
+    format!(
+        "{}:{}:{:?}",
+        process_session.pid, process_session.process_name, process_session.runtime
+    )
 }
 
 fn runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {

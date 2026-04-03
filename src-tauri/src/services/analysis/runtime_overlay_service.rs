@@ -1,6 +1,7 @@
 use crate::domain::analysis_models::{
-    create_field_stable_id, FieldDescriptor, RuntimeClassOverlayDescriptor, RuntimeInstanceFieldSnapshot,
-    RuntimeOverlaySnapshot, RuntimeResolvedFieldDescriptor, StaticFieldDescriptor,
+    create_field_stable_id, FieldDescriptor, RuntimeClassOverlayDescriptor,
+    RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot, RuntimeResolvedFieldDescriptor,
+    StaticFieldDescriptor,
 };
 use crate::domain::operation::{OperationError, OperationResult};
 use crate::infrastructure::clock::current_timestamp;
@@ -75,7 +76,8 @@ pub fn get_runtime_instance_fields(
 
     present(execute_runtime_operation(state, || {
         let parsed_instance_address = parse_address(instance_address)?;
-        let response = load_native_overlay_response(state, &descriptor, Some(parsed_instance_address))?;
+        let response =
+            load_native_overlay_response(state, &descriptor, Some(parsed_instance_address))?;
 
         Ok::<RuntimeInstanceFieldSnapshot, OperationError>(RuntimeInstanceFieldSnapshot {
             class_stable_id: descriptor.stable_id.clone(),
@@ -166,6 +168,7 @@ fn load_native_overlay_response(
 fn parse_address(value: &str) -> OperationResult<usize> {
     let trimmed = value.trim();
     let normalized = trimmed.strip_prefix("0x").unwrap_or(trimmed);
-    usize::from_str_radix(normalized, 16)
-        .map_err(|error| OperationError::invalid_address(format!("Invalid instance address '{}': {}", value, error)))
+    usize::from_str_radix(normalized, 16).map_err(|error| {
+        OperationError::invalid_address(format!("Invalid instance address '{}': {}", value, error))
+    })
 }

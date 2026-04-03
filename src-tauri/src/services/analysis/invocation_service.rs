@@ -22,8 +22,12 @@ fn build_failure_result(
         class_stable_id: request.class_stable_id.clone(),
         method_stable_id: request.method_stable_id.clone(),
         method_name: method.map(|entry| entry.name.clone()).unwrap_or_default(),
-        method_signature: method.map(|entry| entry.signature.clone()).unwrap_or_default(),
-        return_type: method.map(|entry| entry.return_type.clone()).unwrap_or_default(),
+        method_signature: method
+            .map(|entry| entry.signature.clone())
+            .unwrap_or_default(),
+        return_type: method
+            .map(|entry| entry.return_type.clone())
+            .unwrap_or_default(),
         success: false,
         failure_kind,
         error: Some(error.into()),
@@ -138,7 +142,13 @@ pub fn invoke_runtime_method(
     };
 
     match execute_runtime_operation(state, || {
-        native_invoke::invoke_runtime_method(runtime_api, attached.pid, &descriptor, &method, &request)
+        native_invoke::invoke_runtime_method(
+            runtime_api,
+            attached.pid,
+            &descriptor,
+            &method,
+            &request,
+        )
     }) {
         Ok(result) => result,
         Err(error) => build_failure_result(

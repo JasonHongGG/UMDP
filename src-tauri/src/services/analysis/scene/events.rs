@@ -1,6 +1,5 @@
 use crate::domain::analysis_models::{
-    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorTaskState,
-    SceneWorkspaceState,
+    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorTaskState, SceneWorkspaceState,
 };
 use crate::infrastructure::logging;
 use tauri::{AppHandle, Emitter};

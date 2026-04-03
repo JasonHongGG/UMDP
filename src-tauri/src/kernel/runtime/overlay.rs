@@ -61,14 +61,25 @@ pub fn load_class_overlay(
                 name: field.name.clone(),
                 field_type: field.type_name.clone(),
                 offset: field.offset.map(format_hex_offset),
-                address: instance_address.and_then(|address| field.offset.map(|offset| format_hex_address(address + offset))),
-                value: instance_address.and_then(|address| read_field_value(runtime_api, field, Some(address)).ok().flatten()),
+                address: instance_address.and_then(|address| {
+                    field
+                        .offset
+                        .map(|offset| format_hex_address(address + offset))
+                }),
+                value: instance_address.and_then(|address| {
+                    read_field_value(runtime_api, field, Some(address))
+                        .ok()
+                        .flatten()
+                }),
             })
             .collect(),
     })
 }
 
-pub(crate) fn resolve_image(runtime_api: &dyn RuntimeApi, image_name: &str) -> Result<NativeAddress, String> {
+pub(crate) fn resolve_image(
+    runtime_api: &dyn RuntimeApi,
+    image_name: &str,
+) -> Result<NativeAddress, String> {
     let expected = image_name.to_ascii_lowercase();
     let without_extension = expected.strip_suffix(".dll").unwrap_or(&expected);
     for assembly in runtime_api.enumerate_assemblies()? {
@@ -85,7 +96,10 @@ pub(crate) fn resolve_image(runtime_api: &dyn RuntimeApi, image_name: &str) -> R
     Err("image not found".to_string())
 }
 
-pub(crate) fn build_class_hierarchy(runtime_api: &dyn RuntimeApi, class_handle: NativeAddress) -> Result<Vec<NativeAddress>, String> {
+pub(crate) fn build_class_hierarchy(
+    runtime_api: &dyn RuntimeApi,
+    class_handle: NativeAddress,
+) -> Result<Vec<NativeAddress>, String> {
     let mut hierarchy = Vec::new();
     let mut current = class_handle;
     while current != 0 {
@@ -112,17 +126,36 @@ pub(crate) fn read_field_value(
     };
 
     match field.type_name.as_str() {
-        "System.Boolean" => Ok(try_read(1)?.map(|bytes| if bytes[0] == 0 { "false".to_string() } else { "true".to_string() })),
+        "System.Boolean" => Ok(try_read(1)?.map(|bytes| {
+            if bytes[0] == 0 {
+                "false".to_string()
+            } else {
+                "true".to_string()
+            }
+        })),
         "System.Byte" => Ok(try_read(1)?.map(|bytes| bytes[0].to_string())),
         "System.SByte" => Ok(try_read(1)?.map(|bytes| (bytes[0] as i8).to_string())),
-        "System.Int16" => Ok(try_read(2)?.map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]).to_string())),
-        "System.UInt16" => Ok(try_read(2)?.map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]).to_string())),
-        "System.Int32" => Ok(try_read(4)?.map(|bytes| i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string())),
-        "System.UInt32" => Ok(try_read(4)?.map(|bytes| u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string())),
-        "System.Int64" => Ok(try_read(8)?.map(|bytes| i64::from_le_bytes(bytes.try_into().unwrap()).to_string())),
-        "System.UInt64" => Ok(try_read(8)?.map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()).to_string())),
-        "System.Single" => Ok(try_read(4)?.map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string())),
-        "System.Double" => Ok(try_read(8)?.map(|bytes| f64::from_le_bytes(bytes.try_into().unwrap()).to_string())),
+        "System.Int16" => {
+            Ok(try_read(2)?.map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]).to_string()))
+        }
+        "System.UInt16" => {
+            Ok(try_read(2)?.map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]).to_string()))
+        }
+        "System.Int32" => Ok(try_read(4)?
+            .map(|bytes| i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string())),
+        "System.UInt32" => Ok(try_read(4)?
+            .map(|bytes| u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string())),
+        "System.Int64" => {
+            Ok(try_read(8)?.map(|bytes| i64::from_le_bytes(bytes.try_into().unwrap()).to_string()))
+        }
+        "System.UInt64" => {
+            Ok(try_read(8)?.map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()).to_string()))
+        }
+        "System.Single" => Ok(try_read(4)?
+            .map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).to_string())),
+        "System.Double" => {
+            Ok(try_read(8)?.map(|bytes| f64::from_le_bytes(bytes.try_into().unwrap()).to_string()))
+        }
         _ => {
             let pointer_value = if cfg!(target_pointer_width = "64") {
                 try_read(8)?.map(|bytes| usize::from_le_bytes(bytes.try_into().unwrap()))

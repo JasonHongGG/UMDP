@@ -4,11 +4,14 @@ use crate::infrastructure::clock::current_timestamp;
 use crate::infrastructure::logging;
 use crate::infrastructure::tooling::managed_metadata_reader;
 use crate::services::analysis::runtime_session_service::ensure_attached_session;
+use crate::state::AppState;
 use std::time::Instant;
 use tauri::AppHandle;
-use crate::state::AppState;
 
-fn same_metadata_source(left: &crate::domain::analysis_models::ProcessSession, right: &crate::domain::analysis_models::ProcessSession) -> bool {
+fn same_metadata_source(
+    left: &crate::domain::analysis_models::ProcessSession,
+    right: &crate::domain::analysis_models::ProcessSession,
+) -> bool {
     left.pid == right.pid
         && left.exe_path == right.exe_path
         && left.data_dir == right.data_dir
@@ -65,6 +68,9 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<A
         ],
     );
 
-    state.workspace().analysis().set_metadata_snapshot(response.clone());
+    state
+        .workspace()
+        .analysis()
+        .set_metadata_snapshot(response.clone());
     Ok(response)
 }

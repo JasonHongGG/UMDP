@@ -85,12 +85,14 @@ impl MonoRuntimeApi {
         }
 
         if let Ok(address) = self.resolve_export_address("mono_class_from_name_case") {
-            self.exports.insert("mono_class_from_name_case".to_string(), address);
+            self.exports
+                .insert("mono_class_from_name_case".to_string(), address);
         }
 
         self.thread_attach = self.export_address("mono_thread_attach")?;
         self.thread_detach = self.export_address("mono_thread_detach")?;
-        self.root_domain = self.invoke_direct(self.export_address("mono_get_root_domain")?, &[], false)?;
+        self.root_domain =
+            self.invoke_direct(self.export_address("mono_get_root_domain")?, &[], false)?;
         if self.root_domain == 0 {
             return Err("failed to resolve mono root domain".to_string());
         }
@@ -118,12 +120,20 @@ impl MonoRuntimeApi {
                 DONT_RESOLVE_DLL_REFERENCES,
             )
         }
-        .map_err(|error| format!("failed to load local mono module for export resolution: {}", error.message()))?;
+        .map_err(|error| {
+            format!(
+                "failed to load local mono module for export resolution: {}",
+                error.message()
+            )
+        })?;
 
-        let proc_name = std::ffi::CString::new(name).map_err(|_| format!("invalid export name: {}", name))?;
+        let proc_name =
+            std::ffi::CString::new(name).map_err(|_| format!("invalid export name: {}", name))?;
         let local_proc = unsafe { GetProcAddress(local_module, PCSTR(proc_name.as_ptr() as _)) };
         let local_base = local_module.0 as usize;
-        let local_proc_address = local_proc.map(|proc| proc as *const () as usize).unwrap_or(0);
+        let local_proc_address = local_proc
+            .map(|proc| proc as *const () as usize)
+            .unwrap_or(0);
         unsafe {
             let _ = FreeLibrary(local_module);
         }
@@ -154,7 +164,8 @@ impl MonoRuntimeApi {
         arguments: &[NativeAddress],
         attach_thread: bool,
     ) -> Result<NativeAddress, String> {
-        self.invoker().invoke(function_address, arguments, attach_thread)
+        self.invoker()
+            .invoke(function_address, arguments, attach_thread)
     }
 
     fn invoke_string(&self, name: &str, arguments: &[NativeAddress]) -> Result<String, String> {
@@ -166,7 +177,11 @@ impl MonoRuntimeApi {
         Ok(self.invoke(name, arguments)? as i32)
     }
 
-    fn resolve_static_field_address(&self, class_handle: NativeAddress, field_offset: usize) -> Result<NativeAddress, String> {
+    fn resolve_static_field_address(
+        &self,
+        class_handle: NativeAddress,
+        field_offset: usize,
+    ) -> Result<NativeAddress, String> {
         let vtable = self.invoke("mono_class_vtable", &[self.root_domain, class_handle])?;
         if vtable == 0 {
             return Ok(0);
@@ -190,14 +205,17 @@ impl RuntimeApi for MonoRuntimeApi {
         }
 
         let callback_code: [u8; 17] = [
-            0x8B, 0x02, 0x3D, 0xFE, 0x01, 0x00, 0x00, 0x77, 0x07,
-            0x48, 0x89, 0x4C, 0xC2, 0x08, 0xFF, 0x02, 0xC3,
+            0x8B, 0x02, 0x3D, 0xFE, 0x01, 0x00, 0x00, 0x77, 0x07, 0x48, 0x89, 0x4C, 0xC2, 0x08,
+            0xFF, 0x02, 0xC3,
         ];
 
         let callback_offset = 0x100usize;
         let data_offset = 0x200usize;
         let block_size = data_offset + std::mem::size_of::<AssemblyCollector>();
-        let block = self.memory.allocate(block_size, windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0)?;
+        let block = self.memory.allocate(
+            block_size,
+            windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0,
+        )?;
         let callback_address = block.address + callback_offset;
         let data_address = block.address + data_offset;
 
@@ -208,7 +226,11 @@ impl RuntimeApi for MonoRuntimeApi {
         };
         self.memory.write_bytes(callback_address, &callback_code)?;
         self.memory.write_value(data_address, &collector)?;
-        self.memory.protect(block.address, block.size, windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0)?;
+        self.memory.protect(
+            block.address,
+            block.size,
+            windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0,
+        )?;
         self.invoke("mono_assembly_foreach", &[callback_address, data_address])?;
         let collector: AssemblyCollector = self.memory.read_value(data_address)?;
         let count = collector.count.min(collector.handles.len() as u32) as usize;
@@ -260,7 +282,10 @@ impl RuntimeApi for MonoRuntimeApi {
     }
 
     fn enumerate_fields(&self, class: NativeAddress) -> Result<Vec<NativeFieldRecord>, String> {
-        let iterator = self.memory.allocate(std::mem::size_of::<NativeAddress>(), windows::Win32::System::Memory::PAGE_READWRITE.0)?;
+        let iterator = self.memory.allocate(
+            std::mem::size_of::<NativeAddress>(),
+            windows::Win32::System::Memory::PAGE_READWRITE.0,
+        )?;
         self.memory.write_value(iterator.address, &0usize)?;
 
         let mut fields = Vec::new();
@@ -279,7 +304,8 @@ impl RuntimeApi for MonoRuntimeApi {
             let flags = self.invoke_i32("mono_field_get_flags", &[field_handle])?;
             let is_literal = (flags & FIELD_ATTRIBUTE_LITERAL) != 0;
             let has_field_rva = (flags & FIELD_ATTRIBUTE_HAS_FIELD_RVA) != 0;
-            let has_static_storage = (flags & FIELD_ATTRIBUTE_STATIC) != 0 && !is_literal && !has_field_rva;
+            let has_static_storage =
+                (flags & FIELD_ATTRIBUTE_STATIC) != 0 && !is_literal && !has_field_rva;
             let is_static = has_static_storage || is_literal || has_field_rva;
             let type_handle = self.invoke("mono_field_get_type", &[field_handle])?;
             let type_name = self.invoke_string("mono_type_get_name", &[type_handle])?;
@@ -307,12 +333,16 @@ impl RuntimeApi for MonoRuntimeApi {
 
     fn enumerate_methods(&self, _class: NativeAddress) -> Result<Vec<NativeMethodRecord>, String> {
         let class = _class;
-        let iterator = self.memory.allocate(std::mem::size_of::<NativeAddress>(), windows::Win32::System::Memory::PAGE_READWRITE.0)?;
+        let iterator = self.memory.allocate(
+            std::mem::size_of::<NativeAddress>(),
+            windows::Win32::System::Memory::PAGE_READWRITE.0,
+        )?;
         self.memory.write_value(iterator.address, &0usize)?;
 
         let mut methods = Vec::new();
         loop {
-            let method_handle = self.invoke("mono_class_get_methods", &[class, iterator.address])?;
+            let method_handle =
+                self.invoke("mono_class_get_methods", &[class, iterator.address])?;
             if method_handle == 0 {
                 break;
             }
@@ -325,9 +355,11 @@ impl RuntimeApi for MonoRuntimeApi {
 
             let flags = self.invoke_i32("mono_method_get_flags", &[method_handle, 0])?;
             let signature_handle = self.invoke("mono_method_signature", &[method_handle])?;
-            let parameter_desc = self.invoke_string("mono_signature_get_desc", &[signature_handle, 1])?;
+            let parameter_desc =
+                self.invoke_string("mono_signature_get_desc", &[signature_handle, 1])?;
             let parameter_types = split_parameter_types(&parameter_desc);
-            let parameter_count = self.invoke_i32("mono_signature_get_param_count", &[signature_handle])?;
+            let parameter_count =
+                self.invoke_i32("mono_signature_get_param_count", &[signature_handle])?;
 
             let mut name_ptrs = vec![0usize; parameter_count.max(0) as usize];
             if !name_ptrs.is_empty() {
@@ -341,17 +373,30 @@ impl RuntimeApi for MonoRuntimeApi {
                         name_ptrs.len() * std::mem::size_of::<NativeAddress>(),
                     )
                 };
-                self.memory.write_bytes(names_block.address, name_ptr_bytes)?;
-                self.invoke("mono_method_get_param_names", &[method_handle, names_block.address])?;
-                let raw_name_ptrs = self
-                    .memory
-                    .read_bytes(names_block.address, name_ptrs.len() * std::mem::size_of::<NativeAddress>())?;
-                for (index, chunk) in raw_name_ptrs.chunks_exact(std::mem::size_of::<NativeAddress>()).enumerate() {
-                    name_ptrs[index] = NativeAddress::from_ne_bytes(chunk.try_into().map_err(|_| "failed to decode parameter name pointer".to_string())?);
+                self.memory
+                    .write_bytes(names_block.address, name_ptr_bytes)?;
+                self.invoke(
+                    "mono_method_get_param_names",
+                    &[method_handle, names_block.address],
+                )?;
+                let raw_name_ptrs = self.memory.read_bytes(
+                    names_block.address,
+                    name_ptrs.len() * std::mem::size_of::<NativeAddress>(),
+                )?;
+                for (index, chunk) in raw_name_ptrs
+                    .chunks_exact(std::mem::size_of::<NativeAddress>())
+                    .enumerate()
+                {
+                    name_ptrs[index] = NativeAddress::from_ne_bytes(
+                        chunk
+                            .try_into()
+                            .map_err(|_| "failed to decode parameter name pointer".to_string())?,
+                    );
                 }
             }
 
-            let return_type_handle = self.invoke("mono_signature_get_return_type", &[signature_handle])?;
+            let return_type_handle =
+                self.invoke("mono_signature_get_return_type", &[signature_handle])?;
             let return_type = self.invoke_string("mono_type_get_name", &[return_type_handle])?;
 
             let mut signature = format!("{} (", return_type);
@@ -430,8 +475,9 @@ impl RuntimeApi for MonoRuntimeApi {
             return Ok(0);
         }
 
-        self.memory
-            .read_value(array_object + MANAGED_ARRAY_DATA_OFFSET + index * std::mem::size_of::<NativeAddress>())
+        self.memory.read_value(
+            array_object + MANAGED_ARRAY_DATA_OFFSET + index * std::mem::size_of::<NativeAddress>(),
+        )
     }
 
     fn unbox_object(&self, object: NativeAddress) -> Result<NativeAddress, String> {
@@ -452,7 +498,10 @@ impl RuntimeApi for MonoRuntimeApi {
 
     fn create_managed_string(&self, value: &str) -> Result<NativeAddress, String> {
         let remote_value = RemoteUtf8String::new(&self.memory, value)?;
-        self.invoke("mono_string_new", &[self.root_domain, remote_value.address()])
+        self.invoke(
+            "mono_string_new",
+            &[self.root_domain, remote_value.address()],
+        )
     }
 
     fn invoke_method(
@@ -462,7 +511,10 @@ impl RuntimeApi for MonoRuntimeApi {
         parameters: NativeAddress,
         exception: NativeAddress,
     ) -> Result<NativeAddress, String> {
-        self.invoke("mono_runtime_invoke", &[method, instance, parameters, exception])
+        self.invoke(
+            "mono_runtime_invoke",
+            &[method, instance, parameters, exception],
+        )
     }
 
     fn read_managed_string(&self, object: NativeAddress) -> Result<Option<String>, String> {
@@ -534,7 +586,8 @@ impl RuntimeApi for MonoRuntimeApi {
 
 fn find_runtime_module(memory: &RemoteMemory) -> Result<NativeModuleInfo, String> {
     let candidates = ["mono.dll", "mono-2.0-bdwgc.dll", "mono-2.0-sgen.dll"];
-    let modules = crate::infrastructure::native::process::enumerate_modules(memory.process().pid())?;
+    let modules =
+        crate::infrastructure::native::process::enumerate_modules(memory.process().pid())?;
     for module in modules {
         let lower = module.name.to_ascii_lowercase();
         if candidates.iter().any(|candidate| lower == *candidate) {

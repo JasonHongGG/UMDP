@@ -1,7 +1,6 @@
 use crate::domain::analysis_models::{
-    RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenTaskStatus,
-    RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus,
-    RuntimeSceneNodeSummary, RuntimeSceneObjectChildrenTaskState,
+    RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenTaskStatus, RuntimeSceneComponentSummary,
+    RuntimeSceneInspectorTaskStatus, RuntimeSceneNodeSummary, RuntimeSceneObjectChildrenTaskState,
     RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneObjectInspectorTaskState,
     SceneRefreshStatus, SceneWorkspaceState,
 };
@@ -78,7 +77,11 @@ impl SceneState {
         workspace.clone()
     }
 
-    pub fn set_error(&self, session_key: Option<&str>, error: impl Into<String>) -> SceneWorkspaceState {
+    pub fn set_error(
+        &self,
+        session_key: Option<&str>,
+        error: impl Into<String>,
+    ) -> SceneWorkspaceState {
         let mut workspace = self.workspace.lock();
         if !same_session_key(workspace.session_key.as_deref(), session_key) {
             return workspace.clone();
@@ -159,29 +162,46 @@ fn scene_children_cache_entry_impacted(
     impacted: &[&str],
 ) -> bool {
     impacted.contains(&parent_object_address)
-        || entry.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+        || entry.children.iter().any(|child| {
+            impacted
+                .iter()
+                .any(|address| summary_matches_object(child, address))
+        })
 }
 
-fn scene_children_task_impacted(task: &RuntimeSceneObjectChildrenTaskState, impacted: &[&str]) -> bool {
+fn scene_children_task_impacted(
+    task: &RuntimeSceneObjectChildrenTaskState,
+    impacted: &[&str],
+) -> bool {
     impacted.contains(&task.parent_object_address.as_str())
-        || task.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+        || task.children.iter().any(|child| {
+            impacted
+                .iter()
+                .any(|address| summary_matches_object(child, address))
+        })
 }
 
 fn cache_entry_impacted(entry: &SceneInspectorCacheEntry, impacted: &[&str]) -> bool {
-    if impacted.iter().any(|address| summary_matches_object(&entry.header.object, address)) {
-        return true;
-    }
-
-    if entry
-        .header
-        .parent
-        .as_ref()
-        .is_some_and(|parent| impacted.iter().any(|address| summary_matches_object(parent, address)))
+    if impacted
+        .iter()
+        .any(|address| summary_matches_object(&entry.header.object, address))
     {
         return true;
     }
 
-    entry.children.iter().any(|child| impacted.iter().any(|address| summary_matches_object(child, address)))
+    if entry.header.parent.as_ref().is_some_and(|parent| {
+        impacted
+            .iter()
+            .any(|address| summary_matches_object(parent, address))
+    }) {
+        return true;
+    }
+
+    entry.children.iter().any(|child| {
+        impacted
+            .iter()
+            .any(|address| summary_matches_object(child, address))
+    })
 }
 
 fn ensure_children_session(store: &mut SceneChildrenStore, session_key: Option<&str>) {
@@ -231,7 +251,11 @@ impl SceneChildrenState {
         if let Some(current) = store.tasks_by_parent.get(&parent_object_address) {
             if current.mutation_epoch == store.mutation_epoch
                 && !current.is_stale
-                && !matches!(current.status, RuntimeSceneChildrenTaskStatus::Error | RuntimeSceneChildrenTaskStatus::Cancelled)
+                && !matches!(
+                    current.status,
+                    RuntimeSceneChildrenTaskStatus::Error
+                        | RuntimeSceneChildrenTaskStatus::Cancelled
+                )
             {
                 return SceneChildrenTaskStart {
                     state: current.clone(),
@@ -260,7 +284,9 @@ impl SceneChildrenState {
                 state.children = cached.children.clone();
                 state.total_count = cached.total_count;
                 state.loaded_count = state.children.len();
-                store.tasks_by_parent.insert(parent_object_address, state.clone());
+                store
+                    .tasks_by_parent
+                    .insert(parent_object_address, state.clone());
                 return SceneChildrenTaskStart {
                     state,
                     should_spawn: false,
@@ -271,7 +297,9 @@ impl SceneChildrenState {
         store.next_task_id += 1;
         state.task_id = store.next_task_id;
         state.resource_revision = bump_children_revision(&mut store);
-        store.tasks_by_parent.insert(parent_object_address, state.clone());
+        store
+            .tasks_by_parent
+            .insert(parent_object_address, state.clone());
         SceneChildrenTaskStart {
             state,
             should_spawn: true,
@@ -425,13 +453,19 @@ impl SceneChildrenState {
         if impacted_addresses.is_empty() {
             store.cache.clear();
         } else {
-            let impacted_refs = impacted_addresses.iter().map(String::as_str).collect::<Vec<_>>();
+            let impacted_refs = impacted_addresses
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
             store.cache.retain(|parent_object_address, entry| {
                 !scene_children_cache_entry_impacted(parent_object_address, entry, &impacted_refs)
             });
         }
 
-        let impacted_refs = impacted_addresses.iter().map(String::as_str).collect::<Vec<_>>();
+        let impacted_refs = impacted_addresses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
         let has_impacted_task = store.tasks_by_parent.values().any(|task| {
             impacted_addresses.is_empty() || scene_children_task_impacted(task, &impacted_refs)
         });
@@ -461,7 +495,10 @@ impl SceneChildrenState {
 }
 
 impl SceneInspectorState {
-    pub fn current(&self, session_key: Option<&str>) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    pub fn current(
+        &self,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
         let store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
             return None;
@@ -470,7 +507,11 @@ impl SceneInspectorState {
         store.current.clone()
     }
 
-    pub fn start_task(&self, object_address: String, session_key: Option<String>) -> SceneInspectorTaskStart {
+    pub fn start_task(
+        &self,
+        object_address: String,
+        session_key: Option<String>,
+    ) -> SceneInspectorTaskStart {
         let mut store = self.store.lock();
         ensure_inspector_session(&mut store, session_key.as_deref());
         store.next_task_id += 1;
@@ -511,7 +552,11 @@ impl SceneInspectorState {
         SceneInspectorTaskStart { state, use_cached }
     }
 
-    pub fn cancel(&self, task_id: Option<u64>, session_key: Option<&str>) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    pub fn cancel(
+        &self,
+        task_id: Option<u64>,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
             return None;
@@ -728,13 +773,20 @@ impl SceneInspectorState {
         if impacted_addresses.is_empty() {
             store.cache.clear();
         } else {
-            let impacted_refs = impacted_addresses.iter().map(String::as_str).collect::<Vec<_>>();
+            let impacted_refs = impacted_addresses
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
             store.cache.retain(|object_address, entry| {
-                !impacted_refs.contains(&object_address.as_str()) && !cache_entry_impacted(entry, &impacted_refs)
+                !impacted_refs.contains(&object_address.as_str())
+                    && !cache_entry_impacted(entry, &impacted_refs)
             });
         }
 
-        let next_revision = store.current.is_some().then(|| bump_inspector_revision(&mut store));
+        let next_revision = store
+            .current
+            .is_some()
+            .then(|| bump_inspector_revision(&mut store));
         if let Some(current) = store.current.as_mut() {
             if let Some(next_revision) = next_revision {
                 current.resource_revision = next_revision;
@@ -742,7 +794,9 @@ impl SceneInspectorState {
             current.is_stale = true;
             if !matches!(
                 current.status,
-                RuntimeSceneInspectorTaskStatus::Ready | RuntimeSceneInspectorTaskStatus::Error | RuntimeSceneInspectorTaskStatus::Cancelled
+                RuntimeSceneInspectorTaskStatus::Ready
+                    | RuntimeSceneInspectorTaskStatus::Error
+                    | RuntimeSceneInspectorTaskStatus::Cancelled
             ) {
                 current.status = RuntimeSceneInspectorTaskStatus::Cancelled;
             }

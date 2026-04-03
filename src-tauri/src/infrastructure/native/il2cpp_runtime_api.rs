@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use windows::core::{PCSTR, PCWSTR};
 use windows::Win32::Foundation::FreeLibrary;
 use windows::Win32::System::LibraryLoader::{
-    DONT_RESOLVE_DLL_REFERENCES, GetProcAddress, LoadLibraryExW,
+    GetProcAddress, LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES,
 };
 
 const FIELD_ATTRIBUTE_STATIC: i32 = 0x0010;
@@ -84,7 +84,8 @@ impl Il2CppRuntimeApi {
 
         self.thread_attach = self.export_address("il2cpp_thread_attach")?;
         self.thread_detach = self.export_address("il2cpp_thread_detach")?;
-        self.root_domain = self.invoke_direct(self.export_address("il2cpp_domain_get")?, &[], false)?;
+        self.root_domain =
+            self.invoke_direct(self.export_address("il2cpp_domain_get")?, &[], false)?;
         if self.root_domain == 0 {
             return Err("failed to resolve il2cpp root domain".to_string());
         }
@@ -108,13 +109,20 @@ impl Il2CppRuntimeApi {
                 DONT_RESOLVE_DLL_REFERENCES,
             )
         }
-        .map_err(|error| format!("failed to load local il2cpp module for export resolution: {}", error.message()))?;
+        .map_err(|error| {
+            format!(
+                "failed to load local il2cpp module for export resolution: {}",
+                error.message()
+            )
+        })?;
 
-        let proc_name = std::ffi::CString::new(name)
-            .map_err(|_| format!("invalid export name: {name}"))?;
+        let proc_name =
+            std::ffi::CString::new(name).map_err(|_| format!("invalid export name: {name}"))?;
         let local_proc = unsafe { GetProcAddress(local_module, PCSTR(proc_name.as_ptr() as _)) };
         let local_base = local_module.0 as usize;
-        let local_proc_address = local_proc.map(|proc| proc as *const () as usize).unwrap_or(0);
+        let local_proc_address = local_proc
+            .map(|proc| proc as *const () as usize)
+            .unwrap_or(0);
         unsafe {
             let _ = FreeLibrary(local_module);
         }
@@ -234,7 +242,8 @@ impl RuntimeApi for Il2CppRuntimeApi {
 
         let mut fields = Vec::new();
         loop {
-            let field_handle = self.invoke("il2cpp_class_get_fields", &[class, iterator.address])?;
+            let field_handle =
+                self.invoke("il2cpp_class_get_fields", &[class, iterator.address])?;
             if field_handle == 0 {
                 break;
             }
@@ -248,7 +257,8 @@ impl RuntimeApi for Il2CppRuntimeApi {
             let flags = self.invoke_i32("il2cpp_field_get_flags", &[field_handle])?;
             let is_literal = (flags & FIELD_ATTRIBUTE_LITERAL) != 0;
             let has_field_rva = (flags & FIELD_ATTRIBUTE_HAS_FIELD_RVA) != 0;
-            let has_static_storage = (flags & FIELD_ATTRIBUTE_STATIC) != 0 && !is_literal && !has_field_rva;
+            let has_static_storage =
+                (flags & FIELD_ATTRIBUTE_STATIC) != 0 && !is_literal && !has_field_rva;
             let is_static = has_static_storage || is_literal || has_field_rva;
             let type_handle = self.invoke("il2cpp_field_get_type", &[field_handle])?;
             let type_name = self.invoke_string("il2cpp_type_get_name", &[type_handle])?;
@@ -276,7 +286,8 @@ impl RuntimeApi for Il2CppRuntimeApi {
 
         let mut methods = Vec::new();
         loop {
-            let method_handle = self.invoke("il2cpp_class_get_methods", &[class, iterator.address])?;
+            let method_handle =
+                self.invoke("il2cpp_class_get_methods", &[class, iterator.address])?;
             if method_handle == 0 {
                 break;
             }
@@ -288,8 +299,11 @@ impl RuntimeApi for Il2CppRuntimeApi {
             }
 
             let flags = self.invoke_i32("il2cpp_method_get_flags", &[method_handle, 0])?;
-            let parameter_count = self.invoke_i32("il2cpp_method_get_param_count", &[method_handle])?.max(0) as usize;
-            let return_type_handle = self.invoke("il2cpp_method_get_return_type", &[method_handle])?;
+            let parameter_count = self
+                .invoke_i32("il2cpp_method_get_param_count", &[method_handle])?
+                .max(0) as usize;
+            let return_type_handle =
+                self.invoke("il2cpp_method_get_return_type", &[method_handle])?;
             let return_type = self.invoke_string("il2cpp_type_get_name", &[return_type_handle])?;
 
             let mut parameter_types = Vec::with_capacity(parameter_count);
@@ -299,19 +313,13 @@ impl RuntimeApi for Il2CppRuntimeApi {
                     signature.push_str(", ");
                 }
 
-                let param_name_address = self.invoke(
-                    "il2cpp_method_get_param_name",
-                    &[method_handle, index],
-                )?;
+                let param_name_address =
+                    self.invoke("il2cpp_method_get_param_name", &[method_handle, index])?;
                 let parameter_name = self.memory.read_utf8(param_name_address, 1024)?;
-                let parameter_type_handle = self.invoke(
-                    "il2cpp_method_get_param",
-                    &[method_handle, index],
-                )?;
-                let parameter_type = self.invoke_string(
-                    "il2cpp_type_get_name",
-                    &[parameter_type_handle],
-                )?;
+                let parameter_type_handle =
+                    self.invoke("il2cpp_method_get_param", &[method_handle, index])?;
+                let parameter_type =
+                    self.invoke_string("il2cpp_type_get_name", &[parameter_type_handle])?;
 
                 parameter_types.push(parameter_type.clone());
                 signature.push_str(&parameter_type);
@@ -406,7 +414,10 @@ impl RuntimeApi for Il2CppRuntimeApi {
         parameters: NativeAddress,
         exception: NativeAddress,
     ) -> Result<NativeAddress, String> {
-        self.invoke("il2cpp_runtime_invoke", &[method, instance, parameters, exception])
+        self.invoke(
+            "il2cpp_runtime_invoke",
+            &[method, instance, parameters, exception],
+        )
     }
 
     fn read_managed_string(&self, object: NativeAddress) -> Result<Option<String>, String> {
@@ -459,12 +470,14 @@ impl RuntimeApi for Il2CppRuntimeApi {
             return Ok(None);
         };
 
-        let scratch = self.memory.allocate(
-            size,
-            windows::Win32::System::Memory::PAGE_READWRITE.0,
-        )?;
+        let scratch = self
+            .memory
+            .allocate(size, windows::Win32::System::Memory::PAGE_READWRITE.0)?;
         self.memory.write_bytes(scratch.address, &vec![0u8; size])?;
-        self.invoke("il2cpp_field_static_get_value", &[field_handle, scratch.address])?;
+        self.invoke(
+            "il2cpp_field_static_get_value",
+            &[field_handle, scratch.address],
+        )?;
         Ok(Some(self.memory.read_bytes(scratch.address, size)?))
     }
 
@@ -485,7 +498,8 @@ impl RuntimeApi for Il2CppRuntimeApi {
 }
 
 fn find_runtime_module(memory: &RemoteMemory) -> Result<NativeModuleInfo, String> {
-    let modules = crate::infrastructure::native::process::enumerate_modules(memory.process().pid())?;
+    let modules =
+        crate::infrastructure::native::process::enumerate_modules(memory.process().pid())?;
     for module in modules {
         if module.name.eq_ignore_ascii_case("GameAssembly.dll") {
             return Ok(module);

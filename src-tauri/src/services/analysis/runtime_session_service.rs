@@ -1,6 +1,4 @@
-use crate::domain::analysis_models::{
-    AnalysisSnapshot, ClassDescriptor, ProcessSession,
-};
+use crate::domain::analysis_models::{AnalysisSnapshot, ClassDescriptor, ProcessSession};
 use crate::domain::operation::{OperationError, OperationResult};
 use crate::kernel::runtime::access::current_runtime_session;
 use crate::kernel::runtime::session::RuntimeSession;
@@ -24,7 +22,10 @@ pub fn ensure_metadata_snapshot(state: &AppState) -> OperationResult<AnalysisSna
         .ok_or_else(OperationError::metadata_unavailable)
 }
 
-pub fn resolve_class_descriptor(state: &AppState, class_stable_id: &str) -> OperationResult<ClassDescriptor> {
+pub fn resolve_class_descriptor(
+    state: &AppState,
+    class_stable_id: &str,
+) -> OperationResult<ClassDescriptor> {
     let metadata = ensure_metadata_snapshot(state)?;
 
     metadata
@@ -35,8 +36,8 @@ pub fn resolve_class_descriptor(state: &AppState, class_stable_id: &str) -> Oper
 }
 
 pub fn ensure_runtime_session_ready(state: &AppState) -> OperationResult<Arc<RuntimeSession>> {
-    let runtime_session = current_runtime_session(state)
-        .ok_or_else(OperationError::runtime_session_unavailable)?;
+    let runtime_session =
+        current_runtime_session(state).ok_or_else(OperationError::runtime_session_unavailable)?;
 
     if runtime_session.runtime_api().is_none() {
         return Err(OperationError::runtime_api_unavailable());

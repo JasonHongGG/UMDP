@@ -1,5 +1,5 @@
-mod commands;
 mod application;
+mod commands;
 mod domain;
 mod infrastructure;
 mod kernel;

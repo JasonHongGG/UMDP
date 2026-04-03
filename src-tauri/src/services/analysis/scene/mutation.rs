@@ -1,13 +1,11 @@
 use super::{current_scene_session_key, log_scene_duration};
 use crate::domain::analysis_models::{
-    RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
-    RuntimeSceneTransformUpdate,
+    RuntimeSceneMutationOperation, RuntimeSceneMutationResult, RuntimeSceneTransformUpdate,
 };
 use crate::kernel::runtime::session::RuntimeSession;
 use crate::kernel::scene::query as native_scene;
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_runtime_session_ready,
-    execute_runtime_operation, present,
+    ensure_attached_session, ensure_runtime_session_ready, execute_runtime_operation, present,
 };
 use crate::state::AppState;
 use std::sync::Arc;
@@ -135,7 +133,11 @@ pub fn set_scene_object_hide_flags(
         "set_scene_object_hide_flags",
         format!("object_address={object_address}"),
         |runtime_session| {
-            native_scene::set_scene_object_hide_flags(runtime_session.as_ref(), object_address, hide_flags)
+            native_scene::set_scene_object_hide_flags(
+                runtime_session.as_ref(),
+                object_address,
+                hide_flags,
+            )
         },
     )
 }
@@ -172,7 +174,11 @@ pub fn set_scene_object_active(
         "set_scene_object_active",
         format!("object_address={object_address} active_self={active_self}"),
         |runtime_session| {
-            native_scene::set_scene_object_active(runtime_session.as_ref(), object_address, active_self)
+            native_scene::set_scene_object_active(
+                runtime_session.as_ref(),
+                object_address,
+                active_self,
+            )
         },
     )
 }
@@ -208,7 +214,11 @@ pub fn set_scene_behaviour_enabled(
         "set_scene_behaviour_enabled",
         format!("component_address={component_address} enabled={enabled}"),
         |runtime_session| {
-            native_scene::set_scene_behaviour_enabled(runtime_session.as_ref(), component_address, enabled)
+            native_scene::set_scene_behaviour_enabled(
+                runtime_session.as_ref(),
+                component_address,
+                enabled,
+            )
         },
     )
 }
@@ -276,7 +286,9 @@ where
     present(ensure_attached_session(state).map(|_| ()))?;
 
     let runtime_session = ensure_runtime_session_ready(state).map_err(String::from)?;
-    let snapshot = present(execute_runtime_operation(state, || loader(&runtime_session)))?;
+    let snapshot = present(execute_runtime_operation(state, || {
+        loader(&runtime_session)
+    }))?;
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     invalidate_scene_children_after_mutation(state, &snapshot);
     log_scene_duration(label, started_at, &details);
@@ -295,10 +307,7 @@ fn invalidate_scene_inspector_after_mutation(
         .invalidate_related(&impacted, session_key.as_deref());
 }
 
-fn invalidate_scene_children_after_mutation(
-    state: &AppState,
-    result: &RuntimeSceneMutationResult,
-) {
+fn invalidate_scene_children_after_mutation(state: &AppState, result: &RuntimeSceneMutationResult) {
     if matches!(
         result.operation,
         RuntimeSceneMutationOperation::SetActive
@@ -321,9 +330,7 @@ fn invalidate_scene_children_after_mutation(
         .invalidate_related(&impacted, session_key.as_deref());
 }
 
-fn collect_impacted_object_addresses(
-    result: &RuntimeSceneMutationResult,
-) -> Vec<String> {
+fn collect_impacted_object_addresses(result: &RuntimeSceneMutationResult) -> Vec<String> {
     let mut impacted = Vec::new();
     if let Some(target) = result.target_object_address.as_ref() {
         impacted.push(target.clone());
@@ -352,8 +359,7 @@ fn collect_impacted_object_addresses(
     );
     if matches!(
         result.operation,
-        RuntimeSceneMutationOperation::CreateRoot
-            | RuntimeSceneMutationOperation::LoadScene
+        RuntimeSceneMutationOperation::CreateRoot | RuntimeSceneMutationOperation::LoadScene
     ) {
         stateful_scene_root_scope(result, &mut impacted);
     }
@@ -362,10 +368,7 @@ fn collect_impacted_object_addresses(
     impacted
 }
 
-fn stateful_scene_root_scope(
-    result: &RuntimeSceneMutationResult,
-    impacted: &mut Vec<String>,
-) {
+fn stateful_scene_root_scope(result: &RuntimeSceneMutationResult, impacted: &mut Vec<String>) {
     if let Some(parent) = result.parent_object_address.as_ref() {
         impacted.push(parent.clone());
     }

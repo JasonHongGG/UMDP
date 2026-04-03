@@ -1,6 +1,4 @@
-use crate::domain::analysis_models::{
-    RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot,
-};
+use crate::domain::analysis_models::{RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot};
 use crate::services::analysis::runtime_overlay_service;
 use crate::state::AppState;
 use tauri::AppHandle;

@@ -45,7 +45,10 @@ pub fn set_runtime_field_value(
         .transpose()?;
 
     let field = candidates.iter().find(|field| {
-        if field.name != request.field_name || field.type_name != request.field_type_name || field.is_static != request.is_static {
+        if field.name != request.field_name
+            || field.type_name != request.field_type_name
+            || field.is_static != request.is_static
+        {
             return false;
         }
 
@@ -147,7 +150,10 @@ pub fn set_runtime_field_value(
     })
 }
 
-fn resolve_field_address(field: &NativeFieldRecord, instance_address: Option<NativeAddress>) -> Option<NativeAddress> {
+fn resolve_field_address(
+    field: &NativeFieldRecord,
+    instance_address: Option<NativeAddress>,
+) -> Option<NativeAddress> {
     if field.is_static {
         return field.static_address;
     }
@@ -168,46 +174,121 @@ fn apply_field_write(
                 Some("true") => 1u8,
                 Some("false") => 0u8,
                 Some(other) => {
-                    return Err((RuntimeFieldSetFailureKind::InvalidValue, format!("invalid boolean value: {}", other)));
+                    return Err((
+                        RuntimeFieldSetFailureKind::InvalidValue,
+                        format!("invalid boolean value: {}", other),
+                    ));
                 }
-                None => return Err((RuntimeFieldSetFailureKind::InvalidValue, "missing boolean value".to_string())),
+                None => {
+                    return Err((
+                        RuntimeFieldSetFailureKind::InvalidValue,
+                        "missing boolean value".to_string(),
+                    ))
+                }
             };
             write_protected_value(memory, address, &value).map_err(write_failed)
         }
-        "System.Byte" => write_numeric::<u8, _>(memory, address, request.serialized_value.as_deref(), parse_unsigned),
-        "System.SByte" => write_numeric::<i8, _>(memory, address, request.serialized_value.as_deref(), parse_signed),
-        "System.Int16" => write_numeric::<i16, _>(memory, address, request.serialized_value.as_deref(), parse_signed),
-        "System.UInt16" => write_numeric::<u16, _>(memory, address, request.serialized_value.as_deref(), parse_unsigned),
-        "System.Int32" => write_numeric::<i32, _>(memory, address, request.serialized_value.as_deref(), parse_signed),
-        "System.UInt32" => write_numeric::<u32, _>(memory, address, request.serialized_value.as_deref(), parse_unsigned),
-        "System.Int64" => write_numeric::<i64, _>(memory, address, request.serialized_value.as_deref(), parse_signed),
-        "System.UInt64" => write_numeric::<u64, _>(memory, address, request.serialized_value.as_deref(), parse_unsigned),
+        "System.Byte" => write_numeric::<u8, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_unsigned,
+        ),
+        "System.SByte" => write_numeric::<i8, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_signed,
+        ),
+        "System.Int16" => write_numeric::<i16, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_signed,
+        ),
+        "System.UInt16" => write_numeric::<u16, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_unsigned,
+        ),
+        "System.Int32" => write_numeric::<i32, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_signed,
+        ),
+        "System.UInt32" => write_numeric::<u32, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_unsigned,
+        ),
+        "System.Int64" => write_numeric::<i64, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_signed,
+        ),
+        "System.UInt64" => write_numeric::<u64, _>(
+            memory,
+            address,
+            request.serialized_value.as_deref(),
+            parse_unsigned,
+        ),
         "System.Single" => {
             let value = request
                 .serialized_value
                 .as_deref()
-                .ok_or_else(|| (RuntimeFieldSetFailureKind::InvalidValue, "missing floating-point value".to_string()))
-                .and_then(|value| value.parse::<f32>().map_err(|error| (RuntimeFieldSetFailureKind::InvalidValue, error.to_string())))?;
+                .ok_or_else(|| {
+                    (
+                        RuntimeFieldSetFailureKind::InvalidValue,
+                        "missing floating-point value".to_string(),
+                    )
+                })
+                .and_then(|value| {
+                    value.parse::<f32>().map_err(|error| {
+                        (RuntimeFieldSetFailureKind::InvalidValue, error.to_string())
+                    })
+                })?;
             write_protected_value(memory, address, &value).map_err(write_failed)
         }
         "System.Double" => {
             let value = request
                 .serialized_value
                 .as_deref()
-                .ok_or_else(|| (RuntimeFieldSetFailureKind::InvalidValue, "missing floating-point value".to_string()))
-                .and_then(|value| value.parse::<f64>().map_err(|error| (RuntimeFieldSetFailureKind::InvalidValue, error.to_string())))?;
+                .ok_or_else(|| {
+                    (
+                        RuntimeFieldSetFailureKind::InvalidValue,
+                        "missing floating-point value".to_string(),
+                    )
+                })
+                .and_then(|value| {
+                    value.parse::<f64>().map_err(|error| {
+                        (RuntimeFieldSetFailureKind::InvalidValue, error.to_string())
+                    })
+                })?;
             write_protected_value(memory, address, &value).map_err(write_failed)
         }
-        "System.IntPtr" | "System.UIntPtr"
-        | _ if matches!(
-            request.value_kind,
-            crate::domain::analysis_models::RuntimeFieldValueKind::Address
-        ) => {
+        "System.IntPtr" | "System.UIntPtr" | _
+            if matches!(
+                request.value_kind,
+                crate::domain::analysis_models::RuntimeFieldValueKind::Address
+            ) =>
+        {
             let value = request
                 .serialized_value
                 .as_deref()
-                .ok_or_else(|| (RuntimeFieldSetFailureKind::InvalidValue, "missing address value".to_string()))
-                .and_then(|value| parse_address(value).map_err(|error| (RuntimeFieldSetFailureKind::InvalidValue, error)))?;
+                .ok_or_else(|| {
+                    (
+                        RuntimeFieldSetFailureKind::InvalidValue,
+                        "missing address value".to_string(),
+                    )
+                })
+                .and_then(|value| {
+                    parse_address(value)
+                        .map_err(|error| (RuntimeFieldSetFailureKind::InvalidValue, error))
+                })?;
             write_protected_value(memory, address, &value).map_err(write_failed)
         }
         "System.String" => {
@@ -233,14 +314,28 @@ where
     T: Copy,
     F: FnOnce(&str) -> Result<T, String>,
 {
-    let raw_value = raw_value.ok_or_else(|| (RuntimeFieldSetFailureKind::InvalidValue, "missing numeric value".to_string()))?;
-    let value = parser(raw_value).map_err(|error| (RuntimeFieldSetFailureKind::InvalidValue, error))?;
+    let raw_value = raw_value.ok_or_else(|| {
+        (
+            RuntimeFieldSetFailureKind::InvalidValue,
+            "missing numeric value".to_string(),
+        )
+    })?;
+    let value =
+        parser(raw_value).map_err(|error| (RuntimeFieldSetFailureKind::InvalidValue, error))?;
     write_protected_value(memory, address, &value).map_err(write_failed)
 }
 
-fn write_protected_value<T: Copy>(memory: &RemoteMemory, address: NativeAddress, value: &T) -> Result<(), String> {
+fn write_protected_value<T: Copy>(
+    memory: &RemoteMemory,
+    address: NativeAddress,
+    value: &T,
+) -> Result<(), String> {
     let size = std::mem::size_of::<T>();
-    let previous = memory.protect(address, size, windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0)?;
+    let previous = memory.protect(
+        address,
+        size,
+        windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0,
+    )?;
     let write_result = memory.write_value(address, value);
     let restore_result = memory.protect(address, size, previous);
     write_result?;

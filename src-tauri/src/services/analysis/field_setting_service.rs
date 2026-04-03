@@ -38,20 +38,34 @@ pub fn set_runtime_field_value(
     let attached = match ensure_attached_session(state) {
         Ok(session) => session,
         Err(error) => {
-            return build_failure_result(&request, RuntimeFieldSetFailureKind::NotAttached, error.to_string());
+            return build_failure_result(
+                &request,
+                RuntimeFieldSetFailureKind::NotAttached,
+                error.to_string(),
+            );
         }
     };
     let descriptor = match resolve_class_descriptor(state, &request.class_stable_id) {
         Ok(descriptor) => descriptor,
         Err(error) => {
-            return build_failure_result(&request, RuntimeFieldSetFailureKind::ClassNotFound, error.to_string());
+            return build_failure_result(
+                &request,
+                RuntimeFieldSetFailureKind::ClassNotFound,
+                error.to_string(),
+            );
         }
     };
 
     let field_exists = if request.is_static {
-        descriptor.static_fields.iter().any(|field| field.stable_id == request.member_stable_id)
+        descriptor
+            .static_fields
+            .iter()
+            .any(|field| field.stable_id == request.member_stable_id)
     } else {
-        descriptor.fields.iter().any(|field| field.stable_id == request.member_stable_id)
+        descriptor
+            .fields
+            .iter()
+            .any(|field| field.stable_id == request.member_stable_id)
     };
     if !field_exists {
         return build_failure_result(
