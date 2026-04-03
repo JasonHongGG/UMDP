@@ -4,7 +4,7 @@ import type { RuntimeCapability } from '@/shared/contracts';
 import {
   createWorkspacePageReadinessMap,
   describeWorkspaceResetNotice,
-} from './pageReadiness';
+} from '@/kernel/workspace/pageReadiness';
 
 describe('workspace page readiness', () => {
   it('gates scene and studio behind session, catalog, and runtime readiness', () => {

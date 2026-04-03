@@ -1,5 +1,5 @@
 use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
-use crate::kernel::workspace;
+use crate::domain::operation::{OperationError, OperationResult};
 use crate::state::AppState;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
@@ -12,15 +12,13 @@ fn same_metadata_source(left: &ProcessSession, right: &ProcessSession) -> bool {
         && left.runtime == right.runtime
 }
 
-pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<ProcessSession, String> {
-    workspace::reset_for_new_attachment(state);
-
+    pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> OperationResult<ProcessSession> {
     let mut sys = System::new_all();
     sys.refresh_processes();
 
     let process = sys
         .process(sysinfo::Pid::from_u32(pid))
-        .ok_or_else(|| format!("Process {} ({}) not found", name, pid))?;
+            .ok_or_else(|| OperationError::process_not_found(pid, &name))?;
 
     let exe_path = process
         .exe()
@@ -41,16 +39,16 @@ pub fn attach_to_process(state: &AppState, pid: u32, name: String) -> Result<Pro
     };
 
     let preserve_metadata = state
-        .workspace_session
-        .analysis
+        .workspace()
+        .analysis()
         .process_session()
         .as_ref()
         .is_some_and(|existing| same_metadata_source(existing, &session))
-        && state.workspace_session.analysis.metadata_snapshot().is_some();
+        && state.workspace().analysis().metadata_snapshot().is_some();
 
-    state.workspace_session.analysis.set_process_session(session.clone());
+    state.workspace().analysis().set_process_session(session.clone());
     if !preserve_metadata {
-        state.workspace_session.analysis.clear_metadata();
+        state.workspace().analysis().clear_metadata();
     }
 
     Ok(session)

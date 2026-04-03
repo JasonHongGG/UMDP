@@ -1,0 +1,230 @@
+import type { ActivePage } from '@/domain/analysis/workspace-types';
+import type { ProcessSession } from '@/domain/analysis/contracts';
+import type { SystemContractVersions, WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
+import {
+  createWorkspacePageReadinessMap,
+  describeWorkspaceResetNotice,
+  type WorkspacePageReadiness,
+  type WorkspaceResetNotice,
+  type WorkspaceSignalTone,
+} from './pageReadiness';
+
+export interface WorkspacePageDetail extends WorkspacePageReadiness {
+  blocked: boolean;
+  badge: string;
+}
+
+export interface WorkspaceKernelState {
+  processSession: ProcessSession | null;
+  contractVersions: SystemContractVersions | null;
+  workspaceLifecycle: WorkspaceLifecycleState;
+  activePage: ActivePage;
+  workspaceTasks: WorkspaceTaskSnapshot[];
+  pageReadiness: Record<ActivePage, WorkspacePageReadiness>;
+  workspaceResetNotice: WorkspaceResetNotice | null;
+  activeTask: WorkspaceTaskSnapshot | null;
+}
+
+export interface WorkspacePresentation {
+  lifecycleLabel: string;
+  lifecycleTone: WorkspaceSignalTone;
+  runtimeLabel: string;
+  runtimeTone: WorkspaceSignalTone;
+  runtimeFlavorLabel: string | null;
+  processLabel: string | null;
+  detailMessage: string;
+  notice: WorkspaceResetNotice | null;
+  pages: Record<ActivePage, WorkspacePageDetail>;
+}
+
+interface CreateWorkspaceKernelStateArgs {
+  processSession: ProcessSession | null;
+  contractVersions: SystemContractVersions | null;
+  workspaceLifecycle: WorkspaceLifecycleState;
+  activePage: ActivePage;
+  workspaceTasks: WorkspaceTaskSnapshot[];
+  previousLifecycle: WorkspaceLifecycleState | null;
+}
+
+export function createWorkspaceKernelState({
+  processSession,
+  contractVersions,
+  workspaceLifecycle,
+  activePage,
+  workspaceTasks,
+  previousLifecycle,
+}: CreateWorkspaceKernelStateArgs): WorkspaceKernelState {
+  const pageReadiness = createWorkspacePageReadinessMap(workspaceLifecycle);
+  const previousSessionKey = previousLifecycle?.runtimeSession.sessionKey ?? null;
+
+  return {
+    processSession,
+    contractVersions,
+    workspaceLifecycle,
+    activePage,
+    workspaceTasks,
+    pageReadiness,
+    workspaceResetNotice: describeWorkspaceResetNotice(workspaceLifecycle, previousSessionKey),
+    activeTask: selectActiveWorkspaceTask(workspaceTasks),
+  };
+}
+
+export function createWorkspacePresentation(kernel: WorkspaceKernelState): WorkspacePresentation {
+  const { workspaceLifecycle } = kernel;
+  const lifecycleTone = getWorkspaceLifecycleTone(workspaceLifecycle);
+  const pages = {
+    inspector: describePageDetail('inspector', kernel.pageReadiness.inspector),
+    studio: describePageDetail('studio', kernel.pageReadiness.studio),
+    scene: describePageDetail('scene', kernel.pageReadiness.scene),
+  };
+
+  return {
+    lifecycleLabel: getWorkspaceLifecycleLabel(workspaceLifecycle),
+    lifecycleTone,
+    runtimeLabel: formatRuntimeSessionLabel(workspaceLifecycle),
+    runtimeTone: workspaceLifecycle.runtimeSession.connected ? 'ready' : kernel.pageReadiness[kernel.activePage].tone,
+    runtimeFlavorLabel: workspaceLifecycle.processSession ? `${workspaceLifecycle.runtime} Runtime` : null,
+    processLabel: workspaceLifecycle.processSession
+      ? `${workspaceLifecycle.processSession.processName} (${workspaceLifecycle.processSession.pid})`
+      : null,
+    detailMessage: resolveWorkspaceDetailMessage(kernel),
+    notice: kernel.workspaceResetNotice,
+    pages,
+  };
+}
+
+function describePageDetail(page: ActivePage, readiness: WorkspacePageReadiness): WorkspacePageDetail {
+  return {
+    ...readiness,
+    blocked: page === 'inspector' ? !readiness.catalogReady : !readiness.selectionReady,
+    badge: describePageBadge(page, readiness),
+  };
+}
+
+function describePageBadge(page: ActivePage, readiness: WorkspacePageReadiness) {
+  if (!readiness.sessionReady) {
+    return 'session required';
+  }
+
+  if (!readiness.catalogReady) {
+    return readiness.tone === 'error' ? 'catalog error' : 'catalog pending';
+  }
+
+  if (page !== 'inspector' && !readiness.capabilityAvailable) {
+    return 'capability unavailable';
+  }
+
+  if (page !== 'inspector' && !readiness.selectionReady) {
+    return readiness.tone === 'error' ? 'runtime locked' : 'runtime pending';
+  }
+
+  return 'ready';
+}
+
+function resolveWorkspaceDetailMessage(kernel: WorkspaceKernelState) {
+  if (kernel.activeTask?.progress?.message) {
+    return kernel.activeTask.progress.total != null
+      ? `${kernel.activeTask.progress.message} (${kernel.activeTask.progress.completed}/${kernel.activeTask.progress.total})`
+      : kernel.activeTask.progress.message;
+  }
+
+  if (kernel.workspaceResetNotice?.message) {
+    return kernel.workspaceResetNotice.message;
+  }
+
+  if (kernel.workspaceLifecycle.runtimeSession.lastError) {
+    return kernel.workspaceLifecycle.runtimeSession.lastError;
+  }
+
+  if (kernel.workspaceLifecycle.errorMessage) {
+    return kernel.workspaceLifecycle.errorMessage;
+  }
+
+  if (kernel.workspaceLifecycle.processSession) {
+    return `${kernel.workspaceLifecycle.processSession.processName} (${kernel.workspaceLifecycle.processSession.pid})`;
+  }
+
+  return 'No process attached';
+}
+
+function getWorkspaceLifecycleLabel(state: WorkspaceLifecycleState) {
+  switch (state.status) {
+    case 'detached':
+      return 'Detached';
+    case 'selecting-process':
+      return 'Selecting Process';
+    case 'attaching':
+      return 'Attaching';
+    case 'attached-without-snapshot':
+      return 'Attached';
+    case 'snapshot-loading':
+      return 'Loading Snapshot';
+    case 'ready':
+      return 'Ready';
+    case 'runtime-error':
+      return 'Runtime Error';
+    case 'recovering':
+      return 'Recovering';
+    default:
+      return 'Unknown';
+  }
+}
+
+function getWorkspaceLifecycleTone(state: WorkspaceLifecycleState): WorkspaceSignalTone {
+  switch (state.status) {
+    case 'ready':
+      return 'ready';
+    case 'snapshot-loading':
+    case 'attaching':
+    case 'selecting-process':
+    case 'recovering':
+      return 'loading';
+    case 'runtime-error':
+      return 'error';
+    case 'attached-without-snapshot':
+      return 'warning';
+    case 'detached':
+    default:
+      return 'idle';
+  }
+}
+
+function formatRuntimeSessionLabel(workspace: WorkspaceLifecycleState) {
+  switch (workspace.runtimeSession.status) {
+    case 'ready':
+      return 'Runtime Ready';
+    case 'starting':
+      return 'Runtime Starting';
+    case 'recovering':
+      return 'Runtime Recovering';
+    case 'degraded':
+      return 'Runtime Degraded';
+    case 'error':
+      return 'Runtime Error';
+    case 'idle':
+    default:
+      return 'Runtime Idle';
+  }
+}
+
+function selectActiveWorkspaceTask(tasks: WorkspaceTaskSnapshot[]) {
+  const statusRank: Record<WorkspaceTaskSnapshot['status'], number> = {
+    running: 0,
+    queued: 1,
+    error: 2,
+    cancelled: 3,
+    success: 4,
+    idle: 5,
+  };
+
+  return [...tasks]
+    .filter((task) => task.status === 'running' || task.status === 'queued' || task.status === 'error')
+    .sort((left, right) => {
+      const rankDelta = statusRank[left.status] - statusRank[right.status];
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+
+      return right.updatedAt.localeCompare(left.updatedAt);
+    })[0] ?? null;
+}

@@ -13,8 +13,8 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
 }
 
 pub fn get_scene_workspace_state(state: &AppState) -> SceneWorkspaceState {
-    let session_key = state.workspace_session.lifecycle.current().runtime_session.session_key;
-    state.scene_module.workspace.current_for(session_key.as_deref())
+    let session_key = state.workspace().lifecycle().current().runtime_session.session_key;
+    state.scene().workspace().current_for(session_key.as_deref())
 }
 
 pub fn start_scene_object_children_analysis(

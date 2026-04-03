@@ -2,11 +2,11 @@ use crate::domain::analysis_models::{
     create_field_stable_id, FieldDescriptor, RuntimeClassOverlayDescriptor, RuntimeInstanceFieldSnapshot,
     RuntimeOverlaySnapshot, RuntimeResolvedFieldDescriptor, StaticFieldDescriptor,
 };
+use crate::domain::operation::{OperationError, OperationResult};
 use crate::infrastructure::clock::current_timestamp;
-use crate::kernel::runtime::access::current_runtime_session;
 use crate::kernel::runtime::overlay as native_overlay;
 use crate::services::analysis::runtime_session_service::{
-    execute_runtime_operation, resolve_class_descriptor,
+    ensure_runtime_session_ready, execute_runtime_operation, present, resolve_class_descriptor,
 };
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -16,9 +16,9 @@ pub fn get_runtime_static_fields(
     state: &AppState,
     class_stable_id: &str,
 ) -> Result<RuntimeOverlaySnapshot, String> {
-    let descriptor = resolve_class_descriptor(state, class_stable_id)?;
+    let descriptor = resolve_class_descriptor(state, class_stable_id).map_err(String::from)?;
 
-    execute_runtime_operation(state, || {
+    present(execute_runtime_operation(state, || {
         let response = load_native_overlay_response(state, &descriptor, None)?;
 
         let overlay = RuntimeClassOverlayDescriptor {
@@ -57,12 +57,12 @@ pub fn get_runtime_static_fields(
                 .collect(),
         };
 
-        Ok(RuntimeOverlaySnapshot {
+        Ok::<RuntimeOverlaySnapshot, OperationError>(RuntimeOverlaySnapshot {
             schema_version: 1,
             generated_at: current_timestamp(),
             classes: std::collections::HashMap::from([(descriptor.stable_id.clone(), overlay)]),
         })
-    })
+    }))
 }
 
 pub fn get_runtime_instance_fields(
@@ -71,13 +71,13 @@ pub fn get_runtime_instance_fields(
     class_stable_id: &str,
     instance_address: &str,
 ) -> Result<RuntimeInstanceFieldSnapshot, String> {
-    let descriptor = resolve_class_descriptor(state, class_stable_id)?;
+    let descriptor = resolve_class_descriptor(state, class_stable_id).map_err(String::from)?;
 
-    execute_runtime_operation(state, || {
+    present(execute_runtime_operation(state, || {
         let parsed_instance_address = parse_address(instance_address)?;
         let response = load_native_overlay_response(state, &descriptor, Some(parsed_instance_address))?;
 
-        Ok(RuntimeInstanceFieldSnapshot {
+        Ok::<RuntimeInstanceFieldSnapshot, OperationError>(RuntimeInstanceFieldSnapshot {
             class_stable_id: descriptor.stable_id.clone(),
             instance_address: instance_address.to_string(),
             fields: response
@@ -98,7 +98,7 @@ pub fn get_runtime_instance_fields(
                 })
                 .collect(),
         })
-    })
+    }))
 }
 
 struct NativeOverlayFieldRow {
@@ -153,19 +153,19 @@ fn load_native_overlay_response(
     state: &AppState,
     descriptor: &crate::domain::analysis_models::ClassDescriptor,
     instance_address: Option<usize>,
-) -> Result<NativeOverlayResponse, String> {
-    let runtime_session = current_runtime_session(state)
-        .ok_or_else(|| "Native runtime session is unavailable".to_string())?;
+) -> OperationResult<NativeOverlayResponse> {
+    let runtime_session = ensure_runtime_session_ready(state)?;
     let runtime_api = runtime_session
         .runtime_api()
-        .ok_or_else(|| "Native runtime session is missing its runtime API".to_string())?;
-    let overlay = native_overlay::load_class_overlay(runtime_api, descriptor, instance_address)?;
+        .ok_or_else(OperationError::runtime_api_unavailable)?;
+    let overlay = native_overlay::load_class_overlay(runtime_api, descriptor, instance_address)
+        .map_err(OperationError::from)?;
     Ok(NativeOverlayResponse::from_native(overlay))
 }
 
-fn parse_address(value: &str) -> Result<usize, String> {
+fn parse_address(value: &str) -> OperationResult<usize> {
     let trimmed = value.trim();
     let normalized = trimmed.strip_prefix("0x").unwrap_or(trimmed);
     usize::from_str_radix(normalized, 16)
-        .map_err(|error| format!("Invalid instance address '{}': {}", value, error))
+        .map_err(|error| OperationError::invalid_address(format!("Invalid instance address '{}': {}", value, error)))
 }

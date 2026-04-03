@@ -153,9 +153,9 @@ function TestConsumer() {
     processPid: shell.processSession?.pid ?? null,
     sessionKey: shell.workspaceLifecycle.runtimeSession.sessionKey,
     hasSnapshot: shell.workspaceLifecycle.hasSnapshot,
-    sceneSelectionReady: shell.pageReadiness.scene.selectionReady,
-    studioSelectionReady: shell.pageReadiness.studio.selectionReady,
-    resetNoticeKind: shell.workspaceResetNotice?.kind ?? null,
+    sceneSelectionReady: shell.workspacePresentation.pages.scene.selectionReady,
+    studioSelectionReady: shell.workspacePresentation.pages.studio.selectionReady,
+    resetNoticeKind: shell.workspacePresentation.notice?.kind ?? null,
     taskCount: shell.workspaceTasks.length,
     analysisProcessPid: analysis.analysisSnapshot?.process?.pid ?? null,
     analysisSchemaVersion: shell.contractVersions?.analysisSchemaVersion ?? null,
@@ -167,14 +167,14 @@ function TestConsumer() {
       processPid: shell.processSession?.pid ?? null,
       sessionKey: shell.workspaceLifecycle.runtimeSession.sessionKey,
       hasSnapshot: shell.workspaceLifecycle.hasSnapshot,
-      sceneSelectionReady: shell.pageReadiness.scene.selectionReady,
-      studioSelectionReady: shell.pageReadiness.studio.selectionReady,
-      resetNoticeKind: shell.workspaceResetNotice?.kind ?? null,
+      sceneSelectionReady: shell.workspacePresentation.pages.scene.selectionReady,
+      studioSelectionReady: shell.workspacePresentation.pages.studio.selectionReady,
+      resetNoticeKind: shell.workspacePresentation.notice?.kind ?? null,
       taskCount: shell.workspaceTasks.length,
       analysisProcessPid: analysis.analysisSnapshot?.process?.pid ?? null,
       analysisSchemaVersion: shell.contractVersions?.analysisSchemaVersion ?? null,
     });
-  }, [analysis.analysisSnapshot?.process?.pid, shell.contractVersions?.analysisSchemaVersion, shell.pageReadiness.scene.selectionReady, shell.pageReadiness.studio.selectionReady, shell.processSession?.pid, shell.workspaceLifecycle.hasSnapshot, shell.workspaceLifecycle.runtimeSession.sessionKey, shell.workspaceLifecycle.status, shell.workspaceResetNotice?.kind, shell.workspaceTasks.length]);
+  }, [analysis.analysisSnapshot?.process?.pid, shell.contractVersions?.analysisSchemaVersion, shell.processSession?.pid, shell.workspaceLifecycle.hasSnapshot, shell.workspaceLifecycle.runtimeSession.sessionKey, shell.workspaceLifecycle.status, shell.workspacePresentation.notice?.kind, shell.workspacePresentation.pages.scene.selectionReady, shell.workspacePresentation.pages.studio.selectionReady, shell.workspaceTasks.length]);
 
   return null;
 }

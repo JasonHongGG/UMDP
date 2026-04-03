@@ -9,34 +9,77 @@ pub use scene_store::{
     SceneChildrenState, SceneInspectorState, SceneState,
 };
 pub use workspace_store::WorkspaceState;
+
 #[derive(Default)]
 pub struct WorkspaceSessionState {
-    pub analysis: AnalysisState,
-    pub lifecycle: WorkspaceState,
+    analysis: AnalysisState,
+    lifecycle: WorkspaceState,
+}
+
+impl WorkspaceSessionState {
+    pub fn analysis(&self) -> &AnalysisState {
+        &self.analysis
+    }
+
+    pub fn lifecycle(&self) -> &WorkspaceState {
+        &self.lifecycle
+    }
 }
 
 #[derive(Default)]
 pub struct RuntimeKernelModuleState {
-    pub runtime: RuntimeKernelState,
+    runtime: RuntimeKernelState,
+}
+
+impl RuntimeKernelModuleState {
+    pub fn session(&self) -> &RuntimeKernelState {
+        &self.runtime
+    }
 }
 
 #[derive(Default)]
 pub struct SceneModuleState {
-    pub workspace: SceneState,
-    pub children: SceneChildrenState,
-    pub inspector: SceneInspectorState,
+    workspace: SceneState,
+    children: SceneChildrenState,
+    inspector: SceneInspectorState,
+}
+
+impl SceneModuleState {
+    pub fn workspace(&self) -> &SceneState {
+        &self.workspace
+    }
+
+    pub fn children(&self) -> &SceneChildrenState {
+        &self.children
+    }
+
+    pub fn inspector(&self) -> &SceneInspectorState {
+        &self.inspector
+    }
 }
 
 #[derive(Default)]
 pub struct AppState {
-    pub workspace_session: WorkspaceSessionState,
-    pub runtime_kernel: RuntimeKernelModuleState,
-    pub scene_module: SceneModuleState,
+    workspace_session: WorkspaceSessionState,
+    runtime_kernel: RuntimeKernelModuleState,
+    scene_module: SceneModuleState,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn workspace(&self) -> &WorkspaceSessionState {
+        &self.workspace_session
+    }
+
+    pub fn runtime_kernel(&self) -> &RuntimeKernelModuleState {
+        &self.runtime_kernel
+    }
+
+    pub fn scene(&self) -> &SceneModuleState {
+        &self.scene_module
     }
 }
 
@@ -111,9 +154,9 @@ mod tests {
     fn workspace_touch_promotes_runtime_session_and_heartbeats() {
         let workspace = WorkspaceState::default();
         workspace.set_attached_without_snapshot(sample_session());
-        workspace.set_ready(Some(sample_session()));
+        workspace.set_ready(Some(sample_session()), false);
 
-        let connected = workspace.touch_runtime_session();
+        let connected = workspace.record_runtime_heartbeat();
         assert!(connected.connected);
         assert!(connected.last_heartbeat_at.is_some());
         assert_eq!(connected.session_key.as_deref(), Some("777:Unity.exe:Mono"));

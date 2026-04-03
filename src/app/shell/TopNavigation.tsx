@@ -1,4 +1,5 @@
 import { Boxes, LayoutDashboard, ScanSearch } from 'lucide-react';
+import type { WorkspacePresentation } from '@/kernel/workspace/derive';
 
 const NAV_ITEMS = [
   { key: 'inspector', label: 'Inspector', icon: ScanSearch },
@@ -9,9 +10,10 @@ const NAV_ITEMS = [
 interface TopNavigationProps {
   activePage: 'inspector' | 'studio' | 'scene';
   onPageChange: (page: 'inspector' | 'studio' | 'scene') => void;
+  pages: WorkspacePresentation['pages'];
 }
 
-export function TopNavigation({ activePage, onPageChange }: TopNavigationProps) {
+export function TopNavigation({ activePage, onPageChange, pages }: TopNavigationProps) {
   const activeIndex = NAV_ITEMS.findIndex((item) => item.key === activePage);
 
   return (
@@ -33,15 +35,25 @@ export function TopNavigation({ activePage, onPageChange }: TopNavigationProps) 
         {NAV_ITEMS.map((item, index) => {
           const Icon = item.icon;
           const active = item.key === activePage;
+          const detail = pages[item.key];
+          const disabled = item.key !== 'inspector' && detail.sessionReady && detail.catalogReady && !detail.capabilityAvailable;
 
           return (
             <div key={item.key} className={index > 0 ? 'ml-1' : ''}>
               <button
-                onClick={() => onPageChange(item.key)}
+                onClick={() => {
+                  if (!disabled) {
+                    onPageChange(item.key);
+                  }
+                }}
+                disabled={disabled}
+                title={disabled ? detail.description : item.label}
                 className={`relative w-[110px] py-1.5 flex items-center justify-center gap-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-300 z-10 ${
                   active
                     ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]'
-                    : 'text-slate-500 hover:text-slate-300'
+                    : disabled
+                      ? 'text-slate-700 cursor-not-allowed'
+                      : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
                 <Icon size={14} className={active ? 'animate-[pulse_3s_ease-in-out_infinite]' : ''} />

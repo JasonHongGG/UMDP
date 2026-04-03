@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { TopBar } from './TopBar';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
+import { createWorkspaceKernelState, createWorkspacePresentation } from '@/kernel/workspace/derive';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -36,30 +37,41 @@ describe('TopBar', () => {
   });
 
   it('shows the attached process name and pid without restoring runtime and contract badges', async () => {
+    const workspace = {
+      ...EMPTY_WORKSPACE_LIFECYCLE,
+      status: 'ready' as const,
+      runtime: 'mono' as const,
+      processSession: {
+        pid: 1337,
+        processName: 'Unity.exe',
+        exePath: 'C:/Unity.exe',
+        dataDir: null,
+        managedDir: null,
+        runtime: 'mono' as const,
+      },
+      runtimeSession: {
+        ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+        status: 'ready' as const,
+        runtime: 'mono' as const,
+        connected: true,
+      },
+    };
+    const workspacePresentation = createWorkspacePresentation(createWorkspaceKernelState({
+      processSession: workspace.processSession,
+      contractVersions: null,
+      workspaceLifecycle: workspace,
+      activePage: 'studio',
+      workspaceTasks: [],
+      previousLifecycle: null,
+    }));
+
     await act(async () => {
       root.render(createElement(TopBar, {
         onOpenSelector: () => undefined,
         activePage: 'studio',
         onPageChange: () => undefined,
-        workspace: {
-          ...EMPTY_WORKSPACE_LIFECYCLE,
-          status: 'ready',
-          runtime: 'mono',
-          processSession: {
-            pid: 1337,
-            processName: 'Unity.exe',
-            exePath: 'C:/Unity.exe',
-            dataDir: null,
-            managedDir: null,
-            runtime: 'mono',
-          },
-          runtimeSession: {
-            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
-            status: 'ready',
-            runtime: 'mono',
-            connected: true,
-          },
-        },
+        workspace,
+        workspacePresentation,
       }));
     });
 

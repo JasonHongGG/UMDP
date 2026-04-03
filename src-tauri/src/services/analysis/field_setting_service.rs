@@ -1,10 +1,11 @@
 use crate::domain::analysis_models::{
     RuntimeFieldSetFailureKind, RuntimeFieldSetRequest, RuntimeFieldSetResult,
 };
-use crate::kernel::runtime::access::current_runtime_session;
+use crate::domain::operation::OperationError;
 use crate::kernel::runtime::field_set as native_field_set;
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, execute_runtime_operation, resolve_class_descriptor,
+    ensure_attached_session, ensure_runtime_session_ready, execute_runtime_operation,
+    resolve_class_descriptor,
 };
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -37,13 +38,13 @@ pub fn set_runtime_field_value(
     let attached = match ensure_attached_session(state) {
         Ok(session) => session,
         Err(error) => {
-            return build_failure_result(&request, RuntimeFieldSetFailureKind::NotAttached, error);
+            return build_failure_result(&request, RuntimeFieldSetFailureKind::NotAttached, error.to_string());
         }
     };
     let descriptor = match resolve_class_descriptor(state, &request.class_stable_id) {
         Ok(descriptor) => descriptor,
         Err(error) => {
-            return build_failure_result(&request, RuntimeFieldSetFailureKind::ClassNotFound, error);
+            return build_failure_result(&request, RuntimeFieldSetFailureKind::ClassNotFound, error.to_string());
         }
     };
 
@@ -69,11 +70,10 @@ pub fn set_runtime_field_value(
     }
 
     match execute_runtime_operation(state, || {
-        let runtime_session = current_runtime_session(state)
-            .ok_or_else(|| "Native runtime session is unavailable".to_string())?;
+        let runtime_session = ensure_runtime_session_ready(state)?;
         let runtime_api = runtime_session
             .runtime_api()
-            .ok_or_else(|| "Native runtime session is missing its runtime API".to_string())?;
+            .ok_or_else(OperationError::runtime_api_unavailable)?;
         native_field_set::set_runtime_field_value(runtime_api, attached.pid, &descriptor, &request)
     }) {
         Ok(response) => response,
@@ -81,7 +81,7 @@ pub fn set_runtime_field_value(
             return build_failure_result(
                 &request,
                 RuntimeFieldSetFailureKind::Unknown,
-                error,
+                error.to_string(),
             );
         }
     }

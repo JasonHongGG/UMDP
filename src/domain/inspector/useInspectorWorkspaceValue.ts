@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPendingClassNodeRequest, type ClassBinding, type ClassInfoCatalog, type StudioClassCatalogEntry } from '@/domain/studio/editor';
 import type { PendingClassNodeRequest } from '@/domain/studio/editor';
 import type { StableId } from '@/domain/contracts/shared-identity';
@@ -26,6 +26,7 @@ interface UseInspectorWorkspaceValueOptions {
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   setActivePage: (page: ActivePage) => void;
   queuePendingClassNode: (request: PendingClassNodeRequest) => void;
+  workspaceResetRevision: number;
 }
 
 interface UseInspectorWorkspaceValueResult {
@@ -34,7 +35,6 @@ interface UseInspectorWorkspaceValueResult {
   studioClassCatalogEntries: StudioClassCatalogEntry[];
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
   handleOpenInspectorForBinding: (binding: ClassBinding) => void;
-  resetInspectorWorkspaceState: () => void;
 }
 
 export function useInspectorWorkspaceValue({
@@ -50,6 +50,7 @@ export function useInspectorWorkspaceValue({
   ensureRuntimeOverlayLoaded,
   setActivePage,
   queuePendingClassNode,
+  workspaceResetRevision,
 }: UseInspectorWorkspaceValueOptions): UseInspectorWorkspaceValueResult {
   const [selectedImageStableId, setSelectedImageStableId] = useState<StableId | null>(null);
   const [tabs, setTabs] = useState<InspectorTab[]>([]);
@@ -203,6 +204,10 @@ export function useInspectorWorkspaceValue({
     resetSearchState();
   }, [clearPendingScrollTarget, resetSearchState]);
 
+  useEffect(() => {
+    resetInspectorWorkspaceState();
+  }, [resetInspectorWorkspaceState, workspaceResetRevision]);
+
   const value = useMemo<InspectorWorkspaceContextValue>(() => ({
     attachError,
     images,
@@ -306,6 +311,5 @@ export function useInspectorWorkspaceValue({
     studioClassCatalogEntries,
     staticFieldAddressByClassAndMember,
     handleOpenInspectorForBinding,
-    resetInspectorWorkspaceState,
   };
 }

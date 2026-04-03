@@ -2,10 +2,11 @@ use crate::domain::analysis_models::{
     MethodDescriptor, RuntimeInvokeFailureKind, RuntimeMethodInvokeRequest,
     RuntimeMethodInvokeResult,
 };
-use crate::kernel::runtime::access::current_runtime_session;
+use crate::domain::operation::OperationError;
 use crate::kernel::runtime::invoke as native_invoke;
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_metadata_snapshot, execute_runtime_operation,
+    ensure_attached_session, ensure_metadata_snapshot, ensure_runtime_session_ready,
+    execute_runtime_operation,
 };
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -42,7 +43,7 @@ pub fn invoke_runtime_method(
             return build_failure_result(
                 &request,
                 RuntimeInvokeFailureKind::NotAttached,
-                error,
+                error.to_string(),
                 None,
                 None,
             )
@@ -54,7 +55,7 @@ pub fn invoke_runtime_method(
             return build_failure_result(
                 &request,
                 RuntimeInvokeFailureKind::MetadataUnavailable,
-                error,
+                error.to_string(),
                 None,
                 None,
             )
@@ -110,13 +111,13 @@ pub fn invoke_runtime_method(
         );
     }
 
-    let runtime_session = match current_runtime_session(state) {
-        Some(runtime_session) => runtime_session,
-        None => {
+    let runtime_session = match ensure_runtime_session_ready(state) {
+        Ok(runtime_session) => runtime_session,
+        Err(error) => {
             return build_failure_result(
                 &request,
                 RuntimeInvokeFailureKind::Unknown,
-                "Native runtime session is unavailable",
+                error.to_string(),
                 None,
                 Some(&method),
             )
@@ -125,10 +126,11 @@ pub fn invoke_runtime_method(
     let runtime_api = match runtime_session.runtime_api() {
         Some(runtime_api) => runtime_api,
         None => {
+            let error = OperationError::runtime_api_unavailable();
             return build_failure_result(
                 &request,
                 RuntimeInvokeFailureKind::Unknown,
-                "Native runtime session is missing its runtime API",
+                error.to_string(),
                 None,
                 Some(&method),
             );
@@ -142,7 +144,7 @@ pub fn invoke_runtime_method(
         Err(error) => build_failure_result(
             &request,
             RuntimeInvokeFailureKind::Unknown,
-            error,
+            error.to_string(),
             None,
             Some(&method),
         ),

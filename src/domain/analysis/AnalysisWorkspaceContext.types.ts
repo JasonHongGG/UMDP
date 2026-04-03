@@ -5,7 +5,7 @@ import type {
   RuntimeClassOverlayDescriptor,
 } from './contracts';
 import type { SystemContractVersions } from '@/shared/contracts';
-import type { ClassInfoCatalog, StudioClassCatalogEntry } from '@/domain/studio/editor';
+import type { ClassInfoCatalog, PendingClassNodeRequest, StudioClassCatalogEntry } from '@/domain/studio/editor';
 import type { StableId } from '../contracts/shared-identity';
 import type { ResolvedMemberRuntimeValue } from '@/features/studio/core/contracts';
 import type { AnalysisClassInfo, AnalysisClassSummary, AnalysisImageInfo } from './view-models';
@@ -23,6 +23,8 @@ export interface AnalysisWorkspaceContextValue {
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
   studioRuntimeData: StudioRuntimeDataState;
+  pendingClassNode: PendingClassNodeRequest | null;
+  clearPendingClassNode: () => void;
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   ensureRuntimeInstanceFieldsLoaded: (classStableId: StableId, instanceAddress: string) => void;
   runtimeMemberValuesByClassAndAddress: Record<string, Record<string, Record<string, ResolvedMemberRuntimeValue>>>;

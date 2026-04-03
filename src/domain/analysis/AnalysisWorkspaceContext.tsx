@@ -1,29 +1,23 @@
 import React, { createContext, useContext } from 'react';
-import {
-  WorkspaceShellProvider,
-} from '@/domain/workspace/WorkspaceShellContext';
+import { WorkspaceShellProvider } from '@/domain/workspace/WorkspaceShellContext';
 import { InspectorWorkspaceProvider } from '@/domain/inspector/InspectorWorkspaceContext';
-import { StudioWorkspaceProvider } from '@/domain/studio/StudioWorkspaceContext';
 import type { AnalysisWorkspaceContextValue } from './AnalysisWorkspaceContext.types';
-import { useAnalysisWorkspaceComposition } from './hooks/useAnalysisWorkspaceComposition';
+import { useAnalysisWorkspaceModel } from './composition/useAnalysisWorkspaceModel';
 
 const AnalysisWorkspaceContext = createContext<AnalysisWorkspaceContextValue | null>(null);
 
 export function AnalysisWorkspaceProvider({ children }: { children: React.ReactNode }) {
   const {
     analysisWorkspaceValue,
-    inspectorWorkspaceValue,
-    studioWorkspaceValue,
     workspaceShellValue,
-  } = useAnalysisWorkspaceComposition();
+    inspectorWorkspaceValue,
+  } = useAnalysisWorkspaceModel();
 
   return (
     <WorkspaceShellProvider value={workspaceShellValue}>
       <AnalysisWorkspaceContext.Provider value={analysisWorkspaceValue}>
         <InspectorWorkspaceProvider value={inspectorWorkspaceValue}>
-          <StudioWorkspaceProvider value={studioWorkspaceValue}>
-            {children}
-          </StudioWorkspaceProvider>
+          {children}
         </InspectorWorkspaceProvider>
       </AnalysisWorkspaceContext.Provider>
     </WorkspaceShellProvider>

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Binary, ScanSearch } from 'lucide-react';
+import { ScanSearch } from 'lucide-react';
 import { SidebarTools } from '@/features/inspector/components/SidebarTools';
 import { GlobalSearchSidebar } from '@/features/inspector/components/GlobalSearchSidebar';
 import { ClassReferenceSidebar } from '@/features/inspector/components/ClassReferenceSidebar';
@@ -8,11 +8,12 @@ import { ClassesColumn } from '@/features/inspector/components/ClassesColumn';
 import { InspectorTabBar } from '@/features/inspector/components/InspectorTabBar';
 import ClassInspectorApp from '@/features/inspector/components/ClassInspectorApp';
 import { useInspectorWorkspace } from '@/domain/inspector/InspectorWorkspaceContext';
+import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
+import { WorkspaceGate } from '@/shared/ui/WorkspaceGate';
 import { useInspectorPageController } from './useInspectorPageController';
 
 export function InspectorPage() {
   const {
-    attachError,
     images,
     classLookupMap,
     selectedImageStableId,
@@ -63,6 +64,12 @@ export function InspectorPage() {
     pendingScrollClassStableId,
     clearPendingScrollTarget,
   } = useInspectorWorkspace();
+  const { workspacePresentation } = useWorkspaceShellState();
+  const detail = workspacePresentation.pages.inspector;
+
+  if (detail.blocked) {
+    return <WorkspaceGate detail={detail} />;
+  }
 
   const { tabBarRef, imageListRef, classListRef } = useInspectorPageController({
     tabsLength: tabs.length,
@@ -158,12 +165,6 @@ export function InspectorPage() {
           handleCloseTab={handleCloseTab}
           tabBarRef={tabBarRef}
         />
-
-        {attachError ? (
-          <div className="m-4 p-3 bg-red-950/50 border border-red-500/50 rounded-lg text-red-200 text-sm font-mono flex items-center gap-2 z-10">
-            <Binary size={16} /> {attachError}
-          </div>
-        ) : null}
 
         {!activeTab || !selectedClass ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-4 mt-[-60px]">

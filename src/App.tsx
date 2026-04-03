@@ -34,16 +34,16 @@ export default function App() {
 function AppContent() {
   const {
     workspaceLifecycle,
-    workspaceResetNotice,
+    workspacePresentation,
     activePage,
     setActivePage,
-    workspaceTasks,
   } = useWorkspaceShellState();
 
   return (
     <MainLayout>
       <TopBar
         workspace={workspaceLifecycle}
+        workspacePresentation={workspacePresentation}
         onOpenSelector={openProcessSelectorWindow}
         activePage={activePage}
         onPageChange={setActivePage}
@@ -59,7 +59,7 @@ function AppContent() {
         )}
       </Suspense>
 
-      <StatusBar workspace={workspaceLifecycle} tasks={workspaceTasks} resetNotice={workspaceResetNotice} />
+      <StatusBar presentation={workspacePresentation} />
     </MainLayout>
   );
 }

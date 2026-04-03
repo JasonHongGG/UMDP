@@ -12,7 +12,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorTaskState,
 };
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, execute_runtime_operation,
+    ensure_attached_session, execute_runtime_operation, present,
 };
 use crate::state::AppState;
 use std::time::Instant;
@@ -28,13 +28,13 @@ pub fn start_scene_object_children_analysis(
     object_address: &str,
 ) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
     let started_at = Instant::now();
-    ensure_attached_session(state)?;
-    ensure_scene_query_runtime_ready(state)?;
+    present(ensure_attached_session(state).map(|_| ()))?;
+    present(ensure_scene_query_runtime_ready(state))?;
     let session_key = current_scene_session_key(state);
 
     let task_start = state
-        .scene_module
-        .children
+        .scene()
+        .children()
         .start_task(object_address.to_string(), session_key.clone());
     emit_scene_children_task_state(app, &task_start.state);
     if task_start.should_spawn {
@@ -74,8 +74,8 @@ pub fn get_scene_object_children_state(
 ) -> Option<RuntimeSceneObjectChildrenTaskState> {
     let session_key = current_scene_session_key(state);
     state
-        .scene_module
-        .children
+        .scene()
+        .children()
         .current(object_address, session_key.as_deref())
 }
 
@@ -86,8 +86,8 @@ pub fn cancel_scene_object_children_analysis(
 ) -> Option<RuntimeSceneObjectChildrenTaskState> {
     let session_key = current_scene_session_key(state);
     state
-        .scene_module
-        .children
+    .scene()
+    .children()
         .cancel(object_address, task_id, session_key.as_deref())
 }
 
@@ -97,13 +97,13 @@ pub fn start_scene_object_inspector_analysis(
     object_address: &str,
 ) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
     let started_at = Instant::now();
-    ensure_attached_session(state)?;
-    ensure_scene_query_runtime_ready(state)?;
+    present(ensure_attached_session(state).map(|_| ()))?;
+    present(ensure_scene_query_runtime_ready(state))?;
     let session_key = current_scene_session_key(state);
 
     let task_start = state
-        .scene_module
-        .inspector
+        .scene()
+        .inspector()
         .start_task(object_address.to_string(), session_key.clone());
     emit_scene_inspector_task_state(app, &task_start.state);
     if !task_start.use_cached {
@@ -141,7 +141,7 @@ pub fn get_scene_object_inspector_state(
     state: &AppState,
 ) -> Option<RuntimeSceneObjectInspectorTaskState> {
     let session_key = current_scene_session_key(state);
-    state.scene_module.inspector.current(session_key.as_deref())
+    state.scene().inspector().current(session_key.as_deref())
 }
 
 pub fn cancel_scene_object_inspector_analysis(
@@ -150,8 +150,8 @@ pub fn cancel_scene_object_inspector_analysis(
 ) -> Option<RuntimeSceneObjectInspectorTaskState> {
     let session_key = current_scene_session_key(state);
     state
-        .scene_module
-        .inspector
+    .scene()
+    .inspector()
         .cancel(task_id, session_key.as_deref())
 }
 
@@ -175,12 +175,12 @@ fn run_scene_object_children_task(
         }) {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                if let Some(task_state) = state.scene_module.children.fail(
+                if let Some(task_state) = state.scene().children().fail(
                     object_address,
                     task_id,
                     mutation_epoch,
                     session_key,
-                    error,
+                    error.to_string(),
                 ) {
                     emit_scene_children_task_state(app, &task_state);
                 }
@@ -189,7 +189,7 @@ fn run_scene_object_children_task(
         };
 
         let next_offset = page.next_offset;
-        let Some(task_state) = state.scene_module.children.apply_children(
+        let Some(task_state) = state.scene().children().apply_children(
             object_address,
             task_id,
             mutation_epoch,
@@ -209,8 +209,8 @@ fn run_scene_object_children_task(
     }
 
     if let Some(task_state) = state
-        .scene_module
-        .children
+        .scene()
+        .children()
         .complete(object_address, task_id, mutation_epoch, session_key)
     {
         emit_scene_children_task_state(app, &task_state);
@@ -231,9 +231,9 @@ fn run_scene_object_inspector_task(
         Ok(snapshot) => snapshot,
         Err(error) => {
             if let Some(task_state) = state
-                .scene_module
-                .inspector
-                .fail(task_id, mutation_epoch, session_key, error)
+                .scene()
+                .inspector()
+                .fail(task_id, mutation_epoch, session_key, error.to_string())
             {
                 emit_scene_inspector_task_state(app, &task_state);
             }
@@ -241,8 +241,8 @@ fn run_scene_object_inspector_task(
         }
     };
     let Some(task_state) = state
-        .scene_module
-        .inspector
+        .scene()
+        .inspector()
         .apply_header(task_id, mutation_epoch, session_key, header)
     else {
         return;
@@ -262,9 +262,9 @@ fn run_scene_object_inspector_task(
             Ok(snapshot) => snapshot,
             Err(error) => {
                 if let Some(task_state) = state
-                    .scene_module
-                    .inspector
-                    .fail(task_id, mutation_epoch, session_key, error)
+                    .scene()
+                    .inspector()
+                    .fail(task_id, mutation_epoch, session_key, error.to_string())
                 {
                     emit_scene_inspector_task_state(app, &task_state);
                 }
@@ -273,7 +273,7 @@ fn run_scene_object_inspector_task(
         };
 
         let next_offset = page.next_offset;
-        let Some(task_state) = state.scene_module.inspector.apply_children(
+        let Some(task_state) = state.scene().inspector().apply_children(
             task_id,
             mutation_epoch,
             session_key,
@@ -304,9 +304,9 @@ fn run_scene_object_inspector_task(
             Ok(snapshot) => snapshot,
             Err(error) => {
                 if let Some(task_state) = state
-                    .scene_module
-                    .inspector
-                    .fail(task_id, mutation_epoch, session_key, error)
+                    .scene()
+                    .inspector()
+                    .fail(task_id, mutation_epoch, session_key, error.to_string())
                 {
                     emit_scene_inspector_task_state(app, &task_state);
                 }
@@ -315,7 +315,7 @@ fn run_scene_object_inspector_task(
         };
 
         let next_offset = page.next_offset;
-        let Some(task_state) = state.scene_module.inspector.apply_components(
+        let Some(task_state) = state.scene().inspector().apply_components(
             task_id,
             mutation_epoch,
             session_key,
@@ -334,8 +334,8 @@ fn run_scene_object_inspector_task(
     }
 
     if let Some(task_state) = state
-        .scene_module
-        .inspector
+        .scene()
+        .inspector()
         .complete(task_id, mutation_epoch, session_key)
     {
         emit_scene_inspector_task_state(app, &task_state);

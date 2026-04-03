@@ -6,6 +6,7 @@ export interface WorkspacePageReadiness {
   page: WorkspacePage;
   sessionReady: boolean;
   catalogReady: boolean;
+  capabilityAvailable: boolean;
   selectionReady: boolean;
   tone: WorkspaceSignalTone;
   title: string;
@@ -32,11 +33,26 @@ function hasInteractiveRuntime(workspace: WorkspaceLifecycleState) {
     && (workspace.runtimeSession.status === 'ready' || workspace.runtimeSession.status === 'degraded');
 }
 
-function buildSessionBlockedState(page: WorkspacePage): WorkspacePageReadiness {
+function buildSessionBlockedState(page: WorkspacePage, workspace: WorkspaceLifecycleState): WorkspacePageReadiness {
+  const errorMessage = workspace.errorMessage ?? workspace.runtimeSession.lastError;
+  if (errorMessage) {
+    return {
+      page,
+      sessionReady: false,
+      catalogReady: false,
+      capabilityAvailable: page === 'inspector',
+      selectionReady: false,
+      tone: 'error',
+      title: 'Session Unavailable',
+      description: errorMessage,
+    };
+  }
+
   return {
     page,
     sessionReady: false,
     catalogReady: false,
+    capabilityAvailable: page === 'inspector',
     selectionReady: false,
     tone: 'idle',
     title: 'Session Required',
@@ -50,15 +66,30 @@ export function getWorkspacePageReadiness(
 ): WorkspacePageReadiness {
   const sessionReady = workspace.processSession != null;
   if (!sessionReady) {
-    return buildSessionBlockedState(page);
+    return buildSessionBlockedState(page, workspace);
   }
 
   const catalogReady = workspace.hasSnapshot;
   if (!catalogReady) {
+    const errorMessage = workspace.errorMessage ?? workspace.runtimeSession.lastError;
+    if (errorMessage) {
+      return {
+        page,
+        sessionReady: true,
+        catalogReady: false,
+        capabilityAvailable: page === 'inspector' ? true : page === 'scene' ? hasSceneCapability(workspace) : hasExecutionCapability(workspace),
+        selectionReady: false,
+        tone: 'error',
+        title: 'Catalog Unavailable',
+        description: errorMessage,
+      };
+    }
+
     return {
       page,
       sessionReady: true,
       catalogReady: false,
+      capabilityAvailable: page === 'inspector' ? true : page === 'scene' ? hasSceneCapability(workspace) : hasExecutionCapability(workspace),
       selectionReady: false,
       tone: workspace.status === 'snapshot-loading' ? 'loading' : 'warning',
       title: 'Catalog Preparing',
@@ -71,6 +102,7 @@ export function getWorkspacePageReadiness(
       page,
       sessionReady: true,
       catalogReady: true,
+      capabilityAvailable: true,
       selectionReady: true,
       tone: 'ready',
       title: 'Inspector Ready',
@@ -78,20 +110,40 @@ export function getWorkspacePageReadiness(
     };
   }
 
-  const needsRuntime = page === 'scene' ? hasSceneCapability(workspace) : hasExecutionCapability(workspace);
-  const selectionReady = needsRuntime && workspace.status === 'ready' && hasInteractiveRuntime(workspace);
+  const capabilityAvailable = page === 'scene'
+    ? hasSceneCapability(workspace)
+    : hasExecutionCapability(workspace);
 
+  if (!capabilityAvailable) {
+    return {
+      page,
+      sessionReady: true,
+      catalogReady: true,
+      capabilityAvailable: false,
+      selectionReady: false,
+      tone: 'warning',
+      title: page === 'scene' ? 'Scene Capability Missing' : 'Runtime Capability Missing',
+      description: page === 'scene'
+        ? 'The attached runtime does not expose scene read capabilities for this workspace.'
+        : 'The attached runtime does not expose workflow execution capabilities for this workspace.',
+    };
+  }
+
+  const selectionReady = workspace.status === 'ready' && hasInteractiveRuntime(workspace);
   if (!selectionReady) {
     return {
       page,
       sessionReady: true,
       catalogReady: true,
+      capabilityAvailable: true,
       selectionReady: false,
       tone: workspace.status === 'recovering' || workspace.status === 'runtime-error' ? 'error' : 'loading',
-      title: page === 'scene' ? 'Selection Locked' : 'Runtime Locked',
-      description: page === 'scene'
-        ? 'Scene catalog is loaded, but runtime selection and mutations stay gated until the runtime session is healthy.'
-        : 'Studio document is loaded, but runtime execution stays gated until the runtime session is healthy.',
+      title: page === 'scene' ? 'Scene Runtime Locked' : 'Studio Runtime Locked',
+      description: workspace.runtimeSession.lastError
+        ?? workspace.errorMessage
+        ?? (page === 'scene'
+          ? 'Scene hierarchy, selection, and mutations stay gated until the runtime session is healthy.'
+          : 'Studio document editing and runtime execution stay gated until the runtime session is healthy.'),
     };
   }
 
@@ -99,6 +151,7 @@ export function getWorkspacePageReadiness(
     page,
     sessionReady: true,
     catalogReady: true,
+    capabilityAvailable: true,
     selectionReady: true,
     tone: 'ready',
     title: page === 'scene' ? 'Scene Ready' : 'Studio Ready',
@@ -140,23 +193,12 @@ export function describeWorkspaceResetNotice(
     };
   }
 
-  if (workspace.status === 'snapshot-loading') {
-    return {
-      kind: 'snapshot-loading',
-      tone: 'loading',
-      title: 'Snapshot Loading',
-      message: 'Metadata and resource catalogs are loading. Interactive resource state remains gated until this completes.',
-    };
-  }
-
   if (workspace.status === 'recovering') {
     return {
       kind: 'recovering',
       tone: 'error',
       title: 'Runtime Recovering',
-      message: workspace.errorMessage
-        ?? workspace.runtimeSession.lastError
-        ?? 'Runtime connectivity is recovering. Cached state may be invalidated and rebuilt.',
+      message: workspace.runtimeSession.lastError ?? workspace.errorMessage ?? 'Runtime state is recovering for the attached Unity session.',
     };
   }
 
@@ -165,9 +207,16 @@ export function describeWorkspaceResetNotice(
       kind: 'runtime-error',
       tone: 'error',
       title: 'Runtime Error',
-      message: workspace.errorMessage
-        ?? workspace.runtimeSession.lastError
-        ?? 'The runtime session is unavailable. Resource actions remain blocked until the runtime is healthy again.',
+      message: workspace.runtimeSession.lastError ?? workspace.errorMessage ?? 'Runtime state is unavailable.',
+    };
+  }
+
+  if (workspace.status === 'snapshot-loading') {
+    return {
+      kind: 'snapshot-loading',
+      tone: 'loading',
+      title: 'Catalog Preparing',
+      message: 'Metadata and resource catalogs are still loading for the attached Unity session.',
     };
   }
 

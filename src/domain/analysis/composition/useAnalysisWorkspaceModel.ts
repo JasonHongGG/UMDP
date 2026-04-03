@@ -1,35 +1,37 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { createStudioRuntimeDataState } from '@/features/studio/core/runtimeData';
-import type { PendingClassNodeRequest } from '@/domain/studio/editor';
-import type { ActivePage } from '../workspace-types';
-import { useAnalysisRepository } from './useAnalysisRepository';
-import { useAnalysisSessionState } from './useAnalysisSessionState';
-import { useAnalysisRuntimeState } from './useAnalysisRuntimeState';
-import { useAnalysisCatalogProjection } from './useAnalysisCatalogProjection';
-import { useAnalysisContractVersions } from './useAnalysisContractVersions';
+import { useCallback, useMemo, useState } from 'react';
 import {
   useWorkspaceTaskRegistry,
   type WorkspaceShellContextValue,
 } from '@/domain/workspace/WorkspaceShellContext';
-import { useWorkspaceShellSignals } from '@/domain/workspace/useWorkspaceShellSignals';
+import type { AnalysisWorkspaceContextValue } from '@/domain/analysis/AnalysisWorkspaceContext.types';
+import { useAnalysisRepository } from '@/domain/analysis/hooks/useAnalysisRepository';
+import { useAnalysisContractVersions } from '@/domain/analysis/hooks/useAnalysisContractVersions';
+import { useAnalysisSessionState } from '@/domain/analysis/hooks/useAnalysisSessionState';
+import { useAnalysisRuntimeState } from '@/domain/analysis/hooks/useAnalysisRuntimeState';
+import { useAnalysisCatalogProjection } from '@/domain/analysis/hooks/useAnalysisCatalogProjection';
 import { useInspectorWorkspaceValue } from '@/domain/inspector/useInspectorWorkspaceValue';
-import type { InspectorWorkspaceContextValue } from '@/domain/inspector/InspectorWorkspaceContext';
-import { type StudioWorkspaceContextValue } from '@/domain/studio/StudioWorkspaceContext';
-import type { AnalysisWorkspaceContextValue } from '../AnalysisWorkspaceContext.types';
+import { useWorkspaceShellModel } from '@/domain/workspace/useWorkspaceShellModel';
+import { createStudioRuntimeDataState } from '@/features/studio/core/runtimeData';
+import type { PendingClassNodeRequest } from '@/domain/studio/editor';
+import type { ActivePage } from '@/domain/analysis/workspace-types';
 
-export function useAnalysisWorkspaceComposition() {
+export function useAnalysisWorkspaceModel() {
   const [activePage, setActivePage] = useState<ActivePage>('inspector');
   const [pendingClassNode, setPendingClassNode] = useState<PendingClassNodeRequest | null>(null);
+  const [workspaceResetRevision, setWorkspaceResetRevision] = useState(0);
   const { workspaceTasks, setWorkspaceTasks, resetWorkspaceTasks } = useWorkspaceTaskRegistry();
-  const resetWorkspaceStateRef = useRef<() => void>(() => undefined);
 
   const repository = useAnalysisRepository();
   const contractVersions = useAnalysisContractVersions(repository);
 
+  const clearPendingClassNode = useCallback(() => {
+    setPendingClassNode(null);
+  }, []);
+
   const resetWorkspace = useCallback(() => {
     setPendingClassNode(null);
     resetWorkspaceTasks();
-    resetWorkspaceStateRef.current();
+    setWorkspaceResetRevision((current) => current + 1);
   }, [resetWorkspaceTasks]);
 
   const {
@@ -49,7 +51,6 @@ export function useAnalysisWorkspaceComposition() {
     ensureRuntimeInstanceFieldsLoaded,
   } = useAnalysisRuntimeState({ repository, processSession, analysisSnapshot, workspaceLifecycle });
 
-  const { pageReadiness, workspaceResetNotice } = useWorkspaceShellSignals(workspaceLifecycle);
   const {
     images,
     classesByImage,
@@ -69,15 +70,8 @@ export function useAnalysisWorkspaceComposition() {
     ensureRuntimeOverlayLoaded,
     setActivePage,
     queuePendingClassNode: setPendingClassNode,
+    workspaceResetRevision,
   });
-
-  resetWorkspaceStateRef.current = () => {
-    inspectorWorkspace.resetInspectorWorkspaceState();
-  };
-
-  const clearPendingClassNode = useCallback(() => {
-    setPendingClassNode(null);
-  }, []);
 
   const studioRuntimeData = useMemo(() => createStudioRuntimeDataState({
     classes: inspectorWorkspace.studioClassCatalogEntries,
@@ -97,33 +91,13 @@ export function useAnalysisWorkspaceComposition() {
     runtimeMemberValuesByClassAndAddress,
   ]);
 
-  const workspaceShellValue = useMemo<WorkspaceShellContextValue>(() => ({
+  const { workspaceKernel, workspacePresentation } = useWorkspaceShellModel({
     processSession,
     contractVersions,
     workspaceLifecycle,
-    pageReadiness,
-    workspaceResetNotice,
     activePage,
-    setActivePage,
     workspaceTasks,
-    setWorkspaceTasks,
-  }), [
-    activePage,
-    contractVersions,
-    pageReadiness,
-    processSession,
-    setWorkspaceTasks,
-    workspaceLifecycle,
-    workspaceResetNotice,
-    workspaceTasks,
-  ]);
-
-  const studioWorkspaceValue = useMemo<StudioWorkspaceContextValue>(() => ({
-    studioRuntimeData,
-    pendingClassNode,
-    clearPendingClassNode,
-    workspaceLifecycle,
-  }), [clearPendingClassNode, pendingClassNode, studioRuntimeData, workspaceLifecycle]);
+  });
 
   const analysisWorkspaceValue = useMemo<AnalysisWorkspaceContextValue>(() => ({
     processSession,
@@ -138,6 +112,8 @@ export function useAnalysisWorkspaceComposition() {
     classInfoCatalogByStableId: inspectorWorkspace.classInfoCatalogByStableId,
     staticFieldAddressByClassAndMember: inspectorWorkspace.staticFieldAddressByClassAndMember,
     studioRuntimeData,
+    pendingClassNode,
+    clearPendingClassNode,
     ensureRuntimeOverlayLoaded,
     ensureRuntimeInstanceFieldsLoaded,
     runtimeMemberValuesByClassAndAddress,
@@ -146,6 +122,7 @@ export function useAnalysisWorkspaceComposition() {
     attachError,
     classDetailsByStableId,
     classesByImage,
+    clearPendingClassNode,
     contractVersions,
     ensureRuntimeInstanceFieldsLoaded,
     ensureRuntimeOverlayLoaded,
@@ -153,16 +130,37 @@ export function useAnalysisWorkspaceComposition() {
     inspectorWorkspace.classInfoCatalogByStableId,
     inspectorWorkspace.staticFieldAddressByClassAndMember,
     inspectorWorkspace.studioClassCatalogEntries,
+    pendingClassNode,
     processSession,
     runtimeMemberValuesByClassAndAddress,
     runtimeOverlays,
     studioRuntimeData,
   ]);
 
+  const workspaceShellValue = useMemo<WorkspaceShellContextValue>(() => ({
+    processSession,
+    contractVersions,
+    workspaceLifecycle,
+    workspaceKernel,
+    workspacePresentation,
+    activePage,
+    setActivePage,
+    workspaceTasks,
+    setWorkspaceTasks,
+  }), [
+    activePage,
+    contractVersions,
+    processSession,
+    setWorkspaceTasks,
+    workspaceKernel,
+    workspaceLifecycle,
+    workspacePresentation,
+    workspaceTasks,
+  ]);
+
   return {
     analysisWorkspaceValue,
-    inspectorWorkspaceValue: inspectorWorkspace.value as InspectorWorkspaceContextValue,
-    studioWorkspaceValue,
     workspaceShellValue,
+    inspectorWorkspaceValue: inspectorWorkspace.value,
   };
 }

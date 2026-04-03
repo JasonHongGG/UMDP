@@ -1,6 +1,7 @@
 import { Target, X, Square, Minus, Cpu } from 'lucide-react';
 import { TopNavigation } from './TopNavigation';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
+import type { WorkspacePresentation } from '@/kernel/workspace/derive';
 import {
     closeCurrentWindow,
     minimizeCurrentWindow,
@@ -12,9 +13,10 @@ interface TopBarProps {
     activePage: 'inspector' | 'studio' | 'scene';
     onPageChange: (page: 'inspector' | 'studio' | 'scene') => void;
     workspace: WorkspaceLifecycleState;
+    workspacePresentation: WorkspacePresentation;
 }
 
-export function TopBar({ onOpenSelector, activePage, onPageChange, workspace }: TopBarProps) {
+export function TopBar({ onOpenSelector, activePage, onPageChange, workspace, workspacePresentation }: TopBarProps) {
     const hasAttachedProcess = Boolean(workspace.processSession);
 
     const handleMinimize = () => {
@@ -50,7 +52,7 @@ export function TopBar({ onOpenSelector, activePage, onPageChange, workspace }: 
             </div>
 
             {/* Page Navigation Component */}
-            <TopNavigation activePage={activePage} onPageChange={onPageChange} />
+            <TopNavigation activePage={activePage} onPageChange={onPageChange} pages={workspacePresentation.pages} />
 
             <div className="flex items-center gap-2 relative z-10">
                 <button

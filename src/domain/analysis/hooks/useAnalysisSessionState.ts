@@ -3,6 +3,7 @@ import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import { onProcessSelected } from '@/infrastructure/tauri/TauriWorkspaceGateway';
 import { useWorkspaceLifecycleState } from './useWorkspaceLifecycleState';
+import { useWorkspaceLifecycleAutoRefresh } from './useWorkspaceLifecycleAutoRefresh';
 
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -28,31 +29,35 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
   const {
+    applyWorkspaceLifecycleFallback,
     workspaceLifecycle,
-    patchWorkspaceLifecycle,
     refreshWorkspaceLifecycle,
   } = useWorkspaceLifecycleState({
     repository,
-    processSession,
-    loadingImages,
+  });
+
+  useWorkspaceLifecycleAutoRefresh({
+    enabled: processSession != null && !loadingImages,
+    refreshWorkspaceLifecycle,
   });
 
   const fetchMetadata = useCallback(async (session: ProcessSession | null) => {
     const startedAt = nowMs();
     setLoadingImages(true);
-    patchWorkspaceLifecycle({
+    applyWorkspaceLifecycleFallback({
       status: 'snapshot-loading',
       processSession: session,
       runtime: session?.runtime ?? 'unknown',
       hasSnapshot: false,
       errorMessage: null,
     });
+    const metadataLoad = repository.loadAllMetadata();
     logPerf('snapshotLoading:entered', startedAt, {
       processName: session?.processName ?? null,
       runtime: session?.runtime ?? 'unknown',
     });
     try {
-      const snapshot = await repository.loadAllMetadata();
+      const snapshot = await metadataLoad;
       setAnalysisSnapshot({
         ...snapshot,
         process: session,
@@ -66,15 +71,16 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
       console.error('Failed to load metadata', error);
     } finally {
       setLoadingImages(false);
-      await refreshWorkspaceLifecycle({
+      applyWorkspaceLifecycleFallback({
         status: 'attached-without-snapshot',
         processSession: session,
         runtime: session?.runtime ?? 'unknown',
         hasSnapshot: false,
         errorMessage: null,
-      }, 'after-metadata-load');
+      });
+      await refreshWorkspaceLifecycle('after-metadata-load');
     }
-  }, [patchWorkspaceLifecycle, refreshWorkspaceLifecycle, repository]);
+  }, [applyWorkspaceLifecycleFallback, refreshWorkspaceLifecycle, repository]);
 
   useEffect(() => {
     const unlisten = onProcessSelected(async (process) => {
@@ -82,21 +88,30 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
       setAttachError(null);
       setLoadingImages(true);
       try {
-        const session = await repository.attachToProcess({
+        const attachRequest = repository.attachToProcess({
           pid: process.pid,
           name: process.name,
         });
+        applyWorkspaceLifecycleFallback({
+          status: 'attaching',
+          processSession: null,
+          runtime: 'unknown',
+          hasSnapshot: false,
+          errorMessage: null,
+        });
+        const session = await attachRequest;
 
         setProcessSession(session);
         setAnalysisSnapshot(null);
         onResetWorkspace();
-        await refreshWorkspaceLifecycle({
+        applyWorkspaceLifecycleFallback({
           status: 'attached-without-snapshot',
           processSession: session,
           runtime: session.runtime,
           hasSnapshot: false,
           errorMessage: null,
-        }, 'after-attach');
+        });
+        await refreshWorkspaceLifecycle('after-attach');
         logPerf('attachToProcess', startedAt, {
           pid: process.pid,
           processName: process.name,
@@ -109,13 +124,13 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
         onResetWorkspace();
         setAttachError(toErrorMessage(error));
         setLoadingImages(false);
-        await refreshWorkspaceLifecycle({
+        applyWorkspaceLifecycleFallback({
           status: 'runtime-error',
           processSession: null,
           runtime: 'unknown',
           hasSnapshot: false,
           errorMessage: toErrorMessage(error),
-        }, 'attach-failed');
+        });
         console.error(`[perf][session] attachToProcess failed after ${(nowMs() - startedAt).toFixed(1)}ms`, error);
       }
     });
@@ -123,7 +138,7 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
     return () => {
       unlisten.then((dispose) => dispose());
     };
-  }, [fetchMetadata, onResetWorkspace, repository]);
+  }, [applyWorkspaceLifecycleFallback, fetchMetadata, onResetWorkspace, refreshWorkspaceLifecycle, repository]);
 
   return {
     processSession,

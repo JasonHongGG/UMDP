@@ -1,10 +1,10 @@
 mod events;
+mod mapping;
 mod mutation;
 mod query;
 mod tasks;
 
-use crate::state::AppState;
-use std::time::Instant;
+pub(crate) use mapping::{current_scene_session_key, log_scene_duration};
 
 pub use mutation::{
     create_scene_child, create_scene_component, create_scene_root,
@@ -24,14 +24,3 @@ pub use tasks::{
     get_scene_object_inspector_state, start_scene_object_children_analysis,
     start_scene_object_inspector_analysis,
 };
-
-pub(crate) fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
-    eprintln!(
-        "[perf][scene-service] {label} completed in {}ms {details}",
-        started_at.elapsed().as_millis()
-    );
-}
-
-pub(crate) fn current_scene_session_key(state: &AppState) -> Option<String> {
-    state.workspace_session.lifecycle.current().runtime_session.session_key
-}

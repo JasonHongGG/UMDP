@@ -27,4 +27,9 @@ impl AnalysisState {
     pub fn clear_metadata(&self) {
         self.metadata_snapshot.lock().take();
     }
+
+    pub fn reset(&self) {
+        self.process_session.lock().take();
+        self.metadata_snapshot.lock().take();
+    }
 }

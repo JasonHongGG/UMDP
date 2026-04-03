@@ -20,6 +20,15 @@ impl WorkspaceState {
         self.lifecycle.lock().clone()
     }
 
+    pub fn sync_runtime_context(&self) -> WorkspaceLifecycleState {
+        let mut lifecycle = self.lifecycle.lock();
+        let changed = sync_runtime_context(&mut lifecycle);
+        if changed {
+            bump_resource_revision(&mut lifecycle);
+        }
+        lifecycle.clone()
+    }
+
     pub fn set_attaching(&self) {
         let mut lifecycle = self.lifecycle.lock();
         lifecycle.status = WorkspaceLifecycleStatus::Attaching;
@@ -28,6 +37,26 @@ impl WorkspaceState {
         lifecycle.runtime_session.connected = false;
         lifecycle.runtime_session.last_error = None;
         lifecycle.runtime_session.last_heartbeat_at = None;
+        bump_resource_revision(&mut lifecycle);
+    }
+
+    pub fn set_attach_error(&self, error_message: impl Into<String>) {
+        let mut lifecycle = self.lifecycle.lock();
+        let error_message = error_message.into();
+        lifecycle.status = WorkspaceLifecycleStatus::Detached;
+        lifecycle.process_session = None;
+        lifecycle.runtime = RuntimeFlavor::Unknown;
+        lifecycle.has_snapshot = false;
+        lifecycle.error_message = Some(error_message.clone());
+        lifecycle.runtime_session = RuntimeSessionState {
+            status: RuntimeSessionStatus::Error,
+            runtime: RuntimeFlavor::Unknown,
+            capabilities: runtime_capabilities_for(&RuntimeFlavor::Unknown),
+            connected: false,
+            session_key: None,
+            last_error: Some(error_message),
+            last_heartbeat_at: None,
+        };
         bump_resource_revision(&mut lifecycle);
     }
 
@@ -69,7 +98,26 @@ impl WorkspaceState {
         bump_resource_revision(&mut lifecycle);
     }
 
-    pub fn set_ready(&self, process_session: Option<ProcessSession>) {
+    pub fn set_snapshot_error(&self, error_message: impl Into<String>) {
+        let mut lifecycle = self.lifecycle.lock();
+        let error_message = error_message.into();
+        lifecycle.status = if lifecycle.process_session.is_some() {
+            WorkspaceLifecycleStatus::AttachedWithoutSnapshot
+        } else {
+            WorkspaceLifecycleStatus::RuntimeError
+        };
+        lifecycle.has_snapshot = false;
+        lifecycle.error_message = Some(error_message.clone());
+        lifecycle.runtime_session.last_error = Some(error_message);
+        if lifecycle.process_session.is_none() {
+            lifecycle.runtime_session.status = RuntimeSessionStatus::Error;
+            lifecycle.runtime_session.connected = false;
+            lifecycle.runtime_session.last_heartbeat_at = None;
+        }
+        bump_resource_revision(&mut lifecycle);
+    }
+
+    pub fn set_ready(&self, process_session: Option<ProcessSession>, runtime_connected: bool) {
         let mut lifecycle = self.lifecycle.lock();
         lifecycle.status = WorkspaceLifecycleStatus::Ready;
         if let Some(process_session) = process_session {
@@ -78,13 +126,15 @@ impl WorkspaceState {
         }
         lifecycle.has_snapshot = true;
         lifecycle.error_message = None;
-        lifecycle.runtime_session.status = RuntimeSessionStatus::Ready;
-        lifecycle.runtime_session.runtime = lifecycle.runtime.clone();
-        lifecycle.runtime_session.capabilities = runtime_capabilities_for(&lifecycle.runtime);
-        lifecycle.runtime_session.connected = true;
-        lifecycle.runtime_session.session_key = lifecycle.process_session.as_ref().map(runtime_session_key_for);
+        sync_runtime_context(&mut lifecycle);
+        lifecycle.runtime_session.status = if runtime_connected {
+            RuntimeSessionStatus::Ready
+        } else {
+            RuntimeSessionStatus::Starting
+        };
+        lifecycle.runtime_session.connected = runtime_connected;
         lifecycle.runtime_session.last_error = None;
-        lifecycle.runtime_session.last_heartbeat_at = Some(current_timestamp());
+        lifecycle.runtime_session.last_heartbeat_at = runtime_connected.then(current_timestamp);
         bump_resource_revision(&mut lifecycle);
     }
 
@@ -107,26 +157,46 @@ impl WorkspaceState {
         bump_resource_revision(&mut lifecycle);
     }
 
-    pub fn touch_runtime_session(&self) -> RuntimeSessionState {
+    pub fn record_runtime_heartbeat(&self) -> RuntimeSessionState {
         let mut lifecycle = self.lifecycle.lock();
-        let runtime = lifecycle
-            .process_session
-            .as_ref()
-            .map(|session| session.runtime.clone())
-            .unwrap_or_else(|| lifecycle.runtime.clone());
-        lifecycle.runtime_session.runtime = runtime.clone();
-        lifecycle.runtime_session.capabilities = runtime_capabilities_for(&runtime);
-        if lifecycle.runtime_session.session_key.is_none() {
-            lifecycle.runtime_session.session_key = lifecycle.process_session.as_ref().map(runtime_session_key_for);
-        }
+        sync_runtime_context(&mut lifecycle);
         lifecycle.runtime_session.last_heartbeat_at = Some(current_timestamp());
-        if lifecycle.runtime_session.status == RuntimeSessionStatus::Starting && lifecycle.has_snapshot {
+        lifecycle.runtime_session.connected = true;
+        if lifecycle.has_snapshot {
             lifecycle.runtime_session.status = RuntimeSessionStatus::Ready;
-            lifecycle.runtime_session.connected = true;
+        } else if lifecycle.process_session.is_some() {
+            lifecycle.runtime_session.status = RuntimeSessionStatus::Starting;
         }
+        lifecycle.runtime_session.last_error = None;
         bump_resource_revision(&mut lifecycle);
         lifecycle.runtime_session.clone()
     }
+}
+
+fn sync_runtime_context(lifecycle: &mut WorkspaceLifecycleState) -> bool {
+    let runtime = lifecycle
+        .process_session
+        .as_ref()
+        .map(|session| session.runtime.clone())
+        .unwrap_or_else(|| lifecycle.runtime.clone());
+    let capabilities = runtime_capabilities_for(&runtime);
+    let session_key = lifecycle.process_session.as_ref().map(runtime_session_key_for);
+
+    let mut changed = false;
+    if lifecycle.runtime_session.runtime != runtime {
+        lifecycle.runtime_session.runtime = runtime;
+        changed = true;
+    }
+    if lifecycle.runtime_session.capabilities != capabilities {
+        lifecycle.runtime_session.capabilities = capabilities;
+        changed = true;
+    }
+    if lifecycle.runtime_session.session_key != session_key {
+        lifecycle.runtime_session.session_key = session_key;
+        changed = true;
+    }
+
+    changed
 }
 
 fn runtime_session_key_for(process_session: &ProcessSession) -> String {

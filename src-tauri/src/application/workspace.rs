@@ -1,5 +1,6 @@
 use crate::domain::analysis_models::{AnalysisSnapshot, ProcessInfo, ProcessSession};
 use crate::domain::workspace::{current_contract_versions, SystemContractVersions, WorkspaceLifecycleState};
+use crate::kernel::workspace as workspace_kernel;
 use crate::kernel::runtime::access as runtime_access;
 use crate::services::analysis::{
     metadata_query_service, process_catalog_service, session_service,
@@ -21,50 +22,46 @@ pub fn attach_to_process(
     pid: u32,
     name: String,
 ) -> Result<ProcessSession, String> {
-    state.workspace_session.lifecycle.set_attaching();
+    workspace_kernel::begin_attach(state);
 
     match session_service::attach_to_process(state, pid, name) {
         Ok(session) => {
-            state
-                .workspace_session
-                .lifecycle
-                .set_attached_without_snapshot(session.clone());
-            if let Err(error) = runtime_access::refresh_runtime_session(state, &session) {
+            let runtime_result = runtime_access::refresh_runtime_session(state, &session);
+            if let Err(error) = &runtime_result {
                 eprintln!(
                     "[runtime][session] failed to initialize native runtime session for pid={} error={}",
                     session.pid,
                     error
                 );
             }
+            workspace_kernel::finish_attach(state, session.clone());
+            if let Err(error) = runtime_result {
+                workspace_kernel::apply_operation_failure(state, &error);
+            }
             Ok(session)
         }
         Err(error) => {
-            state.workspace_session.lifecycle.set_runtime_error(error.clone());
-            Err(error)
+            workspace_kernel::fail_attach(state, &error);
+            Err(error.into())
         }
     }
 }
 
 pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<AnalysisSnapshot, String> {
-    let session = state.workspace_session.analysis.process_session();
-    state
-        .workspace_session
-        .lifecycle
-        .set_snapshot_loading(session.clone());
+    workspace_kernel::begin_snapshot_load(state);
 
     match metadata_query_service::load_all_metadata(app, state) {
         Ok(snapshot) => {
-            state.workspace_session.lifecycle.set_ready(session);
+            workspace_kernel::finish_snapshot_load(state);
             Ok(snapshot)
         }
         Err(error) => {
-            state.workspace_session.lifecycle.set_runtime_error(error.clone());
-            Err(error)
+            workspace_kernel::fail_snapshot_load(state, &error);
+            Err(error.into())
         }
     }
 }
 
 pub fn get_workspace_lifecycle(state: &AppState) -> WorkspaceLifecycleState {
-    state.workspace_session.lifecycle.touch_runtime_session();
-    state.workspace_session.lifecycle.current()
+    workspace_kernel::current_lifecycle(state)
 }

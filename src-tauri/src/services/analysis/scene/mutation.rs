@@ -3,11 +3,11 @@ use crate::domain::analysis_models::{
     RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
     RuntimeSceneTransformUpdate,
 };
-use crate::kernel::runtime::access::current_runtime_session;
 use crate::kernel::runtime::session::RuntimeSession;
 use crate::kernel::scene::query as native_scene;
 use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, execute_runtime_operation,
+    ensure_attached_session, ensure_runtime_session_ready,
+    execute_runtime_operation, present,
 };
 use crate::state::AppState;
 use std::sync::Arc;
@@ -273,15 +273,10 @@ where
     F: FnOnce(&Arc<RuntimeSession>) -> Result<RuntimeSceneMutationResult, String>,
 {
     let started_at = Instant::now();
-    ensure_attached_session(state)?;
+    present(ensure_attached_session(state).map(|_| ()))?;
 
-    let runtime_session = current_runtime_session(state)
-        .ok_or_else(|| "Native runtime session is unavailable".to_string())?;
-    if runtime_session.runtime_api().is_none() {
-        return Err("Native runtime session is missing its runtime API".to_string());
-    }
-
-    let snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
+    let runtime_session = ensure_runtime_session_ready(state).map_err(String::from)?;
+    let snapshot = present(execute_runtime_operation(state, || loader(&runtime_session)))?;
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     invalidate_scene_children_after_mutation(state, &snapshot);
     log_scene_duration(label, started_at, &details);
@@ -295,8 +290,8 @@ fn invalidate_scene_inspector_after_mutation(
     let impacted = collect_impacted_object_addresses(result);
     let session_key = current_scene_session_key(state);
     state
-        .scene_module
-        .inspector
+        .scene()
+        .inspector()
         .invalidate_related(&impacted, session_key.as_deref());
 }
 
@@ -321,8 +316,8 @@ fn invalidate_scene_children_after_mutation(
     let impacted = collect_impacted_object_addresses(result);
     let session_key = current_scene_session_key(state);
     state
-        .scene_module
-        .children
+        .scene()
+        .children()
         .invalidate_related(&impacted, session_key.as_deref());
 }
 
