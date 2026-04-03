@@ -7,6 +7,12 @@ import type {
   RuntimeSceneTransformSnapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
+
+const sceneDiagnostics = createDiagnosticsLogger({
+  channel: 'scene',
+  origin: 'sceneWorkspaceState',
+});
 
 export const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   resourceRevision: 0,
@@ -22,7 +28,12 @@ export function toErrorMessage(error: unknown) {
 }
 
 export function logSceneError(context: string, error: unknown) {
-  console.log(`[scene] ${context}`, error);
+  sceneDiagnostics.error('Scene operation failed.', {
+    error,
+    context: {
+      operation: context,
+    },
+  });
   return toErrorMessage(error);
 }
 
@@ -31,7 +42,13 @@ function nowMs() {
 }
 
 export function logScenePerf(label: string, startedAt: number, details?: Record<string, unknown>) {
-  console.log(`[perf][scene] ${label} completed in ${(nowMs() - startedAt).toFixed(1)}ms`, details ?? {});
+  sceneDiagnostics.debug('Scene operation completed.', {
+    context: {
+      operation: label,
+      durationMs: nowMs() - startedAt,
+      ...(details ?? {}),
+    },
+  });
 }
 
 export function waitForNextPaint() {

@@ -4,6 +4,7 @@ import {
 import { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '@/features/studio/core/types';
 import type { ClassBinding, ClassInfoCatalog } from '@/domain/studio/editor';
 import type { StudioExecutionAbortReason } from '@/domain/studio/contracts';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import {
   createExecutionTiming,
   executePreparedNode,
@@ -11,6 +12,11 @@ import {
   canMaterializePassiveJsonNode,
   type GraphInterpreterEnvironment,
 } from '@/features/studio/core/graphInterpreter';
+
+const studioExecutionDiagnostics = createDiagnosticsLogger({
+  channel: 'studio',
+  origin: 'executeStudioFlow',
+});
 
 function logRuntimeFlowError(context: {
   runId: string;
@@ -20,15 +26,23 @@ function logRuntimeFlowError(context: {
   abortReason?: StudioExecutionAbortReason;
   error?: unknown;
 }) {
-  console.log('[StudioFrontendError]', {
-    runId: context.runId,
-    nodeId: context.nodeId,
-    phase: 'execute',
-    reason: context.reason,
-    message: context.message,
-    abortReason: context.abortReason,
+  const details = {
     error: context.error,
-  });
+    context: {
+      runId: context.runId,
+      nodeId: context.nodeId,
+      phase: 'execute',
+      reason: context.reason,
+      abortReason: context.abortReason,
+    },
+  };
+
+  if (context.reason === 'aborted') {
+    studioExecutionDiagnostics.warn(context.message, details);
+    return;
+  }
+
+  studioExecutionDiagnostics.error(context.message, details);
 }
 
 function formatAbortMessage(reason: StudioExecutionAbortReason | undefined) {

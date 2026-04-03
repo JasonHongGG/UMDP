@@ -1,10 +1,16 @@
 use crate::state::AppState;
+use crate::infrastructure::logging;
 use std::time::Instant;
 
 pub(crate) fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
-    eprintln!(
-        "[perf][scene-service] {label} completed in {}ms {details}",
-        started_at.elapsed().as_millis()
+    logging::debug(
+        "scene",
+        "scene_service",
+        &format!("{label} completed."),
+        vec![
+            ("durationMs", started_at.elapsed().as_millis().to_string()),
+            ("details", details.to_string()),
+        ],
     );
 }
 

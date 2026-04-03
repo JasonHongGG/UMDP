@@ -1,11 +1,21 @@
 import type { StudioNodeDefinition } from '../types';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
+
+const studioCatalogDiagnostics = createDiagnosticsLogger({
+  channel: 'studio',
+  origin: 'StudioNodeCatalog',
+});
 
 export class StudioNodeCatalog {
   private registry = new Map<string, StudioNodeDefinition>();
 
   public register(nodeDef: StudioNodeDefinition) {
     if (this.registry.has(nodeDef.manifest.type)) {
-      console.warn(`Node type ${nodeDef.manifest.type} is already registered. Overwriting.`);
+      studioCatalogDiagnostics.warn('Node type already registered; overwriting definition.', {
+        context: {
+          nodeType: nodeDef.manifest.type,
+        },
+      });
     }
     this.registry.set(nodeDef.manifest.type, nodeDef);
   }

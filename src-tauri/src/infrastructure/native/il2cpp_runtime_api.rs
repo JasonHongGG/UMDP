@@ -1,4 +1,3 @@
-use crate::domain::analysis_models::RuntimeFlavor;
 use crate::infrastructure::native::memory::{RemoteMemory, RemoteUtf8String};
 use crate::infrastructure::native::process::NativeModuleInfo;
 use crate::infrastructure::native::remote_call::RemoteCallInvoker;
@@ -161,14 +160,6 @@ impl Il2CppRuntimeApi {
 }
 
 impl RuntimeApi for Il2CppRuntimeApi {
-    fn flavor(&self) -> RuntimeFlavor {
-        RuntimeFlavor::Il2cpp
-    }
-
-    fn describe(&self) -> &'static str {
-        "il2cpp-runtime-api"
-    }
-
     fn enumerate_assemblies(&self) -> Result<Vec<NativeAddress>, String> {
         let count_block = self.memory.allocate(
             std::mem::size_of::<u64>(),

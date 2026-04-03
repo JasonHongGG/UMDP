@@ -1,4 +1,3 @@
-use crate::domain::analysis_models::RuntimeFlavor;
 use crate::infrastructure::native::memory::{RemoteMemory, RemoteUtf8String};
 use crate::infrastructure::native::process::NativeModuleInfo;
 use crate::infrastructure::native::remote_call::RemoteCallInvoker;
@@ -181,14 +180,6 @@ impl MonoRuntimeApi {
 }
 
 impl RuntimeApi for MonoRuntimeApi {
-    fn flavor(&self) -> RuntimeFlavor {
-        RuntimeFlavor::Mono
-    }
-
-    fn describe(&self) -> &'static str {
-        "mono-runtime-api"
-    }
-
     fn enumerate_assemblies(&self) -> Result<Vec<NativeAddress>, String> {
         #[derive(Clone, Copy)]
         #[repr(C)]

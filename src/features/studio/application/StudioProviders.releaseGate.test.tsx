@@ -9,6 +9,7 @@ import { studioNodeCatalog } from '@/features/studio/nodes';
 import { initializeStudioNodeRegistry } from '@/features/studio/core/NodeRegistry';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import { useStudioRuntime } from '@/features/studio/core/StudioContext';
+import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 import { StudioProviders } from './StudioProviders';
 import { useStudioFeedback, type StudioFeedbackMessage } from './feedback/StudioFeedbackContext';
 
@@ -131,6 +132,16 @@ describe('StudioProviders release gates', () => {
     latestState = null;
     executeFlow = null;
     localStorage.clear();
+    resetDiagnosticsStateForTests();
+    configureDiagnostics({
+      clearBuffer: true,
+      policy: {
+        enabled: true,
+        captureBuffer: true,
+        consoleOutput: false,
+        minimumLevel: 'debug',
+      },
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -142,6 +153,7 @@ describe('StudioProviders release gates', () => {
     });
     container.remove();
     initializeStudioNodeRegistry([]);
+    resetDiagnosticsStateForTests();
   });
 
   it('reports execution reset feedback when the workspace drops into recovery mid-run', async () => {
@@ -204,8 +216,6 @@ describe('StudioProviders release gates', () => {
   });
 
   it('reports blocked runtime feedback when execution is attempted during a runtime error', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
     await act(async () => {
       root.render(createElement(StudioProviders, {
         runtimeData: RUNTIME_DATA,
@@ -237,21 +247,27 @@ describe('StudioProviders release gates', () => {
       title: 'Execution Blocked',
       description: 'Workspace is not ready (runtime-error).',
     });
-    expect(consoleErrorSpy).toHaveBeenCalledWith('[StudioWorkspaceExecution]', expect.objectContaining({
-      reason: 'blocked',
-      message: 'Workspace is not ready (runtime-error).',
-      workspace: expect.objectContaining({
-        status: 'runtime-error',
-        errorMessage: 'runtime session failed to initialize',
-        runtimeSession: expect.objectContaining({
-          status: 'error',
-          connected: false,
-          lastError: 'runtime session failed to initialize',
-          sessionKey: 'session-9',
+    expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        channel: 'studio',
+        origin: 'useStudioRuntimeState',
+        message: 'Studio execution blocked.',
+        context: expect.objectContaining({
+          reason: 'blocked',
+          message: 'Workspace is not ready (runtime-error).',
+          workspace: expect.objectContaining({
+            status: 'runtime-error',
+            errorMessage: 'runtime session failed to initialize',
+            runtimeSession: expect.objectContaining({
+              status: 'error',
+              connected: false,
+              lastError: 'runtime session failed to initialize',
+              sessionKey: 'session-9',
+            }),
+          }),
         }),
       }),
-    }));
-
-    consoleErrorSpy.mockRestore();
+    ]));
   });
 });

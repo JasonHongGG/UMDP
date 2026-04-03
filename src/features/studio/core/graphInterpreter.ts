@@ -17,8 +17,14 @@ import {
 } from './types';
 import { supportsNodePreview, type NodeExecutionContext, type ValidationIssue } from '@/domain/studio/contracts';
 import type { ClassBinding, ClassInfoCatalog } from '@/domain/studio/editor';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import { getStudioNodeDefinition } from './NodeRegistry';
 import { getRegisteredStudioNodeCatalog } from './catalog/studioNodeCatalogRuntime';
+
+const studioGraphDiagnostics = createDiagnosticsLogger({
+  channel: 'studio',
+  origin: 'graphInterpreter',
+});
 
 export interface GraphInterpreterEnvironment {
   documentId: string;
@@ -58,14 +64,15 @@ function logStudioFrontendError(context: {
   issues?: ValidationIssue[];
   error?: unknown;
 }) {
-  console.log('[StudioFrontendError]', {
-    nodeId: context.nodeId,
-    nodeType: context.nodeType,
-    phase: context.phase,
-    reason: context.reason,
-    message: context.message,
-    issues: context.issues,
+  studioGraphDiagnostics.error(context.message, {
     error: context.error,
+    context: {
+      nodeId: context.nodeId,
+      nodeType: context.nodeType,
+      phase: context.phase,
+      reason: context.reason,
+      issues: context.issues,
+    },
   });
 }
 

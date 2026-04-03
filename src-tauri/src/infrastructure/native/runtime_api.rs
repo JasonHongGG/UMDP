@@ -1,5 +1,3 @@
-use crate::domain::analysis_models::RuntimeFlavor;
-
 pub type NativeAddress = usize;
 
 #[derive(Debug, Clone)]
@@ -23,8 +21,6 @@ pub struct NativeMethodRecord {
 }
 
 pub trait RuntimeApi: Send + Sync {
-    fn flavor(&self) -> RuntimeFlavor;
-    fn describe(&self) -> &'static str;
     fn enumerate_assemblies(&self) -> Result<Vec<NativeAddress>, String>;
     fn get_assembly_image(&self, assembly: NativeAddress) -> Result<NativeAddress, String>;
     fn get_image_name(&self, image: NativeAddress) -> Result<String, String>;

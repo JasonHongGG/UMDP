@@ -14,7 +14,6 @@ pub struct NativeModuleInfo {
     pub name: String,
     pub path: String,
     pub base_address: usize,
-    pub size: u32,
 }
 
 #[derive(Debug)]
@@ -70,7 +69,6 @@ pub fn enumerate_modules(pid: u32) -> Result<Vec<NativeModuleInfo>, String> {
             name: wide_string(&entry.szModule),
             path: wide_string(&entry.szExePath),
             base_address: entry.modBaseAddr as usize,
-            size: entry.modBaseSize,
         });
         has_entry = unsafe { Module32NextW(snapshot, &mut entry) }.is_ok();
     }

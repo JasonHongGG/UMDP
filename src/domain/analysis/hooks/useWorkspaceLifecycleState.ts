@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
+
+const workspaceLifecycleDiagnostics = createDiagnosticsLogger({
+  channel: 'workspace',
+  origin: 'useWorkspaceLifecycleState',
+});
 
 interface UseWorkspaceLifecycleStateOptions {
   repository: AnalysisRepository;
@@ -37,7 +43,12 @@ export function useWorkspaceLifecycleState({
       const workspace = await repository.getWorkspaceLifecycle();
       setWorkspaceLifecycle(workspace);
     } catch (error) {
-      console.error(`Failed to refresh workspace lifecycle (${reason})`, error);
+      workspaceLifecycleDiagnostics.error('Workspace lifecycle refresh failed.', {
+        error,
+        context: {
+          reason,
+        },
+      });
     }
   }, [repository]);
 

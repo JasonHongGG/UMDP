@@ -1,5 +1,6 @@
 use crate::domain::analysis_models::{AnalysisSnapshot, ProcessInfo, ProcessSession};
 use crate::domain::workspace::{current_contract_versions, SystemContractVersions, WorkspaceLifecycleState};
+use crate::infrastructure::logging;
 use crate::kernel::workspace as workspace_kernel;
 use crate::kernel::runtime::access as runtime_access;
 use crate::services::analysis::{
@@ -28,10 +29,14 @@ pub fn attach_to_process(
         Ok(session) => {
             let runtime_result = runtime_access::refresh_runtime_session(state, &session);
             if let Err(error) = &runtime_result {
-                eprintln!(
-                    "[runtime][session] failed to initialize native runtime session for pid={} error={}",
-                    session.pid,
-                    error
+                logging::error(
+                    "runtime",
+                    "workspace_application",
+                    "Native runtime session initialization failed.",
+                    vec![
+                        ("pid", session.pid.to_string()),
+                        ("error", error.to_string()),
+                    ],
                 );
             }
             workspace_kernel::finish_attach(state, session.clone());

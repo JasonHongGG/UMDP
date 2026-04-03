@@ -5,6 +5,7 @@ import path from 'node:path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  envPrefix: ['UNITY_MONO_STUDIO_'],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

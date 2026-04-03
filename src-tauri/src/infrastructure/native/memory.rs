@@ -225,15 +225,4 @@ impl RemoteMemory {
 
         Ok(())
     }
-
-    pub fn allocate_utf16(&self, value: &str) -> Result<RemoteAllocation, String> {
-        let utf16: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
-        let size = utf16.len() * std::mem::size_of::<u16>();
-        let allocation = self.allocate(size, PAGE_READWRITE.0)?;
-
-        let bytes = unsafe { std::slice::from_raw_parts(utf16.as_ptr() as *const u8, size) };
-        self.write_bytes(allocation.address, bytes)?;
-
-        Ok(allocation)
-    }
 }

@@ -7,7 +7,10 @@ import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession, SceneWorkspaceState } from '../contracts';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
+import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 import { useAnalysisSessionState } from './useAnalysisSessionState';
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let processSelectedHandler: ((process: ProcessInfo) => void | Promise<void>) | null = null;
 const disposeProcessSelected = vi.fn();
@@ -113,14 +116,22 @@ async function flushEffects() {
 describe('useAnalysisSessionState', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     processSelectedHandler = null;
     latestState = null;
     disposeProcessSelected.mockReset();
     vi.useRealTimers();
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    resetDiagnosticsStateForTests();
+    configureDiagnostics({
+      clearBuffer: true,
+      policy: {
+        enabled: true,
+        captureBuffer: true,
+        consoleOutput: false,
+        minimumLevel: 'debug',
+      },
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -131,7 +142,7 @@ describe('useAnalysisSessionState', () => {
       root.unmount();
     });
     container.remove();
-    consoleErrorSpy.mockRestore();
+    resetDiagnosticsStateForTests();
     vi.useRealTimers();
   });
 
@@ -232,6 +243,21 @@ describe('useAnalysisSessionState', () => {
         errorMessage: 'runtime session failed to attach',
       },
     });
+    expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        channel: 'analysis',
+        origin: 'useAnalysisSessionState',
+        message: 'Process attach failed.',
+        context: expect.objectContaining({
+          pid: 2001,
+          processName: 'BrokenUnity.exe',
+        }),
+        error: expect.objectContaining({
+          message: 'runtime session failed to attach',
+        }),
+      }),
+    ]));
   });
 
   it('keeps the session attached-without-snapshot when metadata loading fails after attach', async () => {
@@ -271,6 +297,21 @@ describe('useAnalysisSessionState', () => {
         hasSnapshot: false,
       },
     });
+    expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        channel: 'analysis',
+        origin: 'useAnalysisSessionState',
+        message: 'Analysis metadata load failed.',
+        context: expect.objectContaining({
+          processName: 'UnityFail.exe',
+          runtime: 'il2cpp',
+        }),
+        error: expect.objectContaining({
+          message: 'metadata reader crashed',
+        }),
+      }),
+    ]));
   });
 
   it('refreshes workspace lifecycle when the window regains focus', async () => {

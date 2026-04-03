@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import { onProcessSelected } from '@/infrastructure/tauri/TauriWorkspaceGateway';
 import { useWorkspaceLifecycleState } from './useWorkspaceLifecycleState';
 import { useWorkspaceLifecycleAutoRefresh } from './useWorkspaceLifecycleAutoRefresh';
+
+const analysisSessionDiagnostics = createDiagnosticsLogger({
+  channel: 'analysis',
+  origin: 'useAnalysisSessionState',
+});
 
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -15,7 +21,13 @@ function toErrorMessage(error: unknown) {
 
 function logPerf(label: string, startedAt: number, details?: Record<string, unknown>) {
   const durationMs = nowMs() - startedAt;
-  console.log(`[perf][session] ${label} completed in ${durationMs.toFixed(1)}ms`, details ?? {});
+  analysisSessionDiagnostics.debug('Analysis session operation completed.', {
+    context: {
+      operation: label,
+      durationMs,
+      ...(details ?? {}),
+    },
+  });
 }
 
 interface UseAnalysisSessionStateOptions {
@@ -68,7 +80,13 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
         imageCount: snapshot.images.length,
       });
     } catch (error) {
-      console.error('Failed to load metadata', error);
+      analysisSessionDiagnostics.error('Analysis metadata load failed.', {
+        error,
+        context: {
+          processName: session?.processName ?? null,
+          runtime: session?.runtime ?? 'unknown',
+        },
+      });
     } finally {
       setLoadingImages(false);
       applyWorkspaceLifecycleFallback({
@@ -131,7 +149,14 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
           hasSnapshot: false,
           errorMessage: toErrorMessage(error),
         });
-        console.error(`[perf][session] attachToProcess failed after ${(nowMs() - startedAt).toFixed(1)}ms`, error);
+        analysisSessionDiagnostics.error('Process attach failed.', {
+          error,
+          context: {
+            pid: process.pid,
+            processName: process.name,
+            durationMs: nowMs() - startedAt,
+          },
+        });
       }
     });
 

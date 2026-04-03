@@ -6,6 +6,7 @@ use crate::domain::analysis_models::{
     SceneWorkspaceState,
 };
 use crate::application::scene as scene_application;
+use crate::infrastructure::logging::{self, DiagnosticsField};
 use crate::state::AppState;
 use std::fmt::Display;
 use std::time::Instant;
@@ -13,6 +14,30 @@ use tauri::{AppHandle, Manager, State};
 
 fn join_error_message(error: impl Display) -> String {
     format!("Background task failed: {error}")
+}
+
+fn field(name: &'static str, value: impl ToString) -> DiagnosticsField {
+    (name, value.to_string())
+}
+
+fn log_scene_command_result<T, F>(
+    command: &'static str,
+    started_at: Instant,
+    result: &Result<T, String>,
+    base_fields: Vec<DiagnosticsField>,
+    on_success: F,
+) where
+    F: FnOnce(&T) -> Vec<DiagnosticsField>,
+{
+    logging::log_timed_result(
+        "tauri",
+        "scene_commands",
+        command,
+        started_at,
+        result,
+        base_fields,
+        on_success,
+    );
 }
 
 #[tauri::command]
@@ -25,18 +50,9 @@ pub async fn start_scene_refresh(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::start_scene_refresh(&app_handle, &state);
-        match &result {
-            Ok(workspace) => eprintln!(
-                "[perf][tauri] start_scene_refresh command completed in {}ms refresh_status={:?}",
-                started_at.elapsed().as_millis(),
-                workspace.refresh_status
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] start_scene_refresh command failed in {}ms error={}",
-                started_at.elapsed().as_millis(),
-                error
-            ),
-        }
+        log_scene_command_result("start_scene_refresh", started_at, &result, Vec::new(), |workspace| {
+            vec![field("refreshStatus", format!("{:?}", workspace.refresh_status))]
+        });
         result
     })
     .await
@@ -56,21 +72,18 @@ pub fn start_scene_object_children_analysis(
 ) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
     let started_at = Instant::now();
     let result = scene_application::start_scene_object_children_analysis(&app, &state, &object_address);
-    match &result {
-        Ok(task) => eprintln!(
-            "[perf][tauri] start_scene_object_children_analysis completed in {}ms object_address={} task_id={} status={:?}",
-            started_at.elapsed().as_millis(),
-            object_address,
-            task.task_id,
-            task.status
-        ),
-        Err(error) => eprintln!(
-            "[perf][tauri] start_scene_object_children_analysis failed in {}ms object_address={} error={}",
-            started_at.elapsed().as_millis(),
-            object_address,
-            error
-        ),
-    }
+    log_scene_command_result(
+        "start_scene_object_children_analysis",
+        started_at,
+        &result,
+        vec![field("objectAddress", object_address.clone())],
+        |task| {
+            vec![
+                field("taskId", task.task_id),
+                field("status", format!("{:?}", task.status)),
+            ]
+        },
+    );
     result
 }
 
@@ -99,21 +112,18 @@ pub fn start_scene_object_inspector_analysis(
 ) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
     let started_at = Instant::now();
     let result = scene_application::start_scene_object_inspector_analysis(&app, &state, &object_address);
-    match &result {
-        Ok(task) => eprintln!(
-            "[perf][tauri] start_scene_object_inspector_analysis completed in {}ms object_address={} task_id={} status={:?}",
-            started_at.elapsed().as_millis(),
-            object_address,
-            task.task_id,
-            task.status
-        ),
-        Err(error) => eprintln!(
-            "[perf][tauri] start_scene_object_inspector_analysis failed in {}ms object_address={} error={}",
-            started_at.elapsed().as_millis(),
-            object_address,
-            error
-        ),
-    }
+    log_scene_command_result(
+        "start_scene_object_inspector_analysis",
+        started_at,
+        &result,
+        vec![field("objectAddress", object_address.clone())],
+        |task| {
+            vec![
+                field("taskId", task.task_id),
+                field("status", format!("{:?}", task.status)),
+            ]
+        },
+    );
     result
 }
 
@@ -141,20 +151,13 @@ pub async fn get_scene_object_children(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::get_scene_object_children(&app_handle, &state, &object_address);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] get_scene_object_children command completed in {}ms object_address={} child_count={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.children.len()
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] get_scene_object_children command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "get_scene_object_children",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| vec![field("childCount", snapshot.children.len())],
+        );
         result
     })
     .await
@@ -172,21 +175,18 @@ pub async fn get_scene_object_inspector(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::get_scene_object_inspector(&app_handle, &state, &object_address);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] get_scene_object_inspector command completed in {}ms object_address={} children={} components={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.children.len(),
-                snapshot.components.len()
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] get_scene_object_inspector command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "get_scene_object_inspector",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![
+                    field("children", snapshot.children.len()),
+                    field("components", snapshot.components.len()),
+                ]
+            },
+        );
         result
     })
     .await
@@ -205,20 +205,18 @@ pub async fn create_scene_child(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::create_scene_child(&app_handle, &state, &parent_object_address, &name);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] create_scene_child command completed in {}ms parent_object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                parent_object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] create_scene_child command failed in {}ms parent_object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                parent_object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "create_scene_child",
+            started_at,
+            &result,
+            vec![field("parentObjectAddress", parent_object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -237,20 +235,18 @@ pub async fn create_scene_root(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::create_scene_root(&app_handle, &state, scene_handle, &name);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] create_scene_root command completed in {}ms scene_handle={} target_object_address= {}",
-                started_at.elapsed().as_millis(),
-                scene_handle,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] create_scene_root command failed in {}ms scene_handle={} error={}",
-                started_at.elapsed().as_millis(),
-                scene_handle,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "create_scene_root",
+            started_at,
+            &result,
+            vec![field("sceneHandle", scene_handle)],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -268,20 +264,18 @@ pub async fn duplicate_scene_object(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::duplicate_scene_object(&app_handle, &state, &object_address);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] duplicate_scene_object command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] duplicate_scene_object command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "duplicate_scene_object",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -299,20 +293,18 @@ pub async fn delete_scene_object(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::delete_scene_object(&app_handle, &state, &object_address);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] delete_scene_object command completed in {}ms object_address={} deleted_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.deleted_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] delete_scene_object command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "delete_scene_object",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "deletedObjectAddress",
+                    snapshot.deleted_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -331,20 +323,18 @@ pub async fn rename_scene_object(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::rename_scene_object(&app_handle, &state, &object_address, &name);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] rename_scene_object command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] rename_scene_object command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "rename_scene_object",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -363,20 +353,18 @@ pub async fn set_scene_object_tag(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_tag(&app_handle, &state, &object_address, &tag);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] set_scene_object_tag command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] set_scene_object_tag command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "set_scene_object_tag",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -395,20 +383,18 @@ pub async fn set_scene_object_layer(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_layer(&app_handle, &state, &object_address, layer);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] set_scene_object_layer command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] set_scene_object_layer command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "set_scene_object_layer",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -427,20 +413,18 @@ pub async fn set_scene_object_hide_flags(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_hide_flags(&app_handle, &state, &object_address, &hide_flags);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] set_scene_object_hide_flags command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] set_scene_object_hide_flags command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "set_scene_object_hide_flags",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -466,20 +450,25 @@ pub async fn reparent_scene_object(
             parent_object_address.as_deref(),
             parent_path.as_deref(),
         );
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] reparent_scene_object command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] reparent_scene_object command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "reparent_scene_object",
+            started_at,
+            &result,
+            vec![
+                field("objectAddress", object_address.clone()),
+                field(
+                    "parentObjectAddress",
+                    parent_object_address.as_deref().unwrap_or("null"),
+                ),
+                field("parentPath", parent_path.as_deref().unwrap_or("null")),
+            ],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -498,21 +487,21 @@ pub async fn set_scene_object_active(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_active(&app_handle, &state, &object_address, active_self);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] set_scene_object_active command completed in {}ms object_address={} active_self={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                active_self,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] set_scene_object_active command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "set_scene_object_active",
+            started_at,
+            &result,
+            vec![
+                field("objectAddress", object_address.clone()),
+                field("activeSelf", active_self),
+            ],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -531,20 +520,18 @@ pub async fn set_scene_object_transform(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_transform(&app_handle, &state, &object_address, &transform_update);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] set_scene_object_transform command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] set_scene_object_transform command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "set_scene_object_transform",
+            started_at,
+            &result,
+            vec![field("objectAddress", object_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -563,20 +550,21 @@ pub async fn set_scene_behaviour_enabled(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_behaviour_enabled(&app_handle, &state, &component_address, enabled);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] set_scene_behaviour_enabled command completed in {}ms component_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                component_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] set_scene_behaviour_enabled command failed in {}ms component_address={} error={}",
-                started_at.elapsed().as_millis(),
-                component_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "set_scene_behaviour_enabled",
+            started_at,
+            &result,
+            vec![
+                field("componentAddress", component_address.clone()),
+                field("enabled", enabled),
+            ],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -595,20 +583,21 @@ pub async fn create_scene_component(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::create_scene_component(&app_handle, &state, &object_address, &component_type_name);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] create_scene_component command completed in {}ms object_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] create_scene_component command failed in {}ms object_address={} error={}",
-                started_at.elapsed().as_millis(),
-                object_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "create_scene_component",
+            started_at,
+            &result,
+            vec![
+                field("objectAddress", object_address.clone()),
+                field("componentTypeName", component_type_name.clone()),
+            ],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -626,20 +615,18 @@ pub async fn delete_scene_component(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::delete_scene_component(&app_handle, &state, &component_address);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] delete_scene_component command completed in {}ms component_address={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                component_address,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] delete_scene_component command failed in {}ms component_address={} error={}",
-                started_at.elapsed().as_millis(),
-                component_address,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "delete_scene_component",
+            started_at,
+            &result,
+            vec![field("componentAddress", component_address.clone())],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await
@@ -657,20 +644,18 @@ pub async fn load_scene_by_build_index(
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::load_scene_by_build_index(&app_handle, &state, build_index);
-        match &result {
-            Ok(snapshot) => eprintln!(
-                "[perf][tauri] load_scene_by_build_index command completed in {}ms build_index={} target_object_address={}",
-                started_at.elapsed().as_millis(),
-                build_index,
-                snapshot.target_object_address.as_deref().unwrap_or("null")
-            ),
-            Err(error) => eprintln!(
-                "[perf][tauri] load_scene_by_build_index command failed in {}ms build_index={} error={}",
-                started_at.elapsed().as_millis(),
-                build_index,
-                error
-            ),
-        }
+        log_scene_command_result(
+            "load_scene_by_build_index",
+            started_at,
+            &result,
+            vec![field("buildIndex", build_index)],
+            |snapshot| {
+                vec![field(
+                    "targetObjectAddress",
+                    snapshot.target_object_address.as_deref().unwrap_or("null"),
+                )]
+            },
+        );
         result
     })
     .await

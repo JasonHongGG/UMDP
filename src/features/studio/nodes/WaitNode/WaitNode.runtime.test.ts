@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import React, { act, createElement } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { NodeWrapper } from '@/features/studio/components/canvas/NodeWrapper';
 import { executeStudioFlow } from '@/features/studio/application/runtime/executeStudioFlow';
 import { initializeStudioNodeRegistry } from '@/features/studio/core/NodeRegistry';
 import type { StudioNodeDefinition } from '@/features/studio/core/types';
+import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 import WaitNodeDef from './WaitNode';
 
 const openEditModal = vi.fn();
@@ -64,9 +65,29 @@ describe('WaitNode runtime', () => {
 
   beforeEach(() => {
     openEditModal.mockReset();
+    resetDiagnosticsStateForTests();
+    configureDiagnostics({
+      clearBuffer: true,
+      policy: {
+        enabled: true,
+        captureBuffer: true,
+        consoleOutput: false,
+        minimumLevel: 'debug',
+      },
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    initializeStudioNodeRegistry([]);
+    resetDiagnosticsStateForTests();
+    vi.useRealTimers();
   });
 
   it('renders countdown text in running state and keeps double click opening the edit modal', async () => {
@@ -161,7 +182,6 @@ describe('WaitNode runtime', () => {
 
   it('does not fail the wait when progress publication throws', async () => {
     vi.useFakeTimers();
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     initializeStudioNodeRegistry([WaitNodeDef]);
 
     const snapshots: Array<{ status: string }> = [];
@@ -186,13 +206,18 @@ describe('WaitNode runtime', () => {
     await vi.runAllTimersAsync();
 
     expect(snapshots).toContainEqual({ status: 'success' });
-    expect(consoleLogSpy).toHaveBeenCalledWith('[StudioFrontendError]', expect.objectContaining({
-      nodeType: 'wait',
-      phase: 'execute',
-      reason: 'execution-error',
-      message: 'Wait node progress reporting failed.',
-    }));
-
-    consoleLogSpy.mockRestore();
+    expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        channel: 'studio',
+        origin: 'WaitNode',
+        message: 'Wait node progress reporting failed.',
+        context: expect.objectContaining({
+          nodeType: 'wait',
+          phase: 'execute',
+          reason: 'execution-error',
+        }),
+      }),
+    ]));
   });
 });

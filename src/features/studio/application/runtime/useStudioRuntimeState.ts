@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphDocument } from '@/domain/studio/contracts';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import { executeStudioFlow } from './executeStudioFlow';
 import { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '@/features/studio/core/types';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import type { StudioExecutionAbortReason } from '@/domain/studio/contracts';
 import { useStudioFeedback } from '@/features/studio/application/feedback/StudioFeedbackContext';
+
+const studioRuntimeDiagnostics = createDiagnosticsLogger({
+  channel: 'studio',
+  origin: 'useStudioRuntimeState',
+});
 
 interface StudioExecutionWorkspaceDiagnostics {
   status: WorkspaceLifecycleState['status'];
@@ -91,11 +97,20 @@ function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleSt
 
 function logWorkspaceExecutionInterruption(reason: 'blocked' | 'reset', blockedReason: string, workspaceLifecycle: WorkspaceLifecycleState) {
   const readiness = getWorkspaceExecutionReadiness(workspaceLifecycle);
-  console.error('[StudioWorkspaceExecution]', {
-    reason,
-    message: blockedReason,
-    workspace: readiness.diagnostics,
-  });
+  const details = {
+    context: {
+      reason,
+      message: blockedReason,
+      workspace: readiness.diagnostics,
+    },
+  };
+
+  if (reason === 'blocked') {
+    studioRuntimeDiagnostics.error('Studio execution blocked.', details);
+    return;
+  }
+
+  studioRuntimeDiagnostics.warn('Studio execution reset.', details);
 }
 
 export function useStudioRuntimeState(

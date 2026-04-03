@@ -1,6 +1,7 @@
 use crate::domain::analysis_models::AnalysisSnapshot;
 use crate::domain::operation::{OperationError, OperationErrorCode, OperationResult};
 use crate::infrastructure::clock::current_timestamp;
+use crate::infrastructure::logging;
 use crate::infrastructure::tooling::managed_metadata_reader;
 use crate::services::analysis::runtime_session_service::ensure_attached_session;
 use std::time::Instant;
@@ -25,11 +26,15 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<A
             .is_some_and(|existing| same_metadata_source(existing, &attached))
         {
             cached.process = Some(attached.clone());
-            eprintln!(
-                "[perf][metadata] load_all_metadata cache hit pid={} class_count={} image_count={}",
-                attached.pid,
-                cached.classes.len(),
-                cached.images.len()
+            logging::debug(
+                "metadata",
+                "metadata_query_service",
+                "load_all_metadata cache hit.",
+                vec![
+                    ("pid", attached.pid.to_string()),
+                    ("classCount", cached.classes.len().to_string()),
+                    ("imageCount", cached.images.len().to_string()),
+                ],
             );
             return Ok(cached);
         }
@@ -48,12 +53,16 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<A
     response.process = Some(attached.clone());
     response.generated_at = current_timestamp();
 
-    eprintln!(
-        "[perf][metadata] load_all_metadata service completed in {}ms input={} class_count={} image_count={}",
-        started_at.elapsed().as_millis(),
-        metadata_input,
-        response.classes.len(),
-        response.images.len()
+    logging::debug(
+        "metadata",
+        "metadata_query_service",
+        "load_all_metadata completed.",
+        vec![
+            ("durationMs", started_at.elapsed().as_millis().to_string()),
+            ("input", metadata_input.clone()),
+            ("classCount", response.classes.len().to_string()),
+            ("imageCount", response.images.len().to_string()),
+        ],
     );
 
     state.workspace().analysis().set_metadata_snapshot(response.clone());

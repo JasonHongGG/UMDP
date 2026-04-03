@@ -13,6 +13,17 @@ import { WorkspaceGate } from '@/shared/ui/WorkspaceGate';
 import { useInspectorPageController } from './useInspectorPageController';
 
 export function InspectorPage() {
+  const { workspacePresentation } = useWorkspaceShellState();
+  const detail = workspacePresentation.pages.inspector;
+
+  if (detail.blocked) {
+    return <WorkspaceGate detail={detail} />;
+  }
+
+  return <InspectorPageContent />;
+}
+
+function InspectorPageContent() {
   const {
     images,
     classLookupMap,
@@ -64,12 +75,6 @@ export function InspectorPage() {
     pendingScrollClassStableId,
     clearPendingScrollTarget,
   } = useInspectorWorkspace();
-  const { workspacePresentation } = useWorkspaceShellState();
-  const detail = workspacePresentation.pages.inspector;
-
-  if (detail.blocked) {
-    return <WorkspaceGate detail={detail} />;
-  }
 
   const { tabBarRef, imageListRef, classListRef } = useInspectorPageController({
     tabsLength: tabs.length,

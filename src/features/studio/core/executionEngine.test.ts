@@ -3,6 +3,7 @@ import { createLiteralExpressionSource } from './expression';
 import { initializeStudioNodeRegistry } from './NodeRegistry';
 import { createEnvelope, GENERIC_JSON_SCHEMA } from './contracts';
 import { executeStudioFlow } from '@/features/studio/application/runtime/executeStudioFlow';
+import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 import { NodeExecutionSnapshot, StudioNodeDefinition } from './types';
 import ForLoopNodeDef from '@/features/studio/nodes/ForLoopNode/ForLoopNode';
 
@@ -10,11 +11,21 @@ describe('executeStudioFlow', () => {
   afterEach(() => {
     vi.useRealTimers();
     initializeStudioNodeRegistry([]);
+    resetDiagnosticsStateForTests();
   });
 
   it('uses definition-level validation instead of hardcoded node types', async () => {
     vi.useFakeTimers();
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    resetDiagnosticsStateForTests();
+    configureDiagnostics({
+      clearBuffer: true,
+      policy: {
+        enabled: true,
+        captureBuffer: true,
+        consoleOutput: false,
+        minimumLevel: 'debug',
+      },
+    });
 
     const executeSpy = vi.fn(() => ({ state: 'success' as const, outputs: {} }));
     const guardedNode: StudioNodeDefinition = {
@@ -63,14 +74,19 @@ describe('executeStudioFlow', () => {
 
     expect(executeSpy).not.toHaveBeenCalled();
     expect(snapshots).toContainEqual({ status: 'error', errorMessage: 'Guard rejected execution.', failureReason: 'validation-error' });
-    expect(consoleLogSpy).toHaveBeenCalledWith('[StudioFrontendError]', expect.objectContaining({
-      nodeId: 'guarded-1',
-      phase: 'validate',
-      reason: 'validation-error',
-      message: 'Guard rejected execution.',
-    }));
-
-    consoleLogSpy.mockRestore();
+    expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        channel: 'studio',
+        origin: 'graphInterpreter',
+        message: 'Guard rejected execution.',
+        context: expect.objectContaining({
+          nodeId: 'guarded-1',
+          phase: 'validate',
+          reason: 'validation-error',
+        }),
+      }),
+    ]));
   });
 
   it('publishes aborted snapshots and run completion reason when an active node is cancelled', async () => {

@@ -7,6 +7,7 @@ import { useStudioRuntimeState } from './useStudioRuntimeState';
 import type { GraphDocument } from '@/domain/studio/contracts';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
+import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -76,6 +77,16 @@ describe('useStudioRuntimeState', () => {
 
   beforeEach(() => {
     latestState = null;
+    resetDiagnosticsStateForTests();
+    configureDiagnostics({
+      clearBuffer: true,
+      policy: {
+        enabled: true,
+        captureBuffer: true,
+        consoleOutput: false,
+        minimumLevel: 'debug',
+      },
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -86,6 +97,7 @@ describe('useStudioRuntimeState', () => {
       root.unmount();
     });
     container.remove();
+    resetDiagnosticsStateForTests();
   });
 
   it('clears runtime snapshots when workspace recovery begins', () => {
@@ -156,8 +168,6 @@ describe('useStudioRuntimeState', () => {
   });
 
   it('blocks execution and logs workspace diagnostics when the workspace is not ready', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
     act(() => {
       root.render(createElement(HookHarness, {
         lifecycle: {
@@ -185,22 +195,28 @@ describe('useStudioRuntimeState', () => {
     expect(executeStudioFlowMock).not.toHaveBeenCalled();
     expect(latestState?.state.canExecuteFlow).toBe(false);
     expect(latestState?.state.executionBlockedReason).toBe('Workspace is not ready (recovering).');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('[StudioWorkspaceExecution]', expect.objectContaining({
-      reason: 'blocked',
-      message: 'Workspace is not ready (recovering).',
-      workspace: expect.objectContaining({
-        status: 'recovering',
-        hasSnapshot: true,
-        errorMessage: 'runtime session disconnected',
-        runtimeSession: expect.objectContaining({
-          status: 'recovering',
-          connected: false,
-          lastError: 'runtime session disconnected',
-          sessionKey: 'session-1',
+    expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'error',
+        channel: 'studio',
+        origin: 'useStudioRuntimeState',
+        message: 'Studio execution blocked.',
+        context: expect.objectContaining({
+          reason: 'blocked',
+          message: 'Workspace is not ready (recovering).',
+          workspace: expect.objectContaining({
+            status: 'recovering',
+            hasSnapshot: true,
+            errorMessage: 'runtime session disconnected',
+            runtimeSession: expect.objectContaining({
+              status: 'recovering',
+              connected: false,
+              lastError: 'runtime session disconnected',
+              sessionKey: 'session-1',
+            }),
+          }),
         }),
       }),
-    }));
-
-    consoleErrorSpy.mockRestore();
+    ]));
   });
 });

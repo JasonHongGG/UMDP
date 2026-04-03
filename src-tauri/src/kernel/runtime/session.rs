@@ -7,7 +7,6 @@ use crate::infrastructure::native::runtime_api::RuntimeApi;
 
 pub struct RuntimeSession {
     pid: u32,
-    runtime: RuntimeFlavor,
     runtime_api: Option<Box<dyn RuntimeApi>>,
 }
 
@@ -30,17 +29,12 @@ impl RuntimeSession {
 
         Ok(Self {
             pid: process_session.pid,
-            runtime,
             runtime_api,
         })
     }
 
     pub fn pid(&self) -> u32 {
         self.pid
-    }
-
-    pub fn runtime(&self) -> &RuntimeFlavor {
-        &self.runtime
     }
 
     pub fn runtime_api(&self) -> Option<&dyn RuntimeApi> {

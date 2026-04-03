@@ -9,6 +9,8 @@ import { executeStudioFlow } from '@/features/studio/application/runtime/execute
 import { initializeStudioNodeRegistry } from '@/features/studio/core/NodeRegistry';
 import type { StudioNodeDefinition } from '@/features/studio/core/types';
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 const openEditModal = vi.fn();
 
 vi.mock('@/features/studio/components/canvas/Port', () => ({

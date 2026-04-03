@@ -3,6 +3,7 @@ import { Clock3 } from 'lucide-react';
 import { useStudioRuntimeViewState } from '@/features/studio/application/useStudioRuntimeViewState';
 import { createFlowPort } from '@/features/studio/core/contracts';
 import { defineStudioNode } from '@/features/studio/core/NodeRegistry';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import type {
   INodeComponentProps,
   IPort,
@@ -14,6 +15,11 @@ import type {
 import { Port } from '@/features/studio/components/canvas/Port';
 import { formatWaitCountdownLabel, createWaitNodeData, createWaitNodeRuntimeState, clampWaitDelaySeconds, getWaitSubtitle, type WaitNodeData } from './waitNodeModel';
 import WaitNodeEditor from './WaitNodeEditor';
+
+const waitNodeDiagnostics = createDiagnosticsLogger({
+  channel: 'studio',
+  origin: 'WaitNode',
+});
 
 const WAIT_INPUTS: IPort[] = [
   createFlowPort('flow-in', 'Flow In', 'Control input for runtime execution.', { direction: 'input', required: false }),
@@ -42,12 +48,13 @@ function waitForDelay(
     try {
       reportProgress(progress);
     } catch (error) {
-      console.log('[StudioFrontendError]', {
-        nodeType: 'wait',
-        phase: 'execute',
-        reason: 'execution-error',
-        message: 'Wait node progress reporting failed.',
+      waitNodeDiagnostics.error('Wait node progress reporting failed.', {
         error,
+        context: {
+          nodeType: 'wait',
+          phase: 'execute',
+          reason: 'execution-error',
+        },
       });
     }
   };

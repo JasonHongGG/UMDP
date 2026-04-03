@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { ProcessInfo } from './types';
+import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import {
   emitProcessSelected,
   fetchSystemProcesses,
@@ -11,6 +12,11 @@ import {
   onCurrentWindowFocusChanged,
 } from './infrastructure/tauri/TauriWindowGateway';
 import './styles.css';
+
+const processSelectorDiagnostics = createDiagnosticsLogger({
+  channel: 'process-selector',
+  origin: 'ProcessSelectorApp',
+});
 
 export default function ProcessSelectorApp() {
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
@@ -37,7 +43,9 @@ export default function ProcessSelectorApp() {
       setProcesses(next);
     };
 
-    load().catch((error) => console.error('Failed to load processes', error));
+    load().catch((error) => processSelectorDiagnostics.error('Process list load failed.', {
+      error,
+    }));
     setTimeout(() => inputRef.current?.focus(), 50);
 
     let unlistenFocus: (() => void) | undefined;
@@ -53,7 +61,9 @@ export default function ProcessSelectorApp() {
     }, 300);
 
     const refreshPromise = onRefreshProcesses(() => {
-      load().catch((error) => console.error('Failed to refresh processes', error));
+      load().catch((error) => processSelectorDiagnostics.error('Process list refresh failed.', {
+        error,
+      }));
       setTimeout(() => inputRef.current?.focus(), 50);
     });
 
@@ -99,7 +109,13 @@ export default function ProcessSelectorApp() {
       event.preventDefault();
       const selected = filtered[selectedIndex];
       if (selected) {
-        selectProcess(selected).catch((error) => console.error('Failed to select process', error));
+        selectProcess(selected).catch((error) => processSelectorDiagnostics.error('Process selection failed.', {
+          error,
+          context: {
+            pid: selected.pid,
+            processName: selected.name,
+          },
+        }));
       }
     }
   };
@@ -129,7 +145,13 @@ export default function ProcessSelectorApp() {
           filtered.map((p, idx) => (
             <div
               key={p.pid}
-              onClick={() => selectProcess(p).catch(() => undefined)}
+              onClick={() => selectProcess(p).catch((error) => processSelectorDiagnostics.error('Process selection failed.', {
+                error,
+                context: {
+                  pid: p.pid,
+                  processName: p.name,
+                },
+              }))}
               onMouseEnter={() => setSelectedIndex(idx)}
               className={`px-4 py-3 mx-2 my-1 rounded-lg cursor-pointer transition-all duration-150 flex items-center justify-between border ${selectedIndex === idx
                 ? 'bg-cyan-500/20 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)] text-white'

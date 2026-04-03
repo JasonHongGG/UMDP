@@ -1,5 +1,21 @@
 # Unity Mono Studio
 
+## Diagnostics Configuration
+
+Diagnostics can now be configured from a single root `.env` file. Frontend Vite diagnostics and backend Rust diagnostics both read the same `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS*` variables, so you do not need to export shell variables or use DevTools overrides for normal setup.
+
+Start by copying `.env.example` to `.env`, or edit the checked-in local `.env` in this workspace.
+
+Available variables:
+
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS`: enable or disable diagnostics globally.
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS_LEVEL`: `debug`, `info`, `warn`, or `error`.
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS_CHANNELS`: optional comma-separated filter such as `studio,scene,tauri`.
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS_ORIGINS`: optional comma-separated filter such as `useStudioRuntimeState,scene_commands`.
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS_CONSOLE`: frontend console sink toggle when diagnostics are enabled.
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS_BUFFER`: frontend in-memory diagnostics buffer toggle when diagnostics are enabled.
+- `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS_MAX_BUFFER`: frontend diagnostics buffer size.
+
 ## Scripts
 
 - `npm run dev`: start the Vite frontend in development mode.
