@@ -7,6 +7,7 @@ import { AnalysisWorkspaceProvider } from './domain/analysis/AnalysisWorkspaceCo
 import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { StatusBar } from './app/shell/StatusBar';
 import { openProcessSelectorWindow } from './infrastructure/tauri/TauriWorkspaceGateway';
+import { SceneWorkspaceProvider } from '@/features/scene/page/SceneWorkspaceContext';
 import './styles.css';
 
 const StudioPage = lazy(async () => ({
@@ -49,15 +50,17 @@ function AppContent() {
         onPageChange={setActivePage}
       />
 
-      <Suspense fallback={<WorkspacePageFallback activePage={activePage} />}>
-        {activePage === 'inspector' ? (
-          <InspectorPage />
-        ) : activePage === 'scene' ? (
-          <ScenePage />
-        ) : (
-          <StudioPage />
-        )}
-      </Suspense>
+      <SceneWorkspaceProvider>
+        <Suspense fallback={<WorkspacePageFallback activePage={activePage} />}>
+          {activePage === 'inspector' ? (
+            <InspectorPage />
+          ) : activePage === 'scene' ? (
+            <ScenePage />
+          ) : (
+            <StudioPage />
+          )}
+        </Suspense>
+      </SceneWorkspaceProvider>
 
       <StatusBar presentation={workspacePresentation} />
     </MainLayout>

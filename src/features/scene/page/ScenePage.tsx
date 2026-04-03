@@ -1,6 +1,5 @@
 import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { WorkspaceGate } from '@/shared/ui/WorkspaceGate';
-import { SceneWorkspaceProvider } from './SceneWorkspaceContext';
 import { SceneHierarchyPanel } from './components/SceneHierarchyPanel';
 import { SceneInspectorView } from './components/SceneInspectorView';
 
@@ -12,11 +11,7 @@ export function ScenePage() {
     return <WorkspaceGate detail={detail} />;
   }
 
-  return (
-    <SceneWorkspaceProvider>
-      <SceneWorkspaceShell />
-    </SceneWorkspaceProvider>
-  );
+  return <SceneWorkspaceShell />;
 }
 
 function SceneWorkspaceShell() {

@@ -20,7 +20,7 @@ export interface SelectProps {
 
 export function Select({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [coords, setCoords] = useState({ x: 0, y: 0, width: 0 });
+  const [coords, setCoords] = useState({ x: 0, y: 0, width: 0, direction: 'down' });
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
@@ -28,7 +28,14 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
   const updatePosition = () => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    setCoords({ x: rect.left, y: rect.bottom + 6, width: rect.width });
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    if (spaceBelow < 280 && spaceAbove > spaceBelow) {
+      setCoords({ x: rect.left, y: rect.top - 6, width: rect.width, direction: 'up' });
+    } else {
+      setCoords({ x: rect.left, y: rect.bottom + 6, width: rect.width, direction: 'down' });
+    }
   };
 
   useEffect(() => {
@@ -97,10 +104,11 @@ export function Select({ value, onChange, options, placeholder = 'Select...', cl
               style={{
                 position: 'fixed',
                 left: coords.x,
-                top: coords.y,
+                top: coords.direction === 'down' ? coords.y : undefined,
+                bottom: coords.direction === 'up' ? window.innerHeight - coords.y : undefined,
                 width: coords.width,
                 zIndex: 99999,
-                transformOrigin: 'top center'
+                transformOrigin: coords.direction === 'down' ? 'top center' : 'bottom center'
               }}
               className="mndp-select-portal overflow-hidden rounded-xl border border-slate-700/80 bg-[#0c1520]/95 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] flex flex-col max-h-[280px]"
             >

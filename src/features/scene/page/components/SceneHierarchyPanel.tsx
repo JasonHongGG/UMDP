@@ -73,6 +73,7 @@ export function SceneHierarchyPanel() {
     refreshSceneWorkspace,
     selectedObjectAddress,
     setSelectedObjectAddress,
+    openTabForSceneObject,
     childrenByParent,
     childTaskByParent,
     loadingChildrenByParent,
@@ -359,18 +360,26 @@ export function SceneHierarchyPanel() {
 
   return (
     <div className="w-[430px] shrink-0 border-r border-[#1c2838] bg-[#05080c]/95 flex flex-col">
-      <div className="px-4 py-4 border-b border-[#1c2838] flex items-start justify-between gap-3">
+      <div className="px-4 py-4 border-b border-[#1c2838] flex items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Scene Runtime</div>
-          <div className="mt-1 text-slate-200 font-semibold">Loaded Objects</div>
-          <div className="mt-1 text-xs text-slate-500">{summary.sceneCount} scenes, {summary.rootCount} root objects</div>
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+            <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-cyan-400/80">Scene Runtime</div>
+          </div>
+          <div className="mt-1 text-lg text-white font-bold tracking-tight drop-shadow-sm">Loaded Objects</div>
+          <div className="text-xs text-slate-500">{summary.sceneCount} scenes, {summary.rootCount} root objects</div>
         </div>
         <button
           onClick={() => refreshSceneWorkspace().catch(() => undefined)}
-          className="h-10 w-10 rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition"
+          className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all ${
+            sceneWorkspace.refreshStatus === 'refreshing'
+              ? 'bg-transparent text-cyan-400'
+              : 'border border-[#1a2636] bg-[#0a0f16] text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 shadow-sm'
+          }`}
           title="Refresh scene workspace"
+          disabled={sceneWorkspace.refreshStatus === 'refreshing'}
         >
-          <RefreshCw size={16} className={sceneWorkspace.refreshStatus === 'refreshing' ? 'animate-spin' : ''} />
+          <RefreshCw size={14} className={sceneWorkspace.refreshStatus === 'refreshing' ? 'animate-[spin_2s_linear_infinite]' : ''} />
         </button>
       </div>
 
@@ -428,7 +437,15 @@ export function SceneHierarchyPanel() {
       ) : null}
 
       {sceneWorkspace.refreshStatus === 'refreshing' && !sceneWorkspace.snapshot ? (
-        <div className="px-4 py-3 text-sm text-slate-400">Refreshing scene catalog...</div>
+        <div className="px-5 py-6 space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col gap-2 opacity-50">
+              <div className="h-4 w-1/3 bg-white/5 rounded animate-pulse" />
+              <div className="h-3 w-1/2 bg-white/5 rounded animate-pulse" />
+            </div>
+          ))}
+          <div className="text-xs text-cyan-400/60 font-mono text-center pt-2 animate-pulse">Syncing catalog...</div>
+        </div>
       ) : null}
 
       {!sceneWorkspace.snapshot && sceneWorkspace.refreshStatus === 'idle' ? (
@@ -457,7 +474,12 @@ export function SceneHierarchyPanel() {
                 item={metric.item}
                 selectedObjectAddress={selectedObjectAddress}
                 sceneMutationLoading={sceneMutationState.loading}
-                onSelect={setSelectedObjectAddress}
+                onSelect={(node) => openTabForSceneObject({
+                  objectAddress: node.objectAddress,
+                  name: node.name,
+                  sceneName: node.sceneName,
+                  sceneKind: node.sceneKind,
+                })}
                 onToggleScene={toggleScene}
                 onToggleNode={toggleNode}
                 onRootNameChange={(sceneHandle, value) => setRootNameBySceneHandle((previous) => ({
@@ -491,7 +513,7 @@ function SceneVirtualRow({
   item: SceneListItem;
   selectedObjectAddress: string | null;
   sceneMutationLoading: boolean;
-  onSelect: (objectAddress: string) => void;
+  onSelect: (node: { objectAddress: string; name: string; sceneName?: string; sceneKind?: string; }) => void;
   onToggleScene: (sceneHandle: number) => void;
   onToggleNode: (node: RuntimeSceneNodeSummary) => void;
   onRootNameChange: (sceneHandle: number, value: string) => void;
@@ -582,7 +604,12 @@ function SceneVirtualRow({
               >
                 {item.expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               </button>
-              <button onClick={() => onSelect(item.node.objectAddress)} className="min-w-0 flex-1 text-left">
+              <button onClick={() => onSelect({
+                objectAddress: item.node.objectAddress,
+                name: item.node.name,
+                sceneName: item.scene?.name,
+                sceneKind: item.scene?.sceneKind,
+              })} className="min-w-0 flex-1 text-left">
                 <div className={`text-sm truncate ${searchMatched ? 'text-cyan-200' : 'text-slate-200'}`}>{item.node.name}</div>
                 <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
                   <span>{item.node.activeSelf ? 'active' : 'inactive'}</span>

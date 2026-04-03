@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import type {
   RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
@@ -15,12 +15,18 @@ import type { LoadedSceneGraph, LoadedSceneSearchProjection } from './loadedScen
 import { EMPTY_MUTATION_STATE, type SceneMutationState, useSceneWorkspaceStore } from './useSceneWorkspaceStore';
 import { useSceneMutationActions } from './useSceneMutationActions';
 import { useSceneWorkspaceSync } from './useSceneWorkspaceSync';
+import type { SceneInspectorTab } from './useSceneWorkspaceStore';
 
 export interface SceneWorkspaceStateResult {
   sceneWorkspace: SceneWorkspaceState;
   refreshSceneWorkspace: () => Promise<void>;
   selectedObjectAddress: string | null;
   setSelectedObjectAddress: (value: string | null) => void;
+  sceneTabs: SceneInspectorTab[];
+  activeSceneTabIndex: number;
+  openTabForSceneObject: (tab: SceneInspectorTab) => void;
+  handleCloseTab: (index: number, event: React.MouseEvent) => void;
+  setActiveSceneTabIndex: (index: number) => void;
   loadedSceneGraph: LoadedSceneGraph;
   sceneHierarchySearchQuery: string;
   setSceneHierarchySearchQuery: (value: string) => void;
@@ -115,6 +121,10 @@ export function useSceneWorkspaceState({
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneRootsByHandle,
+    sceneTabs,
+    setSceneTabs,
+    activeSceneTabIndex,
+    setActiveSceneTabIndex,
   } = store;
   const {
     loadSceneObjectInspector,
@@ -183,6 +193,55 @@ export function useSceneWorkspaceState({
     bumpParentChildCount,
   });
 
+  const openTabForSceneObject = useCallback((entry: SceneInspectorTab) => {
+    setSceneTabs((previous) => {
+      const existingIndex = previous.findIndex((tab) => tab.objectAddress === entry.objectAddress);
+      const targetIndex = existingIndex >= 0 ? existingIndex : previous.length;
+      
+      setActiveSceneTabIndex(targetIndex);
+      setSelectedObjectAddress(entry.objectAddress);
+      
+      if (existingIndex >= 0) {
+        return previous;
+      }
+      return [...previous, entry];
+    });
+  }, [setActiveSceneTabIndex, setSceneTabs, setSelectedObjectAddress]);
+
+  const handleCloseTab = useCallback((index: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSceneTabs((previous) => {
+      const next = [...previous];
+      next.splice(index, 1);
+      if (next.length === 0) {
+        setActiveSceneTabIndex(-1);
+        setSelectedObjectAddress(null);
+      } else {
+        setActiveSceneTabIndex((current) => {
+          if (current >= index) {
+            const nextActive = Math.max(0, current - 1);
+            setSelectedObjectAddress(next[nextActive].objectAddress);
+            return nextActive;
+          }
+          setSelectedObjectAddress(next[current].objectAddress);
+          return current;
+        });
+      }
+      return next;
+    });
+  }, [setActiveSceneTabIndex, setSceneTabs, setSelectedObjectAddress]);
+
+  const handleSetActiveSceneTabIndex = useCallback((index: number) => {
+    setActiveSceneTabIndex(index);
+    if (sceneTabs[index]) {
+      setSelectedObjectAddress(sceneTabs[index].objectAddress);
+    }
+  }, [sceneTabs, setActiveSceneTabIndex, setSelectedObjectAddress]);
+
+  const handleSetSelectedObjectAddress = useCallback((value: string | null) => {
+    setSelectedObjectAddress(value);
+  }, [setSelectedObjectAddress]);
+
   const sceneTasks = useMemo(() => {
     return collectSceneWorkspaceTasks({
       sceneWorkspace,
@@ -196,7 +255,12 @@ export function useSceneWorkspaceState({
     sceneWorkspace,
     refreshSceneWorkspace,
     selectedObjectAddress,
-    setSelectedObjectAddress,
+    setSelectedObjectAddress: handleSetSelectedObjectAddress,
+    sceneTabs,
+    activeSceneTabIndex,
+    openTabForSceneObject,
+    handleCloseTab,
+    setActiveSceneTabIndex: handleSetActiveSceneTabIndex,
     loadedSceneGraph,
     sceneHierarchySearchQuery,
     setSceneHierarchySearchQuery,

@@ -33,6 +33,13 @@ import {
   type LoadedSceneSearchProjection,
 } from './loadedSceneNodes';
 
+export type SceneInspectorTab = {
+  objectAddress: string;
+  name: string;
+  sceneName?: string;
+  sceneKind?: string;
+};
+
 export type SceneMutationState = {
   operation: RuntimeSceneMutationOperation | null;
   loading: boolean;
@@ -60,6 +67,8 @@ type SceneWorkspaceStoreState = {
   inspectorLoadingByAddress: Record<string, boolean>;
   inspectorErrorByAddress: Record<string, string | null>;
   sceneMutationState: SceneMutationState;
+  sceneTabs: SceneInspectorTab[];
+  activeSceneTabIndex: number;
 };
 
 type SceneStateUpdater<T> = T | ((previous: T) => T);
@@ -82,7 +91,36 @@ type SceneWorkspaceStoreAction =
   | { type: 'applySummaryBatch'; summaries: RuntimeSceneNodeSummary[] }
   | { type: 'applySceneChildrenTaskState'; taskState: RuntimeSceneObjectChildrenTaskState }
   | { type: 'applyInspectorTaskState'; taskState: RuntimeSceneObjectInspectorTaskState }
-  | { type: 'bumpParentChildCount'; objectAddress: string; delta: number };
+  | { type: 'bumpParentChildCount'; objectAddress: string; delta: number }
+  | { type: 'setSceneTabs'; updater: SceneStateUpdater<SceneInspectorTab[]> }
+  | { type: 'setActiveSceneTabIndex'; updater: SceneStateUpdater<number> };
+
+const getSavedTabs = () => {
+  try {
+    const data = sessionStorage.getItem('mndp_scene_tabs');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+};
+
+const getSavedTabIndex = () => {
+  try {
+    const data = sessionStorage.getItem('mndp_scene_tab_index');
+    return data ? Number(data) : -1;
+  } catch {
+    return -1;
+  }
+};
+
+const getSavedSelected = () => {
+  try {
+    const data = sessionStorage.getItem('mndp_scene_selected_address');
+    return data ? data : null;
+  } catch {
+    return null;
+  }
+};
 
 const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
   sceneWorkspace: EMPTY_SCENE_WORKSPACE_STATE,
@@ -97,7 +135,18 @@ const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
   inspectorLoadingByAddress: {},
   inspectorErrorByAddress: {},
   sceneMutationState: EMPTY_MUTATION_STATE,
+  sceneTabs: [],
+  activeSceneTabIndex: -1,
 };
+
+function initSceneWorkspaceStoreState(): SceneWorkspaceStoreState {
+  return {
+    ...EMPTY_SCENE_WORKSPACE_STORE_STATE,
+    sceneTabs: getSavedTabs(),
+    activeSceneTabIndex: getSavedTabIndex(),
+    selectedObjectAddress: getSavedSelected(),
+  };
+}
 
 function resolveSceneStateUpdater<T>(previous: T, updater: SceneStateUpdater<T>) {
   if (typeof updater === 'function') {
@@ -154,19 +203,27 @@ function sceneWorkspaceStoreReducer(
 ): SceneWorkspaceStoreState {
   switch (action.type) {
     case 'reset':
-      return EMPTY_SCENE_WORKSPACE_STORE_STATE;
+      return {
+        ...EMPTY_SCENE_WORKSPACE_STORE_STATE,
+        selectedObjectAddress: state.selectedObjectAddress,
+        sceneTabs: state.sceneTabs,
+        activeSceneTabIndex: state.activeSceneTabIndex,
+      };
     case 'setSceneWorkspace':
       return replaceSceneStoreValue(
         state,
         'sceneWorkspace',
         resolveSceneStateUpdater(state.sceneWorkspace, action.updater),
       );
-    case 'setSelectedObjectAddress':
-      return replaceSceneStoreValue(
-        state,
-        'selectedObjectAddress',
-        resolveSceneStateUpdater(state.selectedObjectAddress, action.updater),
-      );
+    case 'setSelectedObjectAddress': {
+      const nextAddress = resolveSceneStateUpdater(state.selectedObjectAddress, action.updater);
+      if (nextAddress) {
+        sessionStorage.setItem('mndp_scene_selected_address', nextAddress);
+      } else {
+        sessionStorage.removeItem('mndp_scene_selected_address');
+      }
+      return replaceSceneStoreValue(state, 'selectedObjectAddress', nextAddress);
+    }
     case 'setSceneHierarchySearchQuery':
       return replaceSceneStoreValue(
         state,
@@ -227,6 +284,16 @@ function sceneWorkspaceStoreReducer(
         'sceneMutationState',
         resolveSceneStateUpdater(state.sceneMutationState, action.updater),
       );
+    case 'setSceneTabs': {
+      const nextTabs = resolveSceneStateUpdater(state.sceneTabs, action.updater);
+      sessionStorage.setItem('mndp_scene_tabs', JSON.stringify(nextTabs));
+      return replaceSceneStoreValue(state, 'sceneTabs', nextTabs);
+    }
+    case 'setActiveSceneTabIndex': {
+      const nextIndex = resolveSceneStateUpdater(state.activeSceneTabIndex, action.updater);
+      sessionStorage.setItem('mndp_scene_tab_index', String(nextIndex));
+      return replaceSceneStoreValue(state, 'activeSceneTabIndex', nextIndex);
+    }
     case 'applySummaryPatch': {
       const next = patchSummaryCollections(
         state.sceneWorkspace,
@@ -402,7 +469,11 @@ function sceneWorkspaceStoreReducer(
 }
 
 export function useSceneWorkspaceStore() {
-  const [state, dispatch] = useReducer(sceneWorkspaceStoreReducer, EMPTY_SCENE_WORKSPACE_STORE_STATE);
+  const [state, dispatch] = useReducer(
+    sceneWorkspaceStoreReducer, 
+    EMPTY_SCENE_WORKSPACE_STORE_STATE, 
+    initSceneWorkspaceStoreState
+  );
   const {
     sceneWorkspace,
     selectedObjectAddress,
@@ -416,6 +487,8 @@ export function useSceneWorkspaceStore() {
     inspectorLoadingByAddress,
     inspectorErrorByAddress,
     sceneMutationState,
+    sceneTabs,
+    activeSceneTabIndex,
   } = state;
 
   const processKeyRef = useRef<string | null>(null);
@@ -429,6 +502,11 @@ export function useSceneWorkspaceStore() {
   const activeInspectorTaskIdRef = useRef<number | null>(null);
   const inspectorPollTokenRef = useRef(0);
   const sceneMutationTaskCounterRef = useRef(0);
+  
+  const selectedObjectAddressRef = useRef(selectedObjectAddress);
+  useEffect(() => {
+    selectedObjectAddressRef.current = selectedObjectAddress;
+  }, [selectedObjectAddress]);
 
   useEffect(() => {
     childrenByParentRef.current = childrenByParent;
@@ -502,6 +580,14 @@ export function useSceneWorkspaceStore() {
 
   const setSceneMutationState = useCallback((updater: SceneStateUpdater<SceneMutationState>) => {
     dispatch({ type: 'setSceneMutationState', updater });
+  }, []);
+
+  const setSceneTabs = useCallback((updater: SceneStateUpdater<SceneInspectorTab[]>) => {
+    dispatch({ type: 'setSceneTabs', updater });
+  }, []);
+
+  const setActiveSceneTabIndex = useCallback((updater: SceneStateUpdater<number>) => {
+    dispatch({ type: 'setActiveSceneTabIndex', updater });
   }, []);
 
   const resetSceneState = useCallback(() => {
@@ -589,6 +675,10 @@ export function useSceneWorkspaceStore() {
     setInspectorErrorByAddress,
     sceneMutationState,
     setSceneMutationState,
+    sceneTabs,
+    setSceneTabs,
+    activeSceneTabIndex,
+    setActiveSceneTabIndex,
     processKeyRef,
     childrenByParentRef,
     childTaskByParentRef,
