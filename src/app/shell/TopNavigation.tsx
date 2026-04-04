@@ -1,5 +1,5 @@
 import { Boxes, LayoutDashboard, ScanSearch } from 'lucide-react';
-import type { WorkspacePresentation } from '@/kernel/workspace/derive';
+import type { WorkspacePresentation } from '@/domain/workspace/presentation';
 
 const NAV_ITEMS = [
   { key: 'inspector', label: 'Inspector', icon: ScanSearch },

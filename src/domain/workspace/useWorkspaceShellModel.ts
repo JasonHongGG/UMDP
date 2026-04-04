@@ -3,9 +3,9 @@ import type { ActivePage } from '@/domain/analysis/workspace-types';
 import type { ProcessSession } from '@/domain/analysis/contracts';
 import type { SystemContractVersions, WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 import {
-  createWorkspaceKernelState,
+  createWorkspaceViewState,
   createWorkspacePresentation,
-} from '@/kernel/workspace/derive';
+} from '@/domain/workspace/presentation';
 
 interface UseWorkspaceShellModelArgs {
   processSession: ProcessSession | null;
@@ -24,7 +24,7 @@ export function useWorkspaceShellModel({
 }: UseWorkspaceShellModelArgs) {
   const previousLifecycleRef = useRef<WorkspaceLifecycleState | null>(null);
 
-  const workspaceKernel = useMemo(() => createWorkspaceKernelState({
+  const workspaceView = useMemo(() => createWorkspaceViewState({
     processSession,
     contractVersions,
     workspaceLifecycle,
@@ -33,16 +33,14 @@ export function useWorkspaceShellModel({
     previousLifecycle: previousLifecycleRef.current,
   }), [activePage, contractVersions, processSession, workspaceLifecycle, workspaceTasks]);
 
-  const workspacePresentation = useMemo(() => {
-    return createWorkspacePresentation(workspaceKernel);
-  }, [workspaceKernel]);
+  const workspacePresentation = useMemo(() => createWorkspacePresentation(workspaceView), [workspaceView]);
 
   useEffect(() => {
     previousLifecycleRef.current = workspaceLifecycle;
   }, [workspaceLifecycle]);
 
   return {
-    workspaceKernel,
+    workspaceView,
     workspacePresentation,
   };
 }

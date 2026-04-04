@@ -12,12 +12,14 @@ import {
   WORKFLOW_SCHEMA_IDS,
 } from '@/domain/studio/contracts';
 import type { ConnectionChannel } from '@/domain/studio/contracts';
+import type { ResolvedMemberRuntimeValue } from '@/domain/studio/runtime';
 import { ConnectionDirection, IPort } from './types';
 import type { ClassBinding, ClassInfoCatalog, ClassInfoSelection } from '@/domain/studio/editor';
 import { addHexOffset, formatHexAddress, isExplicitHexAddress } from '@/core/addressFormat';
 import { coerceRuntimeFieldValue } from '@/core/runtimeValue';
 import { classifySchemaTypeSemantic } from './expression/semantic';
 export { arePortDataTypesCompatible, arePortTypesCompatible, arePortsCompatible } from './connectionPolicy';
+export type { ResolvedMemberRuntimeValue } from '@/domain/studio/runtime';
 
 export const WORKFLOW_DOCUMENT_VERSION = 1;
 
@@ -119,11 +121,6 @@ export function createEnvelope<TPayload>(schema: JsonSchemaReference, payload: T
     payload,
     meta: meta as Record<string, never> | undefined,
   };
-}
-
-export interface ResolvedMemberRuntimeValue {
-  address: string | null;
-  value: string | null;
 }
 
 function createFieldPayload(

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createLiteralExpressionSource } from '@/features/studio/core/expression';
 import { parseParameterNodeDocumentState } from './nodes';
+
+function createLiteralExpressionSource(raw: string, valueType: 'string' | 'number' | 'boolean' | 'address' | 'json' = 'string') {
+  return {
+    kind: 'literal' as const,
+    raw,
+    valueType,
+  };
+}
 
 describe('parseParameterNodeDocumentState', () => {
   it('keeps only symbols with explicit typed value metadata', () => {

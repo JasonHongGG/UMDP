@@ -2,13 +2,13 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import type { ProcessSession } from '@/domain/analysis/contracts';
 import type { ActivePage } from '@/domain/analysis/workspace-types';
 import type { SystemContractVersions, WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
-import type { WorkspaceKernelState, WorkspacePresentation } from '@/kernel/workspace/derive';
+import type { WorkspacePresentation, WorkspaceViewState } from '@/domain/workspace/presentation';
 
 export interface WorkspaceShellContextValue {
   processSession: ProcessSession | null;
   contractVersions: SystemContractVersions | null;
   workspaceLifecycle: WorkspaceLifecycleState;
-  workspaceKernel: WorkspaceKernelState;
+  workspaceView: WorkspaceViewState;
   workspacePresentation: WorkspacePresentation;
   activePage: ActivePage;
   setActivePage: (page: ActivePage) => void;

@@ -18,13 +18,14 @@ fn field(name: &'static str, value: impl ToString) -> DiagnosticsField {
     (name, value.to_string())
 }
 
-fn log_scene_command_result<T, F>(
+fn log_scene_command_result<T, E, F>(
     command: &'static str,
     started_at: Instant,
-    result: &Result<T, String>,
+    result: &Result<T, E>,
     base_fields: Vec<DiagnosticsField>,
     on_success: F,
 ) where
+    E: Display,
     F: FnOnce(&T) -> Vec<DiagnosticsField>,
 {
     logging::log_timed_result(
@@ -64,6 +65,7 @@ pub async fn start_scene_refresh(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -92,7 +94,7 @@ pub fn start_scene_object_children_analysis(
             ]
         },
     );
-    result
+    result.map_err(String::from)
 }
 
 #[tauri::command]
@@ -133,7 +135,7 @@ pub fn start_scene_object_inspector_analysis(
             ]
         },
     );
-    result
+    result.map_err(String::from)
 }
 
 #[tauri::command]
@@ -174,6 +176,7 @@ pub async fn get_scene_object_children(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -204,6 +207,7 @@ pub async fn get_scene_object_inspector(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -239,6 +243,7 @@ pub async fn create_scene_child(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -269,6 +274,7 @@ pub async fn create_scene_root(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -299,6 +305,7 @@ pub async fn duplicate_scene_object(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -328,6 +335,7 @@ pub async fn delete_scene_object(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -359,6 +367,7 @@ pub async fn rename_scene_object(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -390,6 +399,7 @@ pub async fn set_scene_object_tag(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -421,6 +431,7 @@ pub async fn set_scene_object_layer(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -456,6 +467,7 @@ pub async fn set_scene_object_hide_flags(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -500,6 +512,7 @@ pub async fn reparent_scene_object(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -538,6 +551,7 @@ pub async fn set_scene_object_active(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -573,6 +587,7 @@ pub async fn set_scene_object_transform(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -611,6 +626,7 @@ pub async fn set_scene_behaviour_enabled(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -649,6 +665,7 @@ pub async fn create_scene_component(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -679,6 +696,7 @@ pub async fn delete_scene_component(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -708,4 +726,5 @@ pub async fn load_scene_by_build_index(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }

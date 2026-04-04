@@ -23,15 +23,16 @@ pub fn attach_to_process(
     state: &AppState,
     pid: u32,
     name: String,
-) -> Result<ProcessSession, String> {
+) -> OperationResult<ProcessSession> {
     workspace_kernel::begin_attach(state);
 
     match session_service::attach_to_process(state, pid, name) {
         Ok(session) => {
-            let runtime_result =
-                finalize_attach_with_runtime_refresh(state, &session, |state, session| {
-                    runtime_access::refresh_runtime_session(state, session).map(|_| ())
-                });
+            let runtime_result = workspace_kernel::complete_attach_with_runtime_refresh(
+                state,
+                &session,
+                |state, session| runtime_access::refresh_runtime_session(state, session).map(|_| ()),
+            );
             if let Err(error) = &runtime_result {
                 logging::error(
                     "runtime",
@@ -50,37 +51,15 @@ pub fn attach_to_process(
         }
         Err(error) => {
             workspace_kernel::fail_attach(state, &error);
-            Err(error.into())
+            Err(error)
         }
     }
 }
 
-fn finalize_attach_with_runtime_refresh<F>(
-    state: &AppState,
-    session: &ProcessSession,
-    refresh_runtime_session: F,
-) -> OperationResult<()>
-where
-    F: FnOnce(&AppState, &ProcessSession) -> OperationResult<()>,
-{
-    // Reset the previous runtime/scene backing state before installing the new runtime session.
-    workspace_kernel::finish_attach(state, session.clone());
-    refresh_runtime_session(state, session)
-}
-
-pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> Result<AnalysisSnapshot, String> {
-    workspace_kernel::begin_snapshot_load(state);
-
-    match metadata_query_service::load_all_metadata(app, state) {
-        Ok(snapshot) => {
-            workspace_kernel::finish_snapshot_load(state);
-            Ok(snapshot)
-        }
-        Err(error) => {
-            workspace_kernel::fail_snapshot_load(state, &error);
-            Err(error.into())
-        }
-    }
+pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<AnalysisSnapshot> {
+    workspace_kernel::run_snapshot_load(state, |state| {
+        metadata_query_service::load_all_metadata(app, state)
+    })
 }
 
 pub fn get_workspace_lifecycle(state: &AppState) -> WorkspaceLifecycleState {
@@ -117,13 +96,17 @@ mod tests {
             .analysis()
             .set_process_session(session.clone());
 
-        let result = finalize_attach_with_runtime_refresh(&state, &session, |state, session| {
-            state
-                .runtime_kernel()
-                .session()
-                .set_session(Arc::new(RuntimeSession::for_tests(session.pid)));
-            Ok(())
-        });
+        let result = workspace_kernel::complete_attach_with_runtime_refresh(
+            &state,
+            &session,
+            |state, session| {
+                state
+                    .runtime_kernel()
+                    .session()
+                    .set_session(Arc::new(RuntimeSession::for_tests(session.pid)));
+                Ok(())
+            },
+        );
 
         assert!(result.is_ok());
 
@@ -146,6 +129,38 @@ mod tests {
                 .as_ref()
                 .map(|process| process.pid),
             Some(777)
+        );
+    }
+
+    #[test]
+    fn run_snapshot_load_preserves_attached_session_on_metadata_failure() {
+        let state = AppState::new();
+        let session = sample_session();
+
+        state
+            .workspace()
+            .analysis()
+            .set_process_session(session.clone());
+        workspace_kernel::finish_attach(&state, session.clone());
+
+        let result = workspace_kernel::run_snapshot_load(&state, |_| {
+            Err(crate::domain::operation::OperationError::metadata_unavailable())
+        });
+
+        assert!(result.is_err());
+
+        let lifecycle = workspace_kernel::current_lifecycle(&state);
+        assert_eq!(lifecycle.status, WorkspaceLifecycleStatus::AttachedWithoutSnapshot);
+        assert_eq!(
+            lifecycle
+                .process_session
+                .as_ref()
+                .map(|process| process.pid),
+            Some(777)
+        );
+        assert_eq!(
+            lifecycle.error_message.as_deref(),
+            Some("Metadata not loaded. Please attach to a process first.")
         );
     }
 }

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { TopBar } from './TopBar';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
-import { createWorkspaceKernelState, createWorkspacePresentation } from '@/kernel/workspace/derive';
+import { createWorkspacePresentation, createWorkspaceViewState } from '@/domain/workspace/presentation';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -56,7 +56,7 @@ describe('TopBar', () => {
         connected: true,
       },
     };
-    const workspacePresentation = createWorkspacePresentation(createWorkspaceKernelState({
+    const workspacePresentation = createWorkspacePresentation(createWorkspaceViewState({
       processSession: workspace.processSession,
       contractVersions: null,
       workspaceLifecycle: workspace,

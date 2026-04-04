@@ -6,20 +6,19 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorSnapshot, SceneWorkspaceState,
 };
 use crate::domain::operation::{OperationError, OperationResult};
+use crate::kernel::runtime::access::{ensure_runtime_session_ready, execute_runtime_operation};
 use crate::kernel::runtime::session::RuntimeSession;
 use crate::kernel::scene::query as native_scene;
-use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_runtime_session_ready, execute_runtime_operation, present,
-};
+use crate::kernel::workspace::access::ensure_attached_session;
 use crate::state::AppState;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::AppHandle;
 
-pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWorkspaceState, String> {
+pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> OperationResult<SceneWorkspaceState> {
     let started_at = Instant::now();
-    present(ensure_attached_session(state).map(|_| ()))?;
-    present(ensure_scene_query_runtime_ready(state))?;
+    ensure_attached_session(state).map(|_| ())?;
+    ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
     let workspace = state
         .scene()
@@ -35,7 +34,7 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWor
                 .workspace()
                 .set_error(session_key.as_deref(), error.to_string());
             emit_scene_workspace_state(app, &workspace);
-            return Err(error.into());
+            return Err(error);
         }
     };
 
@@ -66,14 +65,12 @@ pub fn get_scene_object_children(
     _app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> Result<RuntimeSceneChildrenSnapshot, String> {
+) -> OperationResult<RuntimeSceneChildrenSnapshot> {
     let started_at = Instant::now();
-    present(ensure_attached_session(state).map(|_| ()))?;
-    present(ensure_scene_query_runtime_ready(state))?;
+    ensure_attached_session(state).map(|_| ())?;
+    ensure_scene_query_runtime_ready(state)?;
 
-    let snapshot = present(execute_runtime_operation(state, || {
-        load_scene_children(state, object_address)
-    }))?;
+    let snapshot = execute_runtime_operation(state, || load_scene_children(state, object_address))?;
     log_scene_duration(
         "get_scene_object_children",
         started_at,
@@ -89,14 +86,12 @@ pub fn get_scene_object_inspector(
     _app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
+) -> OperationResult<RuntimeSceneObjectInspectorSnapshot> {
     let started_at = Instant::now();
-    present(ensure_attached_session(state).map(|_| ()))?;
-    present(ensure_scene_query_runtime_ready(state))?;
+    ensure_attached_session(state).map(|_| ())?;
+    ensure_scene_query_runtime_ready(state)?;
 
-    let snapshot = present(execute_runtime_operation(state, || {
-        load_scene_inspector(state, object_address)
-    }))?;
+    let snapshot = execute_runtime_operation(state, || load_scene_inspector(state, object_address))?;
     log_scene_duration(
         "get_scene_object_inspector",
         started_at,

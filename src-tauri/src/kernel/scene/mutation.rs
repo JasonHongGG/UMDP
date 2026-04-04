@@ -3,11 +3,11 @@ use super::events::emit_scene_workspace_state;
 use crate::domain::analysis_models::{
     RuntimeSceneMutationOperation, RuntimeSceneMutationResult, RuntimeSceneTransformUpdate,
 };
+use crate::domain::operation::OperationResult;
+use crate::kernel::runtime::access::{ensure_runtime_session_ready, execute_runtime_operation};
 use crate::kernel::runtime::session::RuntimeSession;
 use crate::kernel::scene::query as native_scene;
-use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, ensure_runtime_session_ready, execute_runtime_operation, present,
-};
+use crate::kernel::workspace::access::ensure_attached_session;
 use crate::state::AppState;
 use std::sync::Arc;
 use std::time::Instant;
@@ -18,7 +18,7 @@ pub fn create_scene_child(
     state: &AppState,
     parent_object_address: &str,
     name: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -35,7 +35,7 @@ pub fn create_scene_root(
     state: &AppState,
     scene_handle: i32,
     name: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -49,7 +49,7 @@ pub fn duplicate_scene_object(
     app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -63,7 +63,7 @@ pub fn delete_scene_object(
     app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -78,7 +78,7 @@ pub fn rename_scene_object(
     state: &AppState,
     object_address: &str,
     name: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -93,7 +93,7 @@ pub fn set_scene_object_tag(
     state: &AppState,
     object_address: &str,
     tag: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -108,7 +108,7 @@ pub fn set_scene_object_layer(
     state: &AppState,
     object_address: &str,
     layer: i32,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -123,7 +123,7 @@ pub fn set_scene_object_hide_flags(
     state: &AppState,
     object_address: &str,
     hide_flags: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -141,7 +141,7 @@ pub fn reparent_scene_object(
     object_address: &str,
     parent_object_address: Option<&str>,
     _parent_path: Option<&str>,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -158,7 +158,7 @@ pub fn set_scene_object_active(
     state: &AppState,
     object_address: &str,
     active_self: bool,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -173,7 +173,7 @@ pub fn set_scene_object_transform(
     state: &AppState,
     object_address: &str,
     transform_update: &RuntimeSceneTransformUpdate,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -190,7 +190,7 @@ pub fn set_scene_behaviour_enabled(
     state: &AppState,
     component_address: &str,
     enabled: bool,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -207,7 +207,7 @@ pub fn create_scene_component(
     state: &AppState,
     object_address: &str,
     component_type_name: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -223,7 +223,7 @@ pub fn delete_scene_component(
     app: &AppHandle,
     state: &AppState,
     component_address: &str,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -237,7 +237,7 @@ pub fn load_scene_by_build_index(
     app: &AppHandle,
     state: &AppState,
     build_index: i32,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> OperationResult<RuntimeSceneMutationResult> {
     perform_scene_mutation(
         app,
         state,
@@ -253,15 +253,15 @@ fn perform_scene_mutation<F>(
     label: &str,
     details: String,
     loader: F,
-) -> Result<RuntimeSceneMutationResult, String>
+) -> OperationResult<RuntimeSceneMutationResult>
 where
     F: FnOnce(&Arc<RuntimeSession>) -> Result<RuntimeSceneMutationResult, String>,
 {
     let started_at = Instant::now();
-    present(ensure_attached_session(state).map(|_| ()))?;
+    ensure_attached_session(state).map(|_| ())?;
 
-    let runtime_session = ensure_runtime_session_ready(state).map_err(String::from)?;
-    let snapshot = present(execute_runtime_operation(state, || loader(&runtime_session)))?;
+    let runtime_session = ensure_runtime_session_ready(state)?;
+    let snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     invalidate_scene_children_after_mutation(state, &snapshot);
     let session_key = current_scene_session_key(state);

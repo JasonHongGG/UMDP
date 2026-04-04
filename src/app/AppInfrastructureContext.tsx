@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
 import type { SceneGateway } from '@/domain/scene/gateway';
+import type { WorkspaceAttachIntentChannel } from '@/domain/workspace/ports/WorkspaceAttachIntentChannel';
 import { createTauriAnalysisRepository } from '@/infrastructure/tauri/TauriAnalysisRepository';
 import { createTauriSceneGateway } from '@/infrastructure/tauri/TauriSceneGateway';
+import { createTauriWorkspaceAttachIntentChannel } from '@/infrastructure/tauri/TauriWorkspaceAttachIntentChannel';
 
 interface AppInfrastructureContextValue {
   analysisRepository: AnalysisRepository;
   sceneGateway: SceneGateway;
+  workspaceAttachIntentChannel: WorkspaceAttachIntentChannel;
 }
 
 const AppInfrastructureContext = createContext<AppInfrastructureContextValue | null>(null);
@@ -15,6 +18,7 @@ export function AppInfrastructureProvider({ children }: { children: React.ReactN
   const value = useMemo<AppInfrastructureContextValue>(() => ({
     analysisRepository: createTauriAnalysisRepository(),
     sceneGateway: createTauriSceneGateway(),
+    workspaceAttachIntentChannel: createTauriWorkspaceAttachIntentChannel(),
   }), []);
 
   return (

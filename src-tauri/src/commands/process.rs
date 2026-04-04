@@ -21,7 +21,7 @@ pub fn attach_to_process(
     pid: u32,
     name: String,
 ) -> Result<ProcessSession, String> {
-    workspace_application::attach_to_process(&app, &state, pid, name)
+    workspace_application::attach_to_process(&app, &state, pid, name).map_err(String::from)
 }
 
 #[tauri::command]

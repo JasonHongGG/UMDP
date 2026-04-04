@@ -44,6 +44,7 @@ pub async fn load_all_metadata(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -59,6 +60,7 @@ pub async fn get_runtime_static_fields(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }
 
 #[tauri::command]
@@ -80,4 +82,5 @@ pub async fn get_runtime_instance_fields(
     })
     .await
     .map_err(join_error_message)?
+    .map_err(String::from)
 }

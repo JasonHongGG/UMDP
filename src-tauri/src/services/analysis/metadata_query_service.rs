@@ -3,7 +3,7 @@ use crate::domain::operation::{OperationError, OperationErrorCode, OperationResu
 use crate::infrastructure::clock::current_timestamp;
 use crate::infrastructure::logging;
 use crate::infrastructure::tooling::managed_metadata_reader;
-use crate::services::analysis::runtime_session_service::ensure_attached_session;
+use crate::kernel::workspace::access::ensure_attached_session;
 use crate::state::AppState;
 use std::time::Instant;
 use tauri::AppHandle;

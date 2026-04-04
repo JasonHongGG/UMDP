@@ -1,4 +1,3 @@
-import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import type {
   AnalysisSnapshot,
   ProcessSession,
@@ -7,7 +6,7 @@ import type {
 import type { SystemContractVersions } from '@/shared/contracts';
 import type { ClassInfoCatalog, PendingClassNodeRequest, StudioClassCatalogEntry } from '@/domain/studio/editor';
 import type { StableId } from '../contracts/shared-identity';
-import type { ResolvedMemberRuntimeValue } from '@/features/studio/core/contracts';
+import type { ResolvedMemberRuntimeValue } from '@/domain/studio/runtime';
 import type { AnalysisClassInfo, AnalysisClassSummary, AnalysisImageInfo } from './view-models';
 
 export interface AnalysisWorkspaceContextValue {
@@ -22,7 +21,6 @@ export interface AnalysisWorkspaceContextValue {
   studioClassCatalogEntries: StudioClassCatalogEntry[];
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
-  studioRuntimeData: StudioRuntimeDataState;
   pendingClassNode: PendingClassNodeRequest | null;
   clearPendingClassNode: () => void;
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;

@@ -1,12 +1,11 @@
 
 import { Suspense, lazy } from 'react';
-import { AppInfrastructureProvider } from '@/app/AppInfrastructureContext';
+import { AppInfrastructureProvider, useAppInfrastructure } from '@/app/AppInfrastructureContext';
 import { MainLayout } from '@/app/shell/MainLayout';
 import { TopBar } from '@/app/shell/TopBar';
 import { AnalysisWorkspaceProvider } from './domain/analysis/AnalysisWorkspaceContext';
 import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { StatusBar } from './app/shell/StatusBar';
-import { openProcessSelectorWindow } from './infrastructure/tauri/TauriWorkspaceGateway';
 import { SceneWorkspaceProvider } from '@/features/scene/page/SceneWorkspaceContext';
 import './styles.css';
 
@@ -33,6 +32,7 @@ export default function App() {
 }
 
 function AppContent() {
+  const { workspaceAttachIntentChannel } = useAppInfrastructure();
   const {
     workspaceLifecycle,
     workspacePresentation,
@@ -45,7 +45,9 @@ function AppContent() {
       <TopBar
         workspace={workspaceLifecycle}
         workspacePresentation={workspacePresentation}
-        onOpenSelector={openProcessSelectorWindow}
+        onOpenSelector={() => {
+          workspaceAttachIntentChannel.openProcessSelector().catch(() => undefined);
+        }}
         activePage={activePage}
         onPageChange={setActivePage}
       />

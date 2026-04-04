@@ -7,9 +7,9 @@ use super::refresh::{
 use crate::domain::analysis_models::{
     RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorTaskState,
 };
-use crate::services::analysis::runtime_session_service::{
-    ensure_attached_session, execute_runtime_operation, present,
-};
+use crate::domain::operation::OperationResult;
+use crate::kernel::runtime::access::execute_runtime_operation;
+use crate::kernel::workspace::access::ensure_attached_session;
 use crate::state::AppState;
 use std::time::Instant;
 use tauri::{AppHandle, Manager};
@@ -22,10 +22,10 @@ pub fn start_scene_object_children_analysis(
     app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
+) -> OperationResult<RuntimeSceneObjectChildrenTaskState> {
     let started_at = Instant::now();
-    present(ensure_attached_session(state).map(|_| ()))?;
-    present(ensure_scene_query_runtime_ready(state))?;
+    ensure_attached_session(state).map(|_| ())?;
+    ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
 
     let task_start = state
@@ -90,10 +90,10 @@ pub fn start_scene_object_inspector_analysis(
     app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
+) -> OperationResult<RuntimeSceneObjectInspectorTaskState> {
     let started_at = Instant::now();
-    present(ensure_attached_session(state).map(|_| ()))?;
-    present(ensure_scene_query_runtime_ready(state))?;
+    ensure_attached_session(state).map(|_| ())?;
+    ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
 
     let task_start = state

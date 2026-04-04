@@ -1,4 +1,4 @@
-import type { WorkspacePageDetail } from '@/kernel/workspace/derive';
+import type { WorkspacePageDetail } from '@/domain/workspace/presentation';
 
 const toneClassMap = {
   ready: 'text-cyan-300/80',

@@ -173,6 +173,18 @@ describe('frontend architecture boundaries', () => {
     expect(violations).toEqual([]);
   });
 
+  it('does not allow domain modules to import feature internals', () => {
+    const violations = listViolations((relativePath, contents) => {
+      if (!relativePath.startsWith('domain/')) {
+        return false;
+      }
+
+      return contents.includes('@/features/') || /from\s+['"].*features\//.test(contents);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it('does not allow app shell to import feature internals', () => {
     const violations = listViolations((relativePath, contents) => {
       if (!relativePath.startsWith(APP_SHELL_PREFIX)) {
@@ -219,6 +231,15 @@ describe('frontend architecture boundaries', () => {
     expect(contents.includes('repository.getWorkspaceLifecycle')).toBe(false);
     expect(contents.includes("window.addEventListener('focus'")).toBe(false);
     expect(contents.includes("document.addEventListener('visibilitychange'")).toBe(false);
+    expect(/from\s+['"].*infrastructure\/tauri\//.test(contents)).toBe(false);
+  });
+
+  it('does not allow deprecated frontend workspace kernel imports', () => {
+    const violations = listViolations((_relativePath, contents) => {
+      return contents.includes('@/kernel/workspace/') || /from\s+['"].*kernel\/workspace\//.test(contents);
+    });
+
+    expect(violations).toEqual([]);
   });
 
   it('keeps studio core isolated under the feature slice', () => {

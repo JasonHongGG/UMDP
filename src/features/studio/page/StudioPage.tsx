@@ -7,11 +7,13 @@ import type { PendingClassNodeRequest } from '@/domain/studio/editor';
 import { CanvasCore } from '@/features/studio/components/canvas/CanvasCore';
 import { StudioModalLayer } from '@/features/studio/components/StudioModalLayer';
 import { StudioToolbar } from '@/features/studio/components/StudioToolbar';
+import { useStudioRuntimeDataModel } from '@/features/studio/application/useStudioRuntimeDataModel';
 import { useStudioPageController } from './useStudioPageController';
 import { WorkspaceGate } from '@/shared/ui/WorkspaceGate';
 
 export function StudioPage() {
-  const { studioRuntimeData, pendingClassNode, clearPendingClassNode } = useAnalysisWorkspace();
+  const studioRuntimeData = useStudioRuntimeDataModel();
+  const { pendingClassNode, clearPendingClassNode } = useAnalysisWorkspace();
   const { workspaceLifecycle, workspacePresentation } = useWorkspaceShellState();
   const detail = workspacePresentation.pages.studio;
 

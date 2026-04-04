@@ -7,14 +7,14 @@ import {
   type WorkspacePageReadiness,
   type WorkspaceResetNotice,
   type WorkspaceSignalTone,
-} from './pageReadiness';
+} from '@/domain/workspace/pageReadiness';
 
 export interface WorkspacePageDetail extends WorkspacePageReadiness {
   blocked: boolean;
   badge: string;
 }
 
-export interface WorkspaceKernelState {
+export interface WorkspaceViewState {
   processSession: ProcessSession | null;
   contractVersions: SystemContractVersions | null;
   workspaceLifecycle: WorkspaceLifecycleState;
@@ -37,7 +37,7 @@ export interface WorkspacePresentation {
   pages: Record<ActivePage, WorkspacePageDetail>;
 }
 
-interface CreateWorkspaceKernelStateArgs {
+interface CreateWorkspaceViewStateArgs {
   processSession: ProcessSession | null;
   contractVersions: SystemContractVersions | null;
   workspaceLifecycle: WorkspaceLifecycleState;
@@ -46,14 +46,14 @@ interface CreateWorkspaceKernelStateArgs {
   previousLifecycle: WorkspaceLifecycleState | null;
 }
 
-export function createWorkspaceKernelState({
+export function createWorkspaceViewState({
   processSession,
   contractVersions,
   workspaceLifecycle,
   activePage,
   workspaceTasks,
   previousLifecycle,
-}: CreateWorkspaceKernelStateArgs): WorkspaceKernelState {
+}: CreateWorkspaceViewStateArgs): WorkspaceViewState {
   const pageReadiness = createWorkspacePageReadinessMap(workspaceLifecycle);
   const previousSessionKey = previousLifecycle?.runtimeSession.sessionKey ?? null;
 
@@ -69,26 +69,26 @@ export function createWorkspaceKernelState({
   };
 }
 
-export function createWorkspacePresentation(kernel: WorkspaceKernelState): WorkspacePresentation {
-  const { workspaceLifecycle } = kernel;
+export function createWorkspacePresentation(view: WorkspaceViewState): WorkspacePresentation {
+  const { workspaceLifecycle } = view;
   const lifecycleTone = getWorkspaceLifecycleTone(workspaceLifecycle);
   const pages = {
-    inspector: describePageDetail('inspector', kernel.pageReadiness.inspector),
-    studio: describePageDetail('studio', kernel.pageReadiness.studio),
-    scene: describePageDetail('scene', kernel.pageReadiness.scene),
+    inspector: describePageDetail('inspector', view.pageReadiness.inspector),
+    studio: describePageDetail('studio', view.pageReadiness.studio),
+    scene: describePageDetail('scene', view.pageReadiness.scene),
   };
 
   return {
     lifecycleLabel: getWorkspaceLifecycleLabel(workspaceLifecycle),
     lifecycleTone,
     runtimeLabel: formatRuntimeSessionLabel(workspaceLifecycle),
-    runtimeTone: workspaceLifecycle.runtimeSession.connected ? 'ready' : kernel.pageReadiness[kernel.activePage].tone,
+    runtimeTone: workspaceLifecycle.runtimeSession.connected ? 'ready' : view.pageReadiness[view.activePage].tone,
     runtimeFlavorLabel: workspaceLifecycle.processSession ? `${workspaceLifecycle.runtime} Runtime` : null,
     processLabel: workspaceLifecycle.processSession
       ? `${workspaceLifecycle.processSession.processName} (${workspaceLifecycle.processSession.pid})`
       : null,
-    detailMessage: resolveWorkspaceDetailMessage(kernel),
-    notice: kernel.workspaceResetNotice,
+    detailMessage: resolveWorkspaceDetailMessage(view),
+    notice: view.workspaceResetNotice,
     pages,
   };
 }
@@ -121,27 +121,27 @@ function describePageBadge(page: ActivePage, readiness: WorkspacePageReadiness) 
   return 'ready';
 }
 
-function resolveWorkspaceDetailMessage(kernel: WorkspaceKernelState) {
-  if (kernel.activeTask?.progress?.message) {
-    return kernel.activeTask.progress.total != null
-      ? `${kernel.activeTask.progress.message} (${kernel.activeTask.progress.completed}/${kernel.activeTask.progress.total})`
-      : kernel.activeTask.progress.message;
+function resolveWorkspaceDetailMessage(view: WorkspaceViewState) {
+  if (view.activeTask?.progress?.message) {
+    return view.activeTask.progress.total != null
+      ? `${view.activeTask.progress.message} (${view.activeTask.progress.completed}/${view.activeTask.progress.total})`
+      : view.activeTask.progress.message;
   }
 
-  if (kernel.workspaceResetNotice?.message) {
-    return kernel.workspaceResetNotice.message;
+  if (view.workspaceResetNotice?.message) {
+    return view.workspaceResetNotice.message;
   }
 
-  if (kernel.workspaceLifecycle.runtimeSession.lastError) {
-    return kernel.workspaceLifecycle.runtimeSession.lastError;
+  if (view.workspaceLifecycle.runtimeSession.lastError) {
+    return view.workspaceLifecycle.runtimeSession.lastError;
   }
 
-  if (kernel.workspaceLifecycle.errorMessage) {
-    return kernel.workspaceLifecycle.errorMessage;
+  if (view.workspaceLifecycle.errorMessage) {
+    return view.workspaceLifecycle.errorMessage;
   }
 
-  if (kernel.workspaceLifecycle.processSession) {
-    return `${kernel.workspaceLifecycle.processSession.processName} (${kernel.workspaceLifecycle.processSession.pid})`;
+  if (view.workspaceLifecycle.processSession) {
+    return `${view.workspaceLifecycle.processSession.processName} (${view.workspaceLifecycle.processSession.pid})`;
   }
 
   return 'No process attached';

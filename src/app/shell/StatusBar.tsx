@@ -1,5 +1,5 @@
 import { Binary, Database } from 'lucide-react';
-import type { WorkspacePresentation } from '@/kernel/workspace/derive';
+import type { WorkspacePresentation } from '@/domain/workspace/presentation';
 
 interface StatusBarProps {
   presentation: WorkspacePresentation;

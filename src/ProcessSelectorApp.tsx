@@ -3,10 +3,10 @@ import { Search } from 'lucide-react';
 import type { ProcessInfo } from './types';
 import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import {
-  emitProcessSelected,
+  emitWorkspaceAttachIntent,
   fetchSystemProcesses,
-  onRefreshProcesses,
-} from './infrastructure/tauri/TauriWorkspaceGateway';
+  onWorkspaceProcessCatalogRefresh,
+} from './infrastructure/tauri/TauriWorkspaceAttachIntentChannel';
 import {
   hideCurrentWindow,
   onCurrentWindowFocusChanged,
@@ -60,7 +60,7 @@ export default function ProcessSelectorApp() {
       }).catch(() => undefined);
     }, 300);
 
-    const refreshPromise = onRefreshProcesses(() => {
+    const refreshPromise = onWorkspaceProcessCatalogRefresh(() => {
       load().catch((error) => processSelectorDiagnostics.error('Process list refresh failed.', {
         error,
       }));
@@ -80,7 +80,7 @@ export default function ProcessSelectorApp() {
   }, [selectedIndex]);
 
   const selectProcess = async (process: ProcessInfo) => {
-    await emitProcessSelected(process);
+    await emitWorkspaceAttachIntent(process);
     await hideCurrentWindow();
     setSearch('');
   };

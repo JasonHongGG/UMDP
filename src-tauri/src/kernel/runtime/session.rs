@@ -1,3 +1,4 @@
+use crate::domain::operation::{OperationError, OperationResult};
 use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
 use crate::infrastructure::native::il2cpp_runtime_api::Il2CppRuntimeApi;
 use crate::infrastructure::native::memory::RemoteMemory;
@@ -39,6 +40,11 @@ impl RuntimeSession {
 
     pub fn runtime_api(&self) -> Option<&dyn RuntimeApi> {
         self.runtime_api.as_deref()
+    }
+
+    pub fn require_runtime_api(&self) -> OperationResult<&dyn RuntimeApi> {
+        self.runtime_api()
+            .ok_or_else(OperationError::runtime_api_unavailable)
     }
 
     #[cfg(test)]

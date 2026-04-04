@@ -16,7 +16,8 @@ import { AnalysisWorkspaceProvider, useAnalysisWorkspace } from './AnalysisWorks
 const mocks = vi.hoisted(() => ({
   createTauriAnalysisRepository: vi.fn(),
   createTauriSceneGateway: vi.fn(),
-  disposeProcessSelected: vi.fn(),
+  createTauriWorkspaceAttachIntentChannel: vi.fn(),
+  disposeAttachIntent: vi.fn(),
 }));
 
 let processSelectedHandler: ((process: ProcessInfo) => void | Promise<void>) | null = null;
@@ -29,11 +30,8 @@ vi.mock('@/infrastructure/tauri/TauriSceneGateway', () => ({
   createTauriSceneGateway: mocks.createTauriSceneGateway,
 }));
 
-vi.mock('@/infrastructure/tauri/TauriWorkspaceGateway', () => ({
-  onProcessSelected: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
-    processSelectedHandler = handler;
-    return mocks.disposeProcessSelected;
-  }),
+vi.mock('@/infrastructure/tauri/TauriWorkspaceAttachIntentChannel', () => ({
+  createTauriWorkspaceAttachIntentChannel: mocks.createTauriWorkspaceAttachIntentChannel,
 }));
 
 interface WorkflowSnapshot {
@@ -201,7 +199,15 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     setWorkspaceTasks = null;
     mocks.createTauriAnalysisRepository.mockReset();
     mocks.createTauriSceneGateway.mockReset();
-    mocks.disposeProcessSelected.mockReset();
+    mocks.createTauriWorkspaceAttachIntentChannel.mockReset();
+    mocks.disposeAttachIntent.mockReset();
+    mocks.createTauriWorkspaceAttachIntentChannel.mockReturnValue({
+      openProcessSelector: vi.fn().mockResolvedValue(undefined),
+      onAttachIntent: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
+        processSelectedHandler = handler;
+        return mocks.disposeAttachIntent;
+      }),
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);

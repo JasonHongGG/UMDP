@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createDiagnosticsLogger } from '@/shared/diagnostics';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '../contracts';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
-import { onProcessSelected } from '@/infrastructure/tauri/TauriWorkspaceGateway';
+import type { WorkspaceAttachIntentChannel } from '@/domain/workspace/ports/WorkspaceAttachIntentChannel';
 import { useWorkspaceLifecycleState } from './useWorkspaceLifecycleState';
 import { useWorkspaceLifecycleAutoRefresh } from './useWorkspaceLifecycleAutoRefresh';
 
@@ -33,9 +33,10 @@ function logPerf(label: string, startedAt: number, details?: Record<string, unkn
 interface UseAnalysisSessionStateOptions {
   repository: AnalysisRepository;
   onResetWorkspace: () => void;
+  attachIntentChannel: WorkspaceAttachIntentChannel;
 }
 
-export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAnalysisSessionStateOptions) {
+export function useAnalysisSessionState({ repository, onResetWorkspace, attachIntentChannel }: UseAnalysisSessionStateOptions) {
   const [processSession, setProcessSession] = useState<ProcessSession | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
@@ -101,7 +102,7 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
   }, [applyWorkspaceLifecycleFallback, refreshWorkspaceLifecycle, repository]);
 
   useEffect(() => {
-    const unlisten = onProcessSelected(async (process) => {
+    const subscription = attachIntentChannel.onAttachIntent(async (process) => {
       const startedAt = nowMs();
       setAttachError(null);
       setLoadingImages(true);
@@ -161,9 +162,9 @@ export function useAnalysisSessionState({ repository, onResetWorkspace }: UseAna
     });
 
     return () => {
-      unlisten.then((dispose) => dispose());
+      subscription.then((dispose) => dispose()).catch(() => undefined);
     };
-  }, [applyWorkspaceLifecycleFallback, fetchMetadata, onResetWorkspace, refreshWorkspaceLifecycle, repository]);
+  }, [applyWorkspaceLifecycleFallback, attachIntentChannel, fetchMetadata, onResetWorkspace, refreshWorkspaceLifecycle, repository]);
 
   return {
     processSession,

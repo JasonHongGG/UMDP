@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { StatusBar } from './StatusBar';
 import { EMPTY_WORKSPACE_LIFECYCLE } from './workspaceLifecycle';
-import { createWorkspaceKernelState, createWorkspacePresentation } from '@/kernel/workspace/derive';
+import { createWorkspacePresentation, createWorkspaceViewState } from '@/domain/workspace/presentation';
 import type { WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 
 function createPresentation(workspace: WorkspaceLifecycleState, tasks: WorkspaceTaskSnapshot[] = []) {
-  return createWorkspacePresentation(createWorkspaceKernelState({
+  return createWorkspacePresentation(createWorkspaceViewState({
     processSession: workspace.processSession,
     contractVersions: null,
     workspaceLifecycle: workspace,
@@ -169,7 +169,7 @@ describe('StatusBar', () => {
 
     await act(async () => {
       root.render(createElement(StatusBar, {
-        presentation: createWorkspacePresentation(createWorkspaceKernelState({
+        presentation: createWorkspacePresentation(createWorkspaceViewState({
           processSession: workspace.processSession,
           contractVersions: null,
           workspaceLifecycle: workspace,

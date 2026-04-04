@@ -134,12 +134,14 @@ mod tests {
         assert!(fixture.workspace.resource_state.is_retaining_snapshot);
         assert_eq!(fixture.children_task.task_id, 11);
         assert_eq!(fixture.children_task.resource_revision, 9);
+        assert_eq!(fixture.children_task.session_key.as_deref(), Some("session-1"));
         assert_eq!(fixture.children_task.status, "loading");
         assert_eq!(fixture.children_task.resource_state.resource_kind, "children");
         assert_eq!(fixture.children_task.resource_state.freshness, "refreshing");
         assert_eq!(fixture.children_task.resource_state.session_key.as_deref(), Some("session-1"));
         assert_eq!(fixture.inspector_task.task_id, 12);
         assert_eq!(fixture.inspector_task.resource_revision, 10);
+        assert_eq!(fixture.inspector_task.session_key.as_deref(), Some("session-1"));
         assert_eq!(fixture.inspector_task.status, "components-loading");
         assert_eq!(fixture.inspector_task.resource_state.resource_kind, "inspector");
         assert_eq!(fixture.inspector_task.resource_state.freshness, "refreshing");

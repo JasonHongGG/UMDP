@@ -50,16 +50,85 @@ describe('backend architecture boundaries', () => {
       'common.rs',
       'events.rs',
       'mutation.rs',
-      'query.rs',
       'refresh.rs',
       'tasks.rs',
+    ];
+
+    const requiredSceneQueryModules = [
+      'mod.rs',
+      'entrypoints.rs',
+      'catalog.rs',
+      'mutation.rs',
+      'runtime.rs',
+      'projection.rs',
+      'helpers.rs',
+      'tests.rs',
     ];
 
     const missing = requiredSceneModules.filter((fileName) => {
       return !existsSync(join(RUST_SRC_ROOT, 'kernel', 'scene', fileName));
     });
 
+    const missingQueryModules = requiredSceneQueryModules.filter((fileName) => {
+      return !existsSync(join(RUST_SRC_ROOT, 'kernel', 'scene', 'query', fileName));
+    });
+
     expect(missing).toEqual([]);
+    expect(missingQueryModules).toEqual([]);
+    expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'scene', 'query.rs'))).toBe(false);
+  });
+
+  it('keeps runtime and metadata access owned by kernel access modules', () => {
+    expect(existsSync(join(RUST_SRC_ROOT, 'services', 'analysis', 'runtime_session_service.rs'))).toBe(false);
+    expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'metadata', 'mod.rs'))).toBe(true);
+    expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'metadata', 'access.rs'))).toBe(true);
+
+    const kernelMod = readRustFile('kernel', 'mod.rs');
+    const workspaceMod = readRustFile('kernel', 'workspace', 'mod.rs');
+
+    expect(kernelMod).toContain('pub mod metadata;');
+    expect(workspaceMod).toContain('pub mod access;');
+  });
+
+  it('keeps runtime invoke, field-set, and overlay orchestration out of analysis services', () => {
+    const removedServiceFiles = [
+      'services/analysis/invocation_service.rs',
+      'services/analysis/field_setting_service.rs',
+      'services/analysis/runtime_overlay_service.rs',
+    ];
+
+    const missing = removedServiceFiles.filter((relativePath) => existsSync(join(RUST_SRC_ROOT, ...relativePath.split('/'))));
+
+    expect(missing).toEqual([]);
+
+    const runtimeExecution = readRustFile('application', 'runtime_execution.rs');
+    const metadata = readRustFile('application', 'metadata.rs');
+
+    expect(runtimeExecution).toContain('crate::kernel::runtime::invoke as native_invoke');
+    expect(runtimeExecution).toContain('crate::kernel::runtime::field_set as native_field_set');
+    expect(metadata).toContain('crate::kernel::runtime::overlay as native_overlay');
+  });
+
+  it('keeps application workspace, metadata, and scene errors typed until the command boundary', () => {
+    const files = ['application/workspace.rs', 'application/metadata.rs', 'application/scene.rs'];
+
+    const violations = files.filter((relativePath) => {
+      const contents = readRustFile(...relativePath.split('/'));
+      return /Result<[^\n>]+,\s*String>/.test(contents);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps attach and snapshot workflow transitions owned by kernel workspace helpers', () => {
+    const contents = readRustFile('application', 'workspace.rs');
+    const productionSection = contents.split('#[cfg(test)]')[0] ?? contents;
+
+    expect(productionSection).toContain('workspace_kernel::complete_attach_with_runtime_refresh');
+    expect(productionSection).toContain('workspace_kernel::run_snapshot_load');
+    expect(productionSection).not.toContain('workspace_kernel::finish_attach(');
+    expect(productionSection).not.toContain('workspace_kernel::begin_snapshot_load(');
+    expect(productionSection).not.toContain('workspace_kernel::fail_snapshot_load(');
   });
 
   it('does not allow legacy analysis contract aliases in rust domain models', () => {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import type { AnalysisRepository } from '../repository/AnalysisRepository';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession, SceneWorkspaceState } from '../contracts';
+import type { WorkspaceAttachIntentChannel } from '@/domain/workspace/ports/WorkspaceAttachIntentChannel';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
@@ -13,7 +14,7 @@ import { useAnalysisSessionState } from './useAnalysisSessionState';
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let processSelectedHandler: ((process: ProcessInfo) => void | Promise<void>) | null = null;
-const disposeProcessSelected = vi.fn();
+const disposeAttachIntent = vi.fn();
 
 const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   resourceRevision: 0,
@@ -45,13 +46,6 @@ const EMPTY_SCENE_MUTATION_RESULT = {
   activeSelf: null,
   transform: null,
 };
-
-vi.mock('@/infrastructure/tauri/TauriWorkspaceGateway', () => ({
-  onProcessSelected: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
-    processSelectedHandler = handler;
-    return disposeProcessSelected;
-  }),
-}));
 
 interface HookSnapshot {
   processSession: ProcessSession | null;
@@ -103,8 +97,26 @@ function createRepository(overrides: Partial<AnalysisRepository> = {}): Analysis
   } as AnalysisRepository;
 }
 
-function HookHarness({ repository, onResetWorkspace }: { repository: AnalysisRepository; onResetWorkspace: () => void }) {
-  const state = useAnalysisSessionState({ repository, onResetWorkspace });
+function createAttachIntentChannel(): WorkspaceAttachIntentChannel {
+  return {
+    openProcessSelector: vi.fn().mockResolvedValue(undefined),
+    onAttachIntent: vi.fn(async (handler: (process: ProcessInfo) => void | Promise<void>) => {
+      processSelectedHandler = handler;
+      return disposeAttachIntent;
+    }),
+  };
+}
+
+function HookHarness({
+  repository,
+  onResetWorkspace,
+  attachIntentChannel,
+}: {
+  repository: AnalysisRepository;
+  onResetWorkspace: () => void;
+  attachIntentChannel: WorkspaceAttachIntentChannel;
+}) {
+  const state = useAnalysisSessionState({ repository, onResetWorkspace, attachIntentChannel });
 
   latestState = {
     processSession: state.processSession,
@@ -130,7 +142,7 @@ describe('useAnalysisSessionState', () => {
   beforeEach(() => {
     processSelectedHandler = null;
     latestState = null;
-    disposeProcessSelected.mockReset();
+    disposeAttachIntent.mockReset();
     vi.useRealTimers();
     resetDiagnosticsStateForTests();
     configureDiagnostics({
@@ -193,9 +205,10 @@ describe('useAnalysisSessionState', () => {
       })),
     });
     const onResetWorkspace = vi.fn();
+    const attachIntentChannel = createAttachIntentChannel();
 
     await act(async () => {
-      root.render(createElement(HookHarness, { repository, onResetWorkspace }));
+      root.render(createElement(HookHarness, { repository, onResetWorkspace, attachIntentChannel }));
     });
     await flushEffects();
 
@@ -229,9 +242,10 @@ describe('useAnalysisSessionState', () => {
       getWorkspaceLifecycle: vi.fn().mockRejectedValue(new Error('workspace unavailable')),
     });
     const onResetWorkspace = vi.fn();
+    const attachIntentChannel = createAttachIntentChannel();
 
     await act(async () => {
-      root.render(createElement(HookHarness, { repository, onResetWorkspace }));
+      root.render(createElement(HookHarness, { repository, onResetWorkspace, attachIntentChannel }));
     });
     await flushEffects();
 
@@ -284,9 +298,10 @@ describe('useAnalysisSessionState', () => {
       loadAllMetadata: vi.fn().mockRejectedValue(new Error('metadata reader crashed')),
       getWorkspaceLifecycle: vi.fn().mockRejectedValue(new Error('workspace unavailable')),
     });
+    const attachIntentChannel = createAttachIntentChannel();
 
     await act(async () => {
-      root.render(createElement(HookHarness, { repository, onResetWorkspace: vi.fn() }));
+      root.render(createElement(HookHarness, { repository, onResetWorkspace: vi.fn(), attachIntentChannel }));
     });
     await flushEffects();
 
@@ -382,9 +397,10 @@ describe('useAnalysisSessionState', () => {
           },
         })),
     });
+    const attachIntentChannel = createAttachIntentChannel();
 
     await act(async () => {
-      root.render(createElement(HookHarness, { repository, onResetWorkspace: vi.fn() }));
+      root.render(createElement(HookHarness, { repository, onResetWorkspace: vi.fn(), attachIntentChannel }));
     });
     await flushEffects();
 
