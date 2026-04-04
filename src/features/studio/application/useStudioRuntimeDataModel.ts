@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useAnalysisWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
+import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
 import { createStudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 
 export function useStudioRuntimeDataModel() {

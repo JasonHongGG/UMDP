@@ -11,7 +11,7 @@ import type {
   AnalysisImageInfo,
 } from '@/domain/analysis/view-models';
 import type { ActivePage, InspectorTab } from '@/domain/analysis/workspace-types';
-import type { InspectorWorkspaceContextValue } from './InspectorWorkspaceContext';
+import type { InspectorWorkspaceValue } from './InspectorWorkspaceValue';
 
 interface UseInspectorWorkspaceValueOptions {
   attachError: string | null;
@@ -26,11 +26,11 @@ interface UseInspectorWorkspaceValueOptions {
   ensureRuntimeOverlayLoaded: (classStableId: StableId) => void;
   setActivePage: (page: ActivePage) => void;
   queuePendingClassNode: (request: PendingClassNodeRequest) => void;
-  workspaceResetRevision: number;
+  workspaceResetRevision: string | number;
 }
 
 interface UseInspectorWorkspaceValueResult {
-  value: InspectorWorkspaceContextValue;
+  value: InspectorWorkspaceValue;
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
   studioClassCatalogEntries: StudioClassCatalogEntry[];
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
@@ -208,7 +208,7 @@ export function useInspectorWorkspaceValue({
     resetInspectorWorkspaceState();
   }, [resetInspectorWorkspaceState, workspaceResetRevision]);
 
-  const value = useMemo<InspectorWorkspaceContextValue>(() => ({
+  const value = useMemo<InspectorWorkspaceValue>(() => ({
     attachError,
     images,
     classLookupMap,

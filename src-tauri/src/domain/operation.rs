@@ -1,7 +1,10 @@
 use std::error::Error;
 use std::fmt;
+use std::fmt::Display;
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum OperationErrorCode {
     ProcessNotFound,
     NotAttached,
@@ -19,10 +22,50 @@ pub enum OperationErrorCode {
     RuntimeFault,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum OperationFailureEffect {
     None,
     RuntimeSessionDropped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OperationDisplayHint {
+    Inline,
+    Banner,
+    Toast,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationErrorEnvelope {
+    pub code: OperationErrorCode,
+    pub message: String,
+    pub effect: OperationFailureEffect,
+    pub operation_key: Option<String>,
+    pub recoverable: bool,
+    pub display_hint: OperationDisplayHint,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationFeedbackEnvelope {
+    pub operation_key: String,
+    pub tone: String,
+    pub title: String,
+    pub description: String,
+    pub target_id: Option<String>,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandEnvelope<T> {
+    pub ok: bool,
+    pub data: Option<T>,
+    pub error: Option<OperationErrorEnvelope>,
+    pub feedback: Option<OperationFeedbackEnvelope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +76,7 @@ pub struct OperationError {
 }
 
 pub type OperationResult<T> = Result<T, OperationError>;
+pub type AsyncCommandResult<T> = Result<CommandEnvelope<T>, String>;
 
 impl OperationError {
     pub fn new(code: OperationErrorCode, message: impl Into<String>) -> Self {
@@ -135,6 +179,28 @@ impl OperationError {
         self.message.clone()
     }
 
+    pub fn into_envelope(self, operation_key: Option<&str>) -> OperationErrorEnvelope {
+        let recoverable = self.effect == OperationFailureEffect::None;
+        let display_hint = match self.code {
+            OperationErrorCode::ArgumentMismatch
+            | OperationErrorCode::InvalidAddress
+            | OperationErrorCode::InstanceRequired => OperationDisplayHint::Inline,
+            OperationErrorCode::RuntimeFault
+            | OperationErrorCode::RuntimeApiUnavailable
+            | OperationErrorCode::RuntimeSessionUnavailable => OperationDisplayHint::Banner,
+            _ => OperationDisplayHint::Banner,
+        };
+
+        OperationErrorEnvelope {
+            code: self.code,
+            message: self.message,
+            effect: self.effect,
+            operation_key: operation_key.map(str::to_owned),
+            recoverable,
+            display_hint,
+        }
+    }
+
     fn classify_message(message: impl Into<String>) -> Self {
         let message = message.into();
         let lower = message.to_ascii_lowercase();
@@ -215,4 +281,36 @@ impl From<OperationError> for String {
     fn from(value: OperationError) -> Self {
         value.message
     }
+}
+
+pub fn command_success<T>(data: T) -> CommandEnvelope<T> {
+    CommandEnvelope {
+        ok: true,
+        data: Some(data),
+        error: None,
+        feedback: None,
+    }
+}
+
+pub fn command_error<T>(error: impl Into<OperationError>, operation_key: &'static str) -> CommandEnvelope<T> {
+    CommandEnvelope {
+        ok: false,
+        data: None,
+        error: Some(error.into().into_envelope(Some(operation_key))),
+        feedback: None,
+    }
+}
+
+pub fn command_result<T>(result: OperationResult<T>, operation_key: &'static str) -> CommandEnvelope<T> {
+    match result {
+        Ok(data) => command_success(data),
+        Err(error) => command_error(error, operation_key),
+    }
+}
+
+pub fn background_task_failure<T>(operation_key: &'static str, error: impl Display) -> CommandEnvelope<T> {
+    command_error(
+        OperationError::runtime_fault(format!("Background task failed: {error}")),
+        operation_key,
+    )
 }

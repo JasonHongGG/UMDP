@@ -1,24 +1,25 @@
 use crate::application::runtime_execution;
 use crate::domain::analysis_models::{RuntimeFieldSetRequest, RuntimeFieldSetResult};
+use crate::domain::operation::{
+    background_task_failure, command_success, AsyncCommandResult,
+};
 use crate::state::AppState;
-use std::fmt::Display;
 use tauri::{AppHandle, Manager, State};
-
-fn join_error_message(error: impl Display) -> String {
-    format!("Background task failed: {error}")
-}
 
 #[tauri::command]
 pub async fn set_runtime_field_value(
     app: AppHandle,
     _state: State<'_, AppState>,
     request: RuntimeFieldSetRequest,
-) -> Result<RuntimeFieldSetResult, String> {
+) -> AsyncCommandResult<RuntimeFieldSetResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
-        runtime_execution::set_runtime_field_value(&app_handle, &state, request)
+        command_success(runtime_execution::set_runtime_field_value(&app_handle, &state, request))
     })
     .await
-    .map_err(join_error_message)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("runtime.set-field-value", error),
+    })
 }

@@ -21,6 +21,15 @@ const WORLD_DATA_CLASS_ID = createClassStableId({ imageStableId: IMAGE_ID, names
 const WORLD_DATA_METHOD_ID = createMethodStableId({ classStableId: WORLD_DATA_CLASS_ID, methodName: 'Describe', signature: 'System.String ()' });
 const ARGUMENT_ID = createStableId('binding', ['call-1', 'x']);
 
+function createSuccessEnvelope<T>(data: T) {
+  return {
+    ok: true as const,
+    data,
+    error: null,
+    feedback: null,
+  };
+}
+
 const BINDING: ClassBinding = {
   imageStableId: IMAGE_ID,
   classStableId: CLASS_ID,
@@ -82,7 +91,7 @@ describe('studio full flow integration', () => {
 
   it('executes trigger -> class -> call-function and emits a real runtime snapshot result', async () => {
     vi.useFakeTimers();
-    invokeMock.mockResolvedValueOnce({
+    invokeMock.mockResolvedValueOnce(createSuccessEnvelope({
       classStableId: CLASS_ID,
       methodStableId: METHOD_ID,
       methodName: 'Move',
@@ -93,7 +102,7 @@ describe('studio full flow integration', () => {
       error: null,
       exception: null,
       result: null,
-    });
+    }));
 
     const nodes: StudioNode[] = [
       { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
@@ -172,7 +181,7 @@ describe('studio full flow integration', () => {
 
   it('chains object return instance references into a downstream class node', async () => {
     vi.useFakeTimers();
-    invokeMock.mockResolvedValueOnce({
+    invokeMock.mockResolvedValueOnce(createSuccessEnvelope({
       classStableId: CLASS_ID,
       methodStableId: METHOD_ID,
       methodName: 'Move',
@@ -187,7 +196,7 @@ describe('studio full flow integration', () => {
         value: null,
         objectAddress: '244190ab960',
       },
-    });
+    }));
 
     const nodes: StudioNode[] = [
       { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },
@@ -280,7 +289,7 @@ describe('studio full flow integration', () => {
 
   it('projects a selected member reference into a downstream class node instance input', async () => {
     vi.useFakeTimers();
-    invokeMock.mockResolvedValueOnce({
+    invokeMock.mockResolvedValueOnce(createSuccessEnvelope({
       classStableId: CLASS_ID,
       instanceAddress: '0x1234',
       fields: [{
@@ -291,7 +300,7 @@ describe('studio full flow integration', () => {
         address: '0x1254',
         value: '244190ab960',
       }],
-    });
+    }));
 
     const playerCatalog: ClassInfoCatalog = {
       members: [{
@@ -382,7 +391,7 @@ describe('studio full flow integration', () => {
 
   it('routes call-function results into a display node runtime snapshot and continues downstream flow', async () => {
     vi.useFakeTimers();
-    invokeMock.mockResolvedValueOnce({
+    invokeMock.mockResolvedValueOnce(createSuccessEnvelope({
       classStableId: CLASS_ID,
       methodStableId: METHOD_ID,
       methodName: 'Move',
@@ -393,7 +402,7 @@ describe('studio full flow integration', () => {
       error: null,
       exception: null,
       result: null,
-    });
+    }));
 
     const nodes: StudioNode[] = [
       { id: 'trigger-1', type: 'trigger', position: { x: 0, y: 0 }, data: {} },

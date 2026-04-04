@@ -1,10 +1,10 @@
 
 import { Suspense, lazy } from 'react';
 import { AppInfrastructureProvider, useAppInfrastructure } from '@/app/AppInfrastructureContext';
+import { AppStateProvider } from '@/app/state/AppStateProvider';
+import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import { MainLayout } from '@/app/shell/MainLayout';
 import { TopBar } from '@/app/shell/TopBar';
-import { AnalysisWorkspaceProvider } from './domain/analysis/AnalysisWorkspaceContext';
-import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
 import { StatusBar } from './app/shell/StatusBar';
 import { SceneWorkspaceProvider } from '@/features/scene/page/SceneWorkspaceContext';
 import './styles.css';
@@ -24,9 +24,9 @@ const ScenePage = lazy(async () => ({
 export default function App() {
   return (
     <AppInfrastructureProvider>
-      <AnalysisWorkspaceProvider>
+      <AppStateProvider>
         <AppContent />
-      </AnalysisWorkspaceProvider>
+      </AppStateProvider>
     </AppInfrastructureProvider>
   );
 }

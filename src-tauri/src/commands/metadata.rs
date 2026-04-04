@@ -2,15 +2,13 @@ use crate::application::{metadata as metadata_application, workspace as workspac
 use crate::domain::analysis_models::{
     AnalysisSnapshot, RuntimeInstanceFieldSnapshot, RuntimeOverlaySnapshot,
 };
+use crate::domain::operation::{
+    background_task_failure, command_result, AsyncCommandResult,
+};
 use crate::infrastructure::logging::{self, DiagnosticsField};
 use crate::state::AppState;
-use std::fmt::Display;
 use std::time::Instant;
 use tauri::{AppHandle, Manager, State};
-
-fn join_error_message(error: impl Display) -> String {
-    format!("Background task failed: {error}")
-}
 
 fn field(name: &'static str, value: impl ToString) -> DiagnosticsField {
     (name, value.to_string())
@@ -20,9 +18,9 @@ fn field(name: &'static str, value: impl ToString) -> DiagnosticsField {
 pub async fn load_all_metadata(
     app: AppHandle,
     _state: State<'_, AppState>,
-) -> Result<AnalysisSnapshot, String> {
+) -> AsyncCommandResult<AnalysisSnapshot> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = workspace_application::load_all_metadata(&app_handle, &state);
@@ -40,11 +38,13 @@ pub async fn load_all_metadata(
                 ]
             },
         );
-        result
+        command_result(result, "metadata.load-all")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("metadata.load-all", error),
+    })
 }
 
 #[tauri::command]
@@ -52,15 +52,20 @@ pub async fn get_runtime_static_fields(
     app: AppHandle,
     _state: State<'_, AppState>,
     class_stable_id: String,
-) -> Result<RuntimeOverlaySnapshot, String> {
+) -> AsyncCommandResult<RuntimeOverlaySnapshot> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
-        metadata_application::get_runtime_static_fields(&app_handle, &state, &class_stable_id)
+        command_result(
+            metadata_application::get_runtime_static_fields(&app_handle, &state, &class_stable_id),
+            "runtime.get-static-fields",
+        )
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("runtime.get-static-fields", error),
+    })
 }
 
 #[tauri::command]
@@ -69,18 +74,23 @@ pub async fn get_runtime_instance_fields(
     _state: State<'_, AppState>,
     class_stable_id: String,
     instance_address: String,
-) -> Result<RuntimeInstanceFieldSnapshot, String> {
+) -> AsyncCommandResult<RuntimeInstanceFieldSnapshot> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let state = app_handle.state::<AppState>();
-        metadata_application::get_runtime_instance_fields(
-            &app_handle,
-            &state,
-            &class_stable_id,
-            &instance_address,
+        command_result(
+            metadata_application::get_runtime_instance_fields(
+                &app_handle,
+                &state,
+                &class_stable_id,
+                &instance_address,
+            ),
+            "runtime.get-instance-fields",
         )
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("runtime.get-instance-fields", error),
+    })
 }

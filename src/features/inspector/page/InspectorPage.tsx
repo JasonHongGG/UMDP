@@ -7,10 +7,10 @@ import { AssembliesColumn } from '@/features/inspector/components/AssembliesColu
 import { ClassesColumn } from '@/features/inspector/components/ClassesColumn';
 import { InspectorTabBar } from '@/features/inspector/components/InspectorTabBar';
 import ClassInspectorApp from '@/features/inspector/components/ClassInspectorApp';
-import { useInspectorWorkspace } from '@/domain/inspector/InspectorWorkspaceContext';
-import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
+import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import { WorkspaceGate } from '@/shared/ui/WorkspaceGate';
 import { useInspectorPageController } from './useInspectorPageController';
+import { useInspectorPageState } from './useInspectorPageState';
 
 export function InspectorPage() {
   const { workspacePresentation } = useWorkspaceShellState();
@@ -74,7 +74,7 @@ function InspectorPageContent() {
     pendingScrollImageStableId,
     pendingScrollClassStableId,
     clearPendingScrollTarget,
-  } = useInspectorWorkspace();
+  } = useInspectorPageState();
 
   const { tabBarRef, imageListRef, classListRef } = useInspectorPageController({
     tabsLength: tabs.length,

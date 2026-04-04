@@ -1,8 +1,8 @@
 import React from 'react';
 import { StudioProviders } from '@/features/studio/application/StudioProviders';
 import { useStudioPageState } from '@/features/studio/application/useStudioPageState';
-import { useAnalysisWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
-import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
+import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
+import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import type { PendingClassNodeRequest } from '@/domain/studio/editor';
 import { CanvasCore } from '@/features/studio/components/canvas/CanvasCore';
 import { StudioModalLayer } from '@/features/studio/components/StudioModalLayer';

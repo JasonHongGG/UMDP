@@ -1,5 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { createDiagnosticsLogger } from '@/shared/diagnostics';
+import {
+  type CommandEnvelope,
+  coerceOperationErrorEnvelope,
+  createOperationErrorEnvelope,
+} from '@/shared/contracts';
 
 export interface TauriInvokeRequest {
   label: string;
@@ -10,6 +15,16 @@ export interface TauriInvokeRequest {
 
 export interface TauriIpcClient {
   invoke<T>(request: TauriInvokeRequest): Promise<T>;
+}
+
+export class AppCommandError extends Error {
+  readonly envelope;
+
+  constructor(envelope: ReturnType<typeof createOperationErrorEnvelope>) {
+    super(envelope.message);
+    this.name = 'AppCommandError';
+    this.envelope = envelope;
+  }
 }
 
 function nowMs() {
@@ -27,7 +42,11 @@ export function createTauriIpcClient(): TauriIpcClient {
       const startedAt = nowMs();
 
       try {
-        const result = await invoke<T>(command, args);
+        const result = await invoke<CommandEnvelope<T>>(command, args);
+        if (!result.ok) {
+          throw new AppCommandError(coerceOperationErrorEnvelope(result.error, label));
+        }
+
         if (logSuccess) {
           tauriDiagnostics.debug('Tauri invoke completed.', {
             context: {
@@ -38,10 +57,13 @@ export function createTauriIpcClient(): TauriIpcClient {
             },
           });
         }
-        return result;
+        return result.data;
       } catch (error) {
+        const normalizedError = error instanceof AppCommandError
+          ? error
+          : new AppCommandError(coerceOperationErrorEnvelope(error, label));
         tauriDiagnostics.error('Tauri invoke failed.', {
-          error,
+          error: normalizedError,
           context: {
             operation: label,
             command,
@@ -49,7 +71,7 @@ export function createTauriIpcClient(): TauriIpcClient {
             durationMs: nowMs() - startedAt,
           },
         });
-        throw error;
+        throw normalizedError;
       }
     },
   };

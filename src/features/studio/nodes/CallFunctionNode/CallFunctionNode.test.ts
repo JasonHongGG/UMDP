@@ -16,6 +16,15 @@ const METHOD_ATTACH_TARGET = createMethodStableId({ classStableId: CLASS_ID, met
 const ARGUMENT_ID = createStableId('binding', ['call-1', 'x']);
 const TARGET_ARGUMENT_ID = createStableId('binding', ['call-1', 'target']);
 
+function createSuccessEnvelope<T>(data: T) {
+  return {
+    ok: true as const,
+    data,
+    error: null,
+    feedback: null,
+  };
+}
+
 function createExecutionContext(overrides: Partial<Parameters<NonNullable<typeof CallFunctionNodeDef.executionContract>['execute']>[0]> = {}) {
   return {
     documentId: 'doc-1',
@@ -109,7 +118,7 @@ describe('CallFunctionNode', () => {
           name: 'Move',
         },
         success: false,
-        error: 'Failed to invoke method: Error: bridge offline',
+        error: 'Failed to invoke method: AppCommandError: bridge offline',
         arguments: [{ name: 'x', value: 1.5 }],
       },
     });
@@ -122,7 +131,7 @@ describe('CallFunctionNode', () => {
   });
 
   it('projects object return addresses to a dedicated instance-ref output', async () => {
-    invokeMock.mockResolvedValueOnce({
+    invokeMock.mockResolvedValueOnce(createSuccessEnvelope({
       classStableId: CLASS_ID,
       methodStableId: METHOD_ID,
       methodName: 'Move',
@@ -137,7 +146,7 @@ describe('CallFunctionNode', () => {
         value: null,
         objectAddress: '244190ab960',
       },
-    });
+    }));
 
     const result = await CallFunctionNodeDef.executionContract!.execute(createExecutionContext({
       resolvedBindings: {
@@ -157,7 +166,7 @@ describe('CallFunctionNode', () => {
   });
 
   it('propagates explicit hex addresses as invoke address arguments for reference-type parameters', async () => {
-    invokeMock.mockResolvedValueOnce({
+    invokeMock.mockResolvedValueOnce(createSuccessEnvelope({
       classStableId: CLASS_ID,
       methodStableId: METHOD_ATTACH_TARGET,
       methodName: 'AttachTarget',
@@ -172,7 +181,7 @@ describe('CallFunctionNode', () => {
         value: null,
         objectAddress: null,
       },
-    });
+    }));
 
     const result = await CallFunctionNodeDef.executionContract!.execute(createExecutionContext({
       documentState: {

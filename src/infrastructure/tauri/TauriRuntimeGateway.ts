@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import type {
   RuntimeFieldSetRequest,
   RuntimeFieldSetResult,
@@ -7,24 +6,27 @@ import type {
   RuntimeMethodInvokeResult,
   RuntimeOverlaySnapshot,
 } from '@/domain/analysis/contracts';
+import { createTauriIpcClient } from './TauriIpcClient';
+
+const client = createTauriIpcClient();
 
 export async function getRuntimeStaticFields(classStableId: string) {
-  return invoke<RuntimeOverlaySnapshot>('get_runtime_static_fields', {
+  return client.invoke<RuntimeOverlaySnapshot>({ label: 'get_runtime_static_fields', command: 'get_runtime_static_fields', args: {
     classStableId,
-  });
+  } });
 }
 
 export async function getRuntimeInstanceFields(classStableId: string, instanceAddress: string) {
-  return invoke<RuntimeInstanceFieldSnapshot>('get_runtime_instance_fields', {
+  return client.invoke<RuntimeInstanceFieldSnapshot>({ label: 'get_runtime_instance_fields', command: 'get_runtime_instance_fields', args: {
     classStableId,
     instanceAddress,
-  });
+  } });
 }
 
 export async function invokeRuntimeMethod(request: RuntimeMethodInvokeRequest) {
-  return invoke<RuntimeMethodInvokeResult>('invoke_runtime_method', { request });
+  return client.invoke<RuntimeMethodInvokeResult>({ label: 'invoke_runtime_method', command: 'invoke_runtime_method', args: { request } });
 }
 
 export async function setRuntimeFieldValue(request: RuntimeFieldSetRequest) {
-  return invoke<RuntimeFieldSetResult>('set_runtime_field_value', { request });
+  return client.invoke<RuntimeFieldSetResult>({ label: 'set_runtime_field_value', command: 'set_runtime_field_value', args: { request } });
 }

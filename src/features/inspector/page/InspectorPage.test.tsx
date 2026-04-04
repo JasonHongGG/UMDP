@@ -44,7 +44,7 @@ vi.mock('@/shared/ui/WorkspaceGate', () => ({
   WorkspaceGate: () => createElement('div', { 'data-testid': 'workspace-gate' }),
 }));
 
-vi.mock('@/domain/workspace/WorkspaceShellContext', () => ({
+vi.mock('@/app/state/useWorkspaceShellState', () => ({
   useWorkspaceShellState: () => ({
     workspacePresentation: {
       pages: {
@@ -56,8 +56,8 @@ vi.mock('@/domain/workspace/WorkspaceShellContext', () => ({
   }),
 }));
 
-vi.mock('@/domain/inspector/InspectorWorkspaceContext', () => ({
-  useInspectorWorkspace: () => ({
+vi.mock('./useInspectorPageState', () => ({
+  useInspectorPageState: () => ({
     images: [],
     classLookupMap: new Map<string, unknown>(),
     selectedImageStableId: null,

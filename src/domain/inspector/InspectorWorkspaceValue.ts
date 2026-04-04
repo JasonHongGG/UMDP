@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import type React from 'react';
 import type { ClassBinding } from '@/domain/studio/editor';
 import type { StableId } from '@/domain/contracts/shared-identity';
 import type {
@@ -12,7 +12,7 @@ import type {
 } from '@/domain/analysis/view-models';
 import type { ClassLookupEntry, GlobalSearchMode, InspectorTab, ReferenceMode } from '@/domain/analysis/workspace-types';
 
-export interface InspectorWorkspaceContextValue {
+export interface InspectorWorkspaceValue {
   attachError: string | null;
   images: AnalysisImageInfo[];
   classLookupMap: Map<string, ClassLookupEntry>;
@@ -63,29 +63,4 @@ export interface InspectorWorkspaceContextValue {
   pendingScrollImageStableId: StableId | null;
   pendingScrollClassStableId: StableId | null;
   clearPendingScrollTarget: () => void;
-}
-
-const InspectorWorkspaceContext = createContext<InspectorWorkspaceContextValue | null>(null);
-
-export function InspectorWorkspaceProvider({
-  value,
-  children,
-}: {
-  value: InspectorWorkspaceContextValue;
-  children: React.ReactNode;
-}) {
-  return (
-    <InspectorWorkspaceContext.Provider value={value}>
-      {children}
-    </InspectorWorkspaceContext.Provider>
-  );
-}
-
-export function useInspectorWorkspace() {
-  const context = useContext(InspectorWorkspaceContext);
-  if (!context) {
-    throw new Error('useInspectorWorkspace must be used within an InspectorWorkspaceProvider');
-  }
-
-  return context;
 }

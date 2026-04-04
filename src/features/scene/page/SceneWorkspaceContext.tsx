@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import { useSceneGateway } from '@/domain/scene/hooks/useSceneGateway';
-import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
+import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import { useSceneWorkspaceState, type SceneWorkspaceStateResult } from './useSceneWorkspaceState';
 
 const SceneWorkspaceContext = createContext<SceneWorkspaceStateResult | null>(null);

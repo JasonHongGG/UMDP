@@ -217,21 +217,31 @@ describe('frontend architecture boundaries', () => {
     expect(contents.includes('@/infrastructure/tauri/TauriSceneEvents')).toBe(false);
   });
 
-  it('keeps analysis workspace provider as a composition shell instead of owning session and catalog logic directly', () => {
-    const contents = readFileSync(join(SRC_ROOT, 'domain/analysis/AnalysisWorkspaceContext.tsx'), 'utf8');
+  it('removes legacy shared workspace context and composition files', () => {
+    const legacyFiles = [
+      'domain/analysis/AnalysisWorkspaceContext.tsx',
+      'domain/analysis/AnalysisWorkspaceContext.types.ts',
+      'domain/analysis/composition/useAnalysisWorkspaceModel.ts',
+      'domain/analysis/hooks/useAnalysisRuntimeState.ts',
+      'domain/analysis/hooks/useAnalysisSessionState.ts',
+      'domain/analysis/hooks/useWorkspaceLifecycleAutoRefresh.ts',
+      'domain/analysis/hooks/useWorkspaceLifecycleState.ts',
+      'domain/inspector/InspectorWorkspaceContext.tsx',
+      'domain/workspace/WorkspaceShellContext.tsx',
+      'domain/workspace/useWorkspaceShellModel.ts',
+    ].filter((relativePath) => existsSync(join(SRC_ROOT, relativePath)));
 
-    expect(contents.includes('./hooks/useAnalysisSessionState')).toBe(false);
-    expect(contents.includes('./hooks/useAnalysisRuntimeState')).toBe(false);
-    expect(contents.includes('./view-models')).toBe(false);
+    expect(legacyFiles).toEqual([]);
   });
 
-  it('keeps analysis session attach flow separate from workspace lifecycle refresh listeners', () => {
-    const contents = readFileSync(join(SRC_ROOT, 'domain/analysis/hooks/useAnalysisSessionState.ts'), 'utf8');
+  it('keeps app state orchestration separated between store reducers and lifecycle event wiring', () => {
+    const providerContents = readFileSync(join(SRC_ROOT, 'app/state/AppStateProvider.tsx'), 'utf8');
+    const storeContents = readFileSync(join(SRC_ROOT, 'app/state/store.ts'), 'utf8');
 
-    expect(contents.includes('repository.getWorkspaceLifecycle')).toBe(false);
-    expect(contents.includes("window.addEventListener('focus'")).toBe(false);
-    expect(contents.includes("document.addEventListener('visibilitychange'")).toBe(false);
-    expect(/from\s+['"].*infrastructure\/tauri\//.test(contents)).toBe(false);
+    expect(providerContents.includes('@/features/')).toBe(false);
+    expect(providerContents.includes('@/domain/analysis/view-models')).toBe(false);
+    expect(storeContents.includes("window.addEventListener('focus'")).toBe(false);
+    expect(storeContents.includes("document.addEventListener('visibilitychange'")).toBe(false);
   });
 
   it('does not allow deprecated frontend workspace kernel imports', () => {

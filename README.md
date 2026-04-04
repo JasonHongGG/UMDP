@@ -1,5 +1,10 @@
 # Unity Mono Studio
 
+## Architecture Docs
+
+- Overall hard-cut architecture: [docs/architecture/overall-hard-cut.md](docs/architecture/overall-hard-cut.md)
+- Scene resource hard cut: [docs/architecture/scene-resource-hard-cut.md](docs/architecture/scene-resource-hard-cut.md)
+
 ## Diagnostics Configuration
 
 Diagnostics can now be configured from a single root `.env` file. Frontend Vite diagnostics and backend Rust diagnostics both read the same `UNITY_MONO_STUDIO_DEBUG_DIAGNOSTICS*` variables, so you do not need to export shell variables or use DevTools overrides for normal setup.

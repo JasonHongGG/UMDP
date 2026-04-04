@@ -1,4 +1,4 @@
-import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
+import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import { WorkspaceGate } from '@/shared/ui/WorkspaceGate';
 import { SceneHierarchyPanel } from './components/SceneHierarchyPanel';
 import { SceneInspectorView } from './components/SceneInspectorView';

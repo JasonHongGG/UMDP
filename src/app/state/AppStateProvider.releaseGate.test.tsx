@@ -4,12 +4,13 @@ import React, { act, createElement, useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { AppInfrastructureProvider } from '@/app/AppInfrastructureContext';
-import { useWorkspaceShellState } from '@/domain/workspace/WorkspaceShellContext';
+import { useWorkspaceShellState } from './useWorkspaceShellState';
+import { AppStateProvider } from './AppStateProvider';
+import { useAnalysisWorkspace } from './useAnalysisWorkspace';
 import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
 import type { AnalysisSnapshot, ProcessInfo, ProcessSession } from '@/domain/analysis/contracts';
 import type { SystemContractVersions, WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
-import { AnalysisWorkspaceProvider, useAnalysisWorkspace } from './AnalysisWorkspaceContext';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -51,6 +52,7 @@ interface WorkflowSnapshot {
 let latestState: WorkflowSnapshot | null = null;
 let history: WorkflowSnapshot[] = [];
 let setWorkspaceTasks: ((sourceKey: string, tasks: WorkspaceTaskSnapshot[]) => void) | null = null;
+let renderCount = 0;
 
 function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): WorkspaceLifecycleState {
   return {
@@ -78,7 +80,7 @@ function createAttachedLifecycle(
       status: 'starting',
       runtime: session.runtime,
       capabilities: ['metadata', 'execution', 'scene-read'],
-        connected: false,
+      connected: false,
       sessionKey,
       lastError: null,
       lastHeartbeatAt: null,
@@ -144,9 +146,30 @@ function createRepository(overrides: Partial<AnalysisRepository> = {}): Analysis
   } as AnalysisRepository;
 }
 
+function createSceneRefreshTask(updatedAt = '2026-03-31T10:01:00.000Z'): WorkspaceTaskSnapshot {
+  return {
+    taskId: 'scene-refresh',
+    resourceKind: 'scene',
+    operationKey: 'scene.refresh',
+    scope: 'resource',
+    status: 'running',
+    progress: {
+      completed: 0,
+      total: 1,
+      message: 'Refreshing scene workspace',
+    },
+    targetId: null,
+    startedAt: updatedAt,
+    updatedAt,
+    errorMessage: null,
+  };
+}
+
 function TestConsumer() {
   const shell = useWorkspaceShellState();
   const analysis = useAnalysisWorkspace();
+
+  renderCount += 1;
 
   setWorkspaceTasks = shell.setWorkspaceTasks;
   latestState = {
@@ -188,7 +211,7 @@ async function flushEffects() {
   });
 }
 
-describe('AnalysisWorkspaceProvider release gates', () => {
+describe('AppStateProvider release gates', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -197,6 +220,7 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     latestState = null;
     history = [];
     setWorkspaceTasks = null;
+    renderCount = 0;
     mocks.createTauriAnalysisRepository.mockReset();
     mocks.createTauriSceneGateway.mockReset();
     mocks.createTauriWorkspaceAttachIntentChannel.mockReset();
@@ -268,7 +292,7 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     await act(async () => {
       root.render(
         createElement(AppInfrastructureProvider, null,
-          createElement(AnalysisWorkspaceProvider, null,
+          createElement(AppStateProvider, null,
             createElement(TestConsumer),
           ),
         ),
@@ -320,22 +344,7 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     });
 
     await act(async () => {
-      setWorkspaceTasks?.('scene', [{
-        taskId: 'scene-refresh',
-        resourceKind: 'scene',
-        operationKey: 'scene.refresh',
-        scope: 'resource',
-        status: 'running',
-        progress: {
-          completed: 0,
-          total: 1,
-          message: 'Refreshing scene workspace',
-        },
-        targetId: null,
-        startedAt: '2026-03-31T10:01:00.000Z',
-        updatedAt: '2026-03-31T10:01:00.000Z',
-        errorMessage: null,
-      }]);
+      setWorkspaceTasks?.('scene', [createSceneRefreshTask()]);
     });
     await flushEffects();
 
@@ -379,6 +388,58 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     expect(history.some((entry) => entry.resetNoticeKind === 'session-changed')).toBe(true);
   });
 
+  it('keeps workspace task actions stable across updates and ignores duplicate task payloads', async () => {
+    const contractVersions: SystemContractVersions = {
+      tauriCommandVersion: 1,
+      analysisSchemaVersion: 2,
+      workflowSchemaVersion: 1,
+    };
+    const repository = createRepository({
+      getContractVersions: vi.fn().mockResolvedValue(contractVersions),
+      getWorkspaceLifecycle: vi.fn().mockResolvedValue(createLifecycle()),
+      attachToProcess: vi.fn(),
+      loadAllMetadata: vi.fn(),
+      getRuntimeStaticFields: vi.fn(),
+      getRuntimeInstanceFields: vi.fn(),
+    });
+
+    mocks.createTauriAnalysisRepository.mockReturnValue(repository);
+    mocks.createTauriSceneGateway.mockReturnValue({});
+
+    await act(async () => {
+      root.render(
+        createElement(AppInfrastructureProvider, null,
+          createElement(AppStateProvider, null,
+            createElement(TestConsumer),
+          ),
+        ),
+      );
+    });
+    await flushEffects();
+
+    const initialSetter = setWorkspaceTasks;
+    expect(initialSetter).not.toBeNull();
+
+    await act(async () => {
+      initialSetter?.('scene', [createSceneRefreshTask()]);
+    });
+    await flushEffects();
+
+    expect(latestState?.taskCount).toBe(1);
+    expect(setWorkspaceTasks).toBe(initialSetter);
+
+    const renderCountAfterFirstDispatch = renderCount;
+
+    await act(async () => {
+      initialSetter?.('scene', [createSceneRefreshTask()]);
+    });
+    await flushEffects();
+
+    expect(renderCount).toBe(renderCountAfterFirstDispatch);
+    expect(latestState?.taskCount).toBe(1);
+    expect(setWorkspaceTasks).toBe(initialSetter);
+  });
+
   it('keeps scene and studio gated until runtime becomes interactive after metadata is loaded', async () => {
     const session: ProcessSession = {
       pid: 3003,
@@ -417,7 +478,7 @@ describe('AnalysisWorkspaceProvider release gates', () => {
     await act(async () => {
       root.render(
         createElement(AppInfrastructureProvider, null,
-          createElement(AnalysisWorkspaceProvider, null,
+          createElement(AppStateProvider, null,
             createElement(TestConsumer),
           ),
         ),

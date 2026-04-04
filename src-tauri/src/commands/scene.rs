@@ -4,15 +4,14 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
     RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
+use crate::domain::operation::{
+    background_task_failure, command_result, command_success, AsyncCommandResult, CommandEnvelope,
+};
 use crate::infrastructure::logging::{self, DiagnosticsField};
 use crate::state::AppState;
 use std::fmt::Display;
 use std::time::Instant;
 use tauri::{AppHandle, Manager, State};
-
-fn join_error_message(error: impl Display) -> String {
-    format!("Background task failed: {error}")
-}
 
 fn field(name: &'static str, value: impl ToString) -> DiagnosticsField {
     (name, value.to_string())
@@ -43,9 +42,9 @@ fn log_scene_command_result<T, E, F>(
 pub async fn start_scene_refresh(
     app: AppHandle,
     _state: State<'_, AppState>,
-) -> Result<SceneWorkspaceState, String> {
+) -> AsyncCommandResult<SceneWorkspaceState> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::start_scene_refresh(&app_handle, &state);
@@ -61,16 +60,18 @@ pub async fn start_scene_refresh(
                 )]
             },
         );
-        result
+        command_result(result, "scene.start-refresh")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.start-refresh", error),
+    })
 }
 
 #[tauri::command]
-pub fn get_scene_workspace_state(state: State<'_, AppState>) -> SceneWorkspaceState {
-    scene_application::get_scene_workspace_state(&state)
+pub fn get_scene_workspace_state(state: State<'_, AppState>) -> CommandEnvelope<SceneWorkspaceState> {
+    command_success(scene_application::get_scene_workspace_state(&state))
 }
 
 #[tauri::command]
@@ -78,7 +79,7 @@ pub fn start_scene_object_children_analysis(
     app: AppHandle,
     state: State<'_, AppState>,
     object_address: String,
-) -> Result<RuntimeSceneObjectChildrenTaskState, String> {
+) -> CommandEnvelope<RuntimeSceneObjectChildrenTaskState> {
     let started_at = Instant::now();
     let result =
         scene_application::start_scene_object_children_analysis(&app, &state, &object_address);
@@ -94,15 +95,15 @@ pub fn start_scene_object_children_analysis(
             ]
         },
     );
-    result.map_err(String::from)
+    command_result(result, "scene.start-children-analysis")
 }
 
 #[tauri::command]
 pub fn get_scene_object_children_state(
     state: State<'_, AppState>,
     object_address: String,
-) -> Option<RuntimeSceneObjectChildrenTaskState> {
-    scene_application::get_scene_object_children_state(&state, &object_address)
+) -> CommandEnvelope<Option<RuntimeSceneObjectChildrenTaskState>> {
+    command_success(scene_application::get_scene_object_children_state(&state, &object_address))
 }
 
 #[tauri::command]
@@ -110,8 +111,8 @@ pub fn cancel_scene_object_children_analysis(
     state: State<'_, AppState>,
     object_address: String,
     task_id: Option<u64>,
-) -> Option<RuntimeSceneObjectChildrenTaskState> {
-    scene_application::cancel_scene_object_children_analysis(&state, &object_address, task_id)
+) -> CommandEnvelope<Option<RuntimeSceneObjectChildrenTaskState>> {
+    command_success(scene_application::cancel_scene_object_children_analysis(&state, &object_address, task_id))
 }
 
 #[tauri::command]
@@ -119,7 +120,7 @@ pub fn start_scene_object_inspector_analysis(
     app: AppHandle,
     state: State<'_, AppState>,
     object_address: String,
-) -> Result<RuntimeSceneObjectInspectorTaskState, String> {
+) -> CommandEnvelope<RuntimeSceneObjectInspectorTaskState> {
     let started_at = Instant::now();
     let result =
         scene_application::start_scene_object_inspector_analysis(&app, &state, &object_address);
@@ -135,22 +136,22 @@ pub fn start_scene_object_inspector_analysis(
             ]
         },
     );
-    result.map_err(String::from)
+    command_result(result, "scene.start-inspector-analysis")
 }
 
 #[tauri::command]
 pub fn get_scene_object_inspector_state(
     state: State<'_, AppState>,
-) -> Option<RuntimeSceneObjectInspectorTaskState> {
-    scene_application::get_scene_object_inspector_state(&state)
+) -> CommandEnvelope<Option<RuntimeSceneObjectInspectorTaskState>> {
+    command_success(scene_application::get_scene_object_inspector_state(&state))
 }
 
 #[tauri::command]
 pub fn cancel_scene_object_inspector_analysis(
     state: State<'_, AppState>,
     task_id: Option<u64>,
-) -> Option<RuntimeSceneObjectInspectorTaskState> {
-    scene_application::cancel_scene_object_inspector_analysis(&state, task_id)
+) -> CommandEnvelope<Option<RuntimeSceneObjectInspectorTaskState>> {
+    command_success(scene_application::cancel_scene_object_inspector_analysis(&state, task_id))
 }
 
 #[tauri::command]
@@ -158,9 +159,9 @@ pub async fn get_scene_object_children(
     app: AppHandle,
     _state: State<'_, AppState>,
     object_address: String,
-) -> Result<RuntimeSceneChildrenSnapshot, String> {
+) -> AsyncCommandResult<RuntimeSceneChildrenSnapshot> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -172,11 +173,13 @@ pub async fn get_scene_object_children(
             vec![field("objectAddress", object_address.clone())],
             |snapshot| vec![field("childCount", snapshot.children.len())],
         );
-        result
+        command_result(result, "scene.get-children")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.get-children", error),
+    })
 }
 
 #[tauri::command]
@@ -184,9 +187,9 @@ pub async fn get_scene_object_inspector(
     app: AppHandle,
     _state: State<'_, AppState>,
     object_address: String,
-) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
+) -> AsyncCommandResult<RuntimeSceneObjectInspectorSnapshot> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -203,11 +206,13 @@ pub async fn get_scene_object_inspector(
                 ]
             },
         );
-        result
+        command_result(result, "scene.get-inspector")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.get-inspector", error),
+    })
 }
 
 #[tauri::command]
@@ -216,9 +221,9 @@ pub async fn create_scene_child(
     _state: State<'_, AppState>,
     parent_object_address: String,
     name: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::create_scene_child(
@@ -239,11 +244,13 @@ pub async fn create_scene_child(
                 )]
             },
         );
-        result
+        command_result(result, "scene.create-child")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.create-child", error),
+    })
 }
 
 #[tauri::command]
@@ -252,9 +259,9 @@ pub async fn create_scene_root(
     _state: State<'_, AppState>,
     scene_handle: i32,
     name: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::create_scene_root(&app_handle, &state, scene_handle, &name);
@@ -270,11 +277,13 @@ pub async fn create_scene_root(
                 )]
             },
         );
-        result
+        command_result(result, "scene.create-root")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.create-root", error),
+    })
 }
 
 #[tauri::command]
@@ -282,9 +291,9 @@ pub async fn duplicate_scene_object(
     app: AppHandle,
     _state: State<'_, AppState>,
     object_address: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -301,11 +310,13 @@ pub async fn duplicate_scene_object(
                 )]
             },
         );
-        result
+        command_result(result, "scene.duplicate")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.duplicate", error),
+    })
 }
 
 #[tauri::command]
@@ -313,9 +324,9 @@ pub async fn delete_scene_object(
     app: AppHandle,
     _state: State<'_, AppState>,
     object_address: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::delete_scene_object(&app_handle, &state, &object_address);
@@ -331,11 +342,13 @@ pub async fn delete_scene_object(
                 )]
             },
         );
-        result
+        command_result(result, "scene.delete")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.delete", error),
+    })
 }
 
 #[tauri::command]
@@ -344,9 +357,9 @@ pub async fn rename_scene_object(
     _state: State<'_, AppState>,
     object_address: String,
     name: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -363,11 +376,13 @@ pub async fn rename_scene_object(
                 )]
             },
         );
-        result
+        command_result(result, "scene.rename")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.rename", error),
+    })
 }
 
 #[tauri::command]
@@ -376,9 +391,9 @@ pub async fn set_scene_object_tag(
     _state: State<'_, AppState>,
     object_address: String,
     tag: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -395,11 +410,13 @@ pub async fn set_scene_object_tag(
                 )]
             },
         );
-        result
+        command_result(result, "scene.set-tag")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.set-tag", error),
+    })
 }
 
 #[tauri::command]
@@ -408,9 +425,9 @@ pub async fn set_scene_object_layer(
     _state: State<'_, AppState>,
     object_address: String,
     layer: i32,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -427,11 +444,13 @@ pub async fn set_scene_object_layer(
                 )]
             },
         );
-        result
+        command_result(result, "scene.set-layer")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.set-layer", error),
+    })
 }
 
 #[tauri::command]
@@ -440,9 +459,9 @@ pub async fn set_scene_object_hide_flags(
     _state: State<'_, AppState>,
     object_address: String,
     hide_flags: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_hide_flags(
@@ -463,11 +482,13 @@ pub async fn set_scene_object_hide_flags(
                 )]
             },
         );
-        result
+        command_result(result, "scene.set-hide-flags")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.set-hide-flags", error),
+    })
 }
 
 #[tauri::command]
@@ -477,9 +498,9 @@ pub async fn reparent_scene_object(
     object_address: String,
     parent_object_address: Option<String>,
     parent_path: Option<String>,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::reparent_scene_object(
@@ -508,11 +529,13 @@ pub async fn reparent_scene_object(
                 )]
             },
         );
-        result
+        command_result(result, "scene.reparent")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.reparent", error),
+    })
 }
 
 #[tauri::command]
@@ -521,9 +544,9 @@ pub async fn set_scene_object_active(
     _state: State<'_, AppState>,
     object_address: String,
     active_self: bool,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_active(
@@ -547,11 +570,13 @@ pub async fn set_scene_object_active(
                 )]
             },
         );
-        result
+        command_result(result, "scene.set-active")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.set-active", error),
+    })
 }
 
 #[tauri::command]
@@ -560,9 +585,9 @@ pub async fn set_scene_object_transform(
     _state: State<'_, AppState>,
     object_address: String,
     transform_update: RuntimeSceneTransformUpdate,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_object_transform(
@@ -583,11 +608,13 @@ pub async fn set_scene_object_transform(
                 )]
             },
         );
-        result
+        command_result(result, "scene.set-transform")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.set-transform", error),
+    })
 }
 
 #[tauri::command]
@@ -596,9 +623,9 @@ pub async fn set_scene_behaviour_enabled(
     _state: State<'_, AppState>,
     component_address: String,
     enabled: bool,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::set_scene_behaviour_enabled(
@@ -622,11 +649,13 @@ pub async fn set_scene_behaviour_enabled(
                 )]
             },
         );
-        result
+        command_result(result, "scene.set-behaviour-enabled")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.set-behaviour-enabled", error),
+    })
 }
 
 #[tauri::command]
@@ -635,9 +664,9 @@ pub async fn create_scene_component(
     _state: State<'_, AppState>,
     object_address: String,
     component_type_name: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::create_scene_component(
@@ -661,11 +690,13 @@ pub async fn create_scene_component(
                 )]
             },
         );
-        result
+        command_result(result, "scene.create-component")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.create-component", error),
+    })
 }
 
 #[tauri::command]
@@ -673,9 +704,9 @@ pub async fn delete_scene_component(
     app: AppHandle,
     _state: State<'_, AppState>,
     component_address: String,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result =
@@ -692,11 +723,13 @@ pub async fn delete_scene_component(
                 )]
             },
         );
-        result
+        command_result(result, "scene.delete-component")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.delete-component", error),
+    })
 }
 
 #[tauri::command]
@@ -704,9 +737,9 @@ pub async fn load_scene_by_build_index(
     app: AppHandle,
     _state: State<'_, AppState>,
     build_index: i32,
-) -> Result<RuntimeSceneMutationResult, String> {
+) -> AsyncCommandResult<RuntimeSceneMutationResult> {
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(match tauri::async_runtime::spawn_blocking(move || {
         let started_at = Instant::now();
         let state = app_handle.state::<AppState>();
         let result = scene_application::load_scene_by_build_index(&app_handle, &state, build_index);
@@ -722,9 +755,11 @@ pub async fn load_scene_by_build_index(
                 )]
             },
         );
-        result
+        command_result(result, "scene.load-by-build-index")
     })
     .await
-    .map_err(join_error_message)?
-    .map_err(String::from)
+    {
+        Ok(result) => result,
+        Err(error) => background_task_failure("scene.load-by-build-index", error),
+    })
 }

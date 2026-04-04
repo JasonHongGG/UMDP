@@ -13,7 +13,7 @@ const mockUseSceneWorkspace = vi.fn();
 const mockUseSceneInspectorState = vi.fn();
 const mockUseSceneMutationState = vi.fn();
 
-vi.mock('@/domain/analysis/AnalysisWorkspaceContext', () => ({
+vi.mock('@/app/state/useAnalysisWorkspace', () => ({
   useAnalysisWorkspace: () => mockUseAnalysisWorkspace(),
 }));
 

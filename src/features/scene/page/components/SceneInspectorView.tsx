@@ -27,7 +27,7 @@ import type {
   RuntimeSceneTransformUpdate,
   RuntimeVector3Snapshot,
 } from '@/domain/analysis/contracts';
-import { useAnalysisWorkspace } from '@/domain/analysis/AnalysisWorkspaceContext';
+import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
 import { EMPTY_LOADED_SCENE_GRAPH, buildLoadedSceneGraph, collectLoadedDescendantAddresses, filterLoadedSceneNodeRecords } from '../loadedSceneNodes';
 import { useSceneInspectorState, useSceneMutationState, useSceneWorkspace } from '../SceneWorkspaceContext';
 import { ActionButton, EmptyNotice, ErrorNotice, KeyValue, ObjectLinkCard, SceneCard } from './SceneUiPrimitives';
