@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { GraphDocumentEnvelope } from '@/domain/studio/contracts';
+import type {
+  RuntimeSceneObjectChildrenTaskState,
+  RuntimeSceneObjectInspectorTaskState,
+  SceneWorkspaceState,
+} from '@/domain/analysis/contracts';
 import type { SystemContractVersions } from './workspace';
 
 function readFixture<T>(name: string): T {
@@ -23,9 +28,26 @@ describe('shared contract fixtures', () => {
     const fixture = readFixture<SystemContractVersions>('workspace-contract-versions.json');
 
     expect(fixture).toEqual({
-      tauriCommandVersion: 1,
-      analysisSchemaVersion: 2,
+      tauriCommandVersion: 2,
+      analysisSchemaVersion: 3,
       workflowSchemaVersion: 1,
     });
+  });
+
+  it('keeps the scene resource fixture aligned with the scene resource contracts', () => {
+    const fixture = readFixture<{
+      workspace: SceneWorkspaceState;
+      childrenTask: RuntimeSceneObjectChildrenTaskState;
+      inspectorTask: RuntimeSceneObjectInspectorTaskState;
+    }>('scene-resource-contract.json');
+
+    expect(fixture.workspace.resourceState.resourceKind).toBe('catalog');
+    expect(fixture.workspace.resourceState.freshness).toBe('fresh');
+    expect(fixture.workspace.mutationEpoch).toBe(3);
+    expect(fixture.childrenTask.resourceState.resourceKind).toBe('children');
+    expect(fixture.childrenTask.resourceState.freshness).toBe('refreshing');
+    expect(fixture.childrenTask.resourceState.isRetainingSnapshot).toBe(true);
+    expect(fixture.inspectorTask.resourceState.resourceKind).toBe('inspector');
+    expect(fixture.inspectorTask.resourceState.lastSuccessfulAt).toBe('2026-04-04T09:59:55.000Z');
   });
 });

@@ -285,6 +285,48 @@ impl Default for SceneRefreshStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SceneResourceFreshness {
+    Empty,
+    Fresh,
+    Refreshing,
+    Stale,
+    Error,
+}
+
+impl Default for SceneResourceFreshness {
+    fn default() -> Self {
+        Self::Empty
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneResourceKind {
+    Catalog,
+    Children,
+    Inspector,
+}
+
+impl Default for RuntimeSceneResourceKind {
+    fn default() -> Self {
+        Self::Catalog
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneResourceState {
+    pub resource_kind: RuntimeSceneResourceKind,
+    pub resource_revision: u64,
+    pub session_key: Option<String>,
+    pub freshness: SceneResourceFreshness,
+    pub last_successful_at: Option<String>,
+    pub is_retaining_snapshot: bool,
+    pub error_message: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeVector3Snapshot {
@@ -449,6 +491,7 @@ pub struct RuntimeSceneObjectChildrenTaskState {
     pub next_offset: Option<usize>,
     pub error_message: Option<String>,
     pub is_stale: bool,
+    pub resource_state: RuntimeSceneResourceState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,6 +559,7 @@ pub struct RuntimeSceneObjectInspectorTaskState {
     pub components_next_offset: Option<usize>,
     pub error_message: Option<String>,
     pub is_stale: bool,
+    pub resource_state: RuntimeSceneResourceState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -588,8 +632,10 @@ pub struct SceneWorkspaceState {
     pub session_key: Option<String>,
     pub refresh_status: SceneRefreshStatus,
     pub error_message: Option<String>,
+    pub mutation_epoch: u64,
     pub snapshot: Option<RuntimeSceneCatalogSnapshot>,
     pub last_updated_at: Option<String>,
+    pub resource_state: RuntimeSceneResourceState,
 }
 
 fn normalize_segment(segment: &str) -> String {

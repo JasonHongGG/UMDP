@@ -2,9 +2,23 @@ import type {
   RuntimeSceneDescriptor,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectInspectorSnapshot,
+  RuntimeSceneResourceState,
   RuntimeSceneTransformSnapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
+
+export function createSceneResourceState(overrides: Partial<RuntimeSceneResourceState> = {}): RuntimeSceneResourceState {
+  return {
+    resourceKind: 'catalog',
+    resourceRevision: 0,
+    sessionKey: null,
+    freshness: 'fresh',
+    lastSuccessfulAt: '2026-03-30T00:00:00.000Z',
+    isRetainingSnapshot: true,
+    errorMessage: null,
+    ...overrides,
+  };
+}
 
 export function createSceneNodeSummary(overrides: Partial<RuntimeSceneNodeSummary> = {}): RuntimeSceneNodeSummary {
   return {
@@ -44,7 +58,17 @@ export function createSceneWorkspaceState(overrides: Partial<SceneWorkspaceState
     sessionKey: null,
     refreshStatus: 'ready',
     errorMessage: null,
+    mutationEpoch: 0,
     lastUpdatedAt: '2026-03-30T00:00:00.000Z',
+    resourceState: createSceneResourceState({
+      resourceKind: 'catalog',
+      resourceRevision: 0,
+      sessionKey: null,
+      freshness: 'fresh',
+      lastSuccessfulAt: '2026-03-30T00:00:00.000Z',
+      isRetainingSnapshot: true,
+      errorMessage: null,
+    }),
     snapshot: {
       generatedAt: '2026-03-30T00:00:00.000Z',
       scenes: [createSceneDescriptor()],

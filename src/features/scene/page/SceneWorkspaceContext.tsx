@@ -127,6 +127,7 @@ export function useSceneMutationState() {
     deleteSceneComponent,
     loadSceneByBuildIndex,
     sceneMutationState,
+    isSceneMutationPending,
     activeSceneTask,
   } = useSceneWorkspace();
 
@@ -147,6 +148,7 @@ export function useSceneMutationState() {
     deleteSceneComponent,
     loadSceneByBuildIndex,
     sceneMutationState,
+    isSceneMutationPending,
     activeSceneTask,
   };
 }

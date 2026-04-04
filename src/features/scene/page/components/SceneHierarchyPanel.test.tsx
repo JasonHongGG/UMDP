@@ -65,6 +65,7 @@ describe('SceneHierarchyPanel', () => {
     mockUseSceneMutationState.mockReturnValue({
       createSceneRoot: vi.fn().mockResolvedValue(null),
       loadSceneByBuildIndex: vi.fn().mockResolvedValue(null),
+      isSceneMutationPending: vi.fn().mockReturnValue(false),
       sceneMutationState: {
         operation: null,
         loading: false,

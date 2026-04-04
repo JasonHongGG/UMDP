@@ -1,9 +1,9 @@
+use super::common::{current_scene_session_key, log_scene_duration};
 use super::events::{emit_scene_children_task_state, emit_scene_inspector_task_state};
-use super::query::{
+use super::refresh::{
     ensure_scene_query_runtime_ready, load_scene_children_page, load_scene_inspector_children_page,
     load_scene_inspector_components_page, load_scene_inspector_header,
 };
-use super::{current_scene_session_key, log_scene_duration};
 use crate::domain::analysis_models::{
     RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorTaskState,
 };
@@ -178,11 +178,13 @@ fn run_scene_object_children_task(
         };
 
         let next_offset = page.next_offset;
+        let page_offset = page.offset;
         let Some(task_state) = state.scene().children().apply_children(
             object_address,
             task_id,
             mutation_epoch,
             session_key,
+            page_offset,
             page.children,
             page.total_count,
             next_offset,
@@ -266,10 +268,12 @@ fn run_scene_object_inspector_task(
         };
 
         let next_offset = page.next_offset;
+        let page_offset = page.offset;
         let Some(task_state) = state.scene().inspector().apply_children(
             task_id,
             mutation_epoch,
             session_key,
+            page_offset,
             page.children,
             page.total_count,
             next_offset,
@@ -309,10 +313,12 @@ fn run_scene_object_inspector_task(
         };
 
         let next_offset = page.next_offset;
+        let page_offset = page.offset;
         let Some(task_state) = state.scene().inspector().apply_components(
             task_id,
             mutation_epoch,
             session_key,
+            page_offset,
             page.components,
             page.total_count,
             next_offset,

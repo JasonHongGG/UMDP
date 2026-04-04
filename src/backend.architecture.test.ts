@@ -41,20 +41,22 @@ describe('backend architecture boundaries', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps the scene service monolith removed and split modules present', () => {
+  it('keeps scene orchestration owned by kernel modules', () => {
     expect(existsSync(join(RUST_SRC_ROOT, 'services', 'analysis', 'scene_service.rs'))).toBe(false);
+    expect(existsSync(join(RUST_SRC_ROOT, 'services', 'analysis', 'scene'))).toBe(false);
 
     const requiredSceneModules = [
       'mod.rs',
+      'common.rs',
       'events.rs',
-      'mapping.rs',
       'mutation.rs',
       'query.rs',
+      'refresh.rs',
       'tasks.rs',
     ];
 
     const missing = requiredSceneModules.filter((fileName) => {
-      return !existsSync(join(RUST_SRC_ROOT, 'services', 'analysis', 'scene', fileName));
+      return !existsSync(join(RUST_SRC_ROOT, 'kernel', 'scene', fileName));
     });
 
     expect(missing).toEqual([]);

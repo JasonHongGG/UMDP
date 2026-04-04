@@ -4,5 +4,4 @@ pub mod metadata_query_service;
 pub mod process_catalog_service;
 pub mod runtime_overlay_service;
 pub mod runtime_session_service;
-pub mod scene;
 pub mod session_service;

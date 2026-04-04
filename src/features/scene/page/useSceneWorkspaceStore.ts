@@ -45,6 +45,7 @@ export type SceneMutationState = {
   loading: boolean;
   errorMessage: string | null;
   task: WorkspaceTaskSnapshot | null;
+  pendingOperations: Partial<Record<RuntimeSceneMutationOperation, number>>;
 };
 
 export const EMPTY_MUTATION_STATE: SceneMutationState = {
@@ -52,6 +53,7 @@ export const EMPTY_MUTATION_STATE: SceneMutationState = {
   loading: false,
   errorMessage: null,
   task: null,
+  pendingOperations: {},
 };
 
 type SceneWorkspaceStoreState = {

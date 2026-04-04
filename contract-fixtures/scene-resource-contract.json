@@ -1,0 +1,90 @@
+{
+  "workspace": {
+    "resourceRevision": 7,
+    "sessionKey": "session-1",
+    "refreshStatus": "ready",
+    "errorMessage": null,
+    "mutationEpoch": 3,
+    "lastUpdatedAt": "2026-04-04T10:00:00.000Z",
+    "resourceState": {
+      "resourceKind": "catalog",
+      "resourceRevision": 7,
+      "sessionKey": "session-1",
+      "freshness": "fresh",
+      "lastSuccessfulAt": "2026-04-04T10:00:00.000Z",
+      "isRetainingSnapshot": true,
+      "errorMessage": null
+    }
+  },
+  "childrenTask": {
+    "taskId": 11,
+    "resourceRevision": 9,
+    "sessionKey": "session-1",
+    "parentObjectAddress": "0x1000",
+    "status": "loading",
+    "mutationEpoch": 3,
+    "startedAt": "2026-04-04T10:00:01.000Z",
+    "updatedAt": "2026-04-04T10:00:02.000Z",
+    "children": [
+      {
+        "objectAddress": "0x1001",
+        "transformAddress": "0x2001",
+        "parentObjectAddress": "0x1000",
+        "name": "Child",
+        "activeSelf": true,
+        "isStatic": false,
+        "childCount": 0,
+        "hasChildren": false,
+        "componentCount": 1,
+        "layer": 0,
+        "tag": "Untagged",
+        "hideFlags": "None",
+        "path": "Scene/Parent/Child"
+      }
+    ],
+    "totalCount": 1,
+    "loadedCount": 1,
+    "nextOffset": null,
+    "errorMessage": null,
+    "isStale": false,
+    "resourceState": {
+      "resourceKind": "children",
+      "resourceRevision": 9,
+      "sessionKey": "session-1",
+      "freshness": "refreshing",
+      "lastSuccessfulAt": "2026-04-04T09:59:50.000Z",
+      "isRetainingSnapshot": true,
+      "errorMessage": null
+    }
+  },
+  "inspectorTask": {
+    "taskId": 12,
+    "resourceRevision": 10,
+    "sessionKey": "session-1",
+    "objectAddress": "0x1000",
+    "status": "components-loading",
+    "mutationEpoch": 3,
+    "startedAt": "2026-04-04T10:00:01.000Z",
+    "updatedAt": "2026-04-04T10:00:03.000Z",
+    "header": null,
+    "children": [],
+    "childrenTotalCount": 0,
+    "childrenLoadedCount": 0,
+    "childrenNextOffset": null,
+    "components": [],
+    "componentsTotalCount": 0,
+    "componentsLoadedCount": 0,
+    "componentsNextOffset": null,
+    "errorMessage": null,
+    "isStale": false,
+    "resourceState": {
+      "resourceKind": "inspector",
+      "resourceRevision": 10,
+      "sessionKey": "session-1",
+      "freshness": "refreshing",
+      "lastSuccessfulAt": "2026-04-04T09:59:55.000Z",
+      "isRetainingSnapshot": true,
+      "errorMessage": null
+    }
+  }
+}

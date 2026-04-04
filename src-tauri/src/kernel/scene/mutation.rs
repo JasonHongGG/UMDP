@@ -1,4 +1,5 @@
-use super::{current_scene_session_key, log_scene_duration};
+use super::common::{current_scene_session_key, log_scene_duration};
+use super::events::emit_scene_workspace_state;
 use crate::domain::analysis_models::{
     RuntimeSceneMutationOperation, RuntimeSceneMutationResult, RuntimeSceneTransformUpdate,
 };
@@ -13,12 +14,13 @@ use std::time::Instant;
 use tauri::AppHandle;
 
 pub fn create_scene_child(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     parent_object_address: &str,
     name: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "create_scene_child",
         format!("parent_object_address={parent_object_address}"),
@@ -29,251 +31,224 @@ pub fn create_scene_child(
 }
 
 pub fn create_scene_root(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     scene_handle: i32,
     name: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "create_scene_root",
         format!("scene_handle={scene_handle}"),
-        |runtime_session| {
-            native_scene::create_scene_root(runtime_session.as_ref(), scene_handle, name)
-        },
+        |runtime_session| native_scene::create_scene_root(runtime_session.as_ref(), scene_handle, name),
     )
 }
 
 pub fn duplicate_scene_object(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "duplicate_scene_object",
         format!("object_address={object_address}"),
-        |runtime_session| {
-            native_scene::duplicate_scene_object(runtime_session.as_ref(), object_address)
-        },
+        |runtime_session| native_scene::duplicate_scene_object(runtime_session.as_ref(), object_address),
     )
 }
 
 pub fn delete_scene_object(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "delete_scene_object",
         format!("object_address={object_address}"),
-        |runtime_session| {
-            native_scene::delete_scene_object(runtime_session.as_ref(), object_address)
-        },
+        |runtime_session| native_scene::delete_scene_object(runtime_session.as_ref(), object_address),
     )
 }
 
 pub fn rename_scene_object(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     name: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "rename_scene_object",
         format!("object_address={object_address}"),
-        |runtime_session| {
-            native_scene::rename_scene_object(runtime_session.as_ref(), object_address, name)
-        },
+        |runtime_session| native_scene::rename_scene_object(runtime_session.as_ref(), object_address, name),
     )
 }
 
 pub fn set_scene_object_tag(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     tag: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "set_scene_object_tag",
         format!("object_address={object_address}"),
-        |runtime_session| {
-            native_scene::set_scene_object_tag(runtime_session.as_ref(), object_address, tag)
-        },
+        |runtime_session| native_scene::set_scene_object_tag(runtime_session.as_ref(), object_address, tag),
     )
 }
 
 pub fn set_scene_object_layer(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     layer: i32,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "set_scene_object_layer",
         format!("object_address={object_address} layer={layer}"),
-        |runtime_session| {
-            native_scene::set_scene_object_layer(runtime_session.as_ref(), object_address, layer)
-        },
+        |runtime_session| native_scene::set_scene_object_layer(runtime_session.as_ref(), object_address, layer),
     )
 }
 
 pub fn set_scene_object_hide_flags(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     hide_flags: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "set_scene_object_hide_flags",
         format!("object_address={object_address}"),
         |runtime_session| {
-            native_scene::set_scene_object_hide_flags(
-                runtime_session.as_ref(),
-                object_address,
-                hide_flags,
-            )
+            native_scene::set_scene_object_hide_flags(runtime_session.as_ref(), object_address, hide_flags)
         },
     )
 }
 
 pub fn reparent_scene_object(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     parent_object_address: Option<&str>,
     _parent_path: Option<&str>,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "reparent_scene_object",
         format!("object_address={object_address}"),
         |runtime_session| {
-            native_scene::reparent_scene_object(
-                runtime_session.as_ref(),
-                object_address,
-                parent_object_address,
-            )
+            native_scene::reparent_scene_object(runtime_session.as_ref(), object_address, parent_object_address)
         },
     )
 }
 
 pub fn set_scene_object_active(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     active_self: bool,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "set_scene_object_active",
         format!("object_address={object_address} active_self={active_self}"),
-        |runtime_session| {
-            native_scene::set_scene_object_active(
-                runtime_session.as_ref(),
-                object_address,
-                active_self,
-            )
-        },
+        |runtime_session| native_scene::set_scene_object_active(runtime_session.as_ref(), object_address, active_self),
     )
 }
 
 pub fn set_scene_object_transform(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     transform_update: &RuntimeSceneTransformUpdate,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "set_scene_object_transform",
         format!("object_address={object_address}"),
         |runtime_session| {
-            native_scene::set_scene_object_transform(
-                runtime_session.as_ref(),
-                object_address,
-                transform_update,
-            )
+            native_scene::set_scene_object_transform(runtime_session.as_ref(), object_address, transform_update)
         },
     )
 }
 
 pub fn set_scene_behaviour_enabled(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     component_address: &str,
     enabled: bool,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "set_scene_behaviour_enabled",
         format!("component_address={component_address} enabled={enabled}"),
         |runtime_session| {
-            native_scene::set_scene_behaviour_enabled(
-                runtime_session.as_ref(),
-                component_address,
-                enabled,
-            )
+            native_scene::set_scene_behaviour_enabled(runtime_session.as_ref(), component_address, enabled)
         },
     )
 }
 
 pub fn create_scene_component(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     object_address: &str,
     component_type_name: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "create_scene_component",
         format!("object_address={object_address} component_type_name={component_type_name}"),
         |runtime_session| {
-            native_scene::create_scene_component(
-                runtime_session.as_ref(),
-                object_address,
-                component_type_name,
-            )
+            native_scene::create_scene_component(runtime_session.as_ref(), object_address, component_type_name)
         },
     )
 }
 
 pub fn delete_scene_component(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     component_address: &str,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "delete_scene_component",
         format!("component_address={component_address}"),
-        |runtime_session| {
-            native_scene::delete_scene_component(runtime_session.as_ref(), component_address)
-        },
+        |runtime_session| native_scene::delete_scene_component(runtime_session.as_ref(), component_address),
     )
 }
 
 pub fn load_scene_by_build_index(
-    _app: &AppHandle,
+    app: &AppHandle,
     state: &AppState,
     build_index: i32,
 ) -> Result<RuntimeSceneMutationResult, String> {
     perform_scene_mutation(
+        app,
         state,
         "load_scene_by_build_index",
         format!("build_index={build_index}"),
-        |runtime_session| {
-            native_scene::load_scene_by_build_index(runtime_session.as_ref(), build_index)
-        },
+        |runtime_session| native_scene::load_scene_by_build_index(runtime_session.as_ref(), build_index),
     )
 }
 
 fn perform_scene_mutation<F>(
+    app: &AppHandle,
     state: &AppState,
     label: &str,
     details: String,
@@ -286,11 +261,15 @@ where
     present(ensure_attached_session(state).map(|_| ()))?;
 
     let runtime_session = ensure_runtime_session_ready(state).map_err(String::from)?;
-    let snapshot = present(execute_runtime_operation(state, || {
-        loader(&runtime_session)
-    }))?;
+    let snapshot = present(execute_runtime_operation(state, || loader(&runtime_session)))?;
     invalidate_scene_inspector_after_mutation(state, &snapshot);
     invalidate_scene_children_after_mutation(state, &snapshot);
+    let session_key = current_scene_session_key(state);
+    let workspace = state
+        .scene()
+        .workspace()
+        .bump_mutation_epoch(session_key.as_deref());
+    emit_scene_workspace_state(app, &workspace);
     log_scene_duration(label, started_at, &details);
     Ok(snapshot)
 }

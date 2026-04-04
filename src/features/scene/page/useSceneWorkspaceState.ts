@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
 import type {
+  RuntimeSceneMutationOperation,
   RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
@@ -59,6 +60,7 @@ export interface SceneWorkspaceStateResult {
   deleteSceneComponent: (componentAddress: string) => Promise<RuntimeSceneMutationResult | null>;
   loadSceneByBuildIndex: (buildIndex: number) => Promise<RuntimeSceneMutationResult | null>;
   sceneMutationState: SceneMutationState;
+  isSceneMutationPending: (operation: RuntimeSceneMutationOperation) => boolean;
   activeSceneTask: WorkspaceTaskSnapshot | null;
   sceneTasks: WorkspaceTaskSnapshot[];
   sceneRootsByHandle: Record<number, RuntimeSceneNodeSummary[]>;
@@ -135,24 +137,16 @@ export function useSceneWorkspaceState({
     repository,
     workspaceLifecycle,
     active,
+    sceneWorkspace,
     selectedObjectAddress,
     setSceneWorkspace,
-    setChildrenByParent,
-    setChildTaskByParent,
     setLoadingChildrenByParent,
     setChildErrorByParent,
-    setInspectorsByAddress,
-    setInspectorTaskByAddress,
     setInspectorLoadingByAddress,
     setInspectorErrorByAddress,
-    setSceneMutationState,
     processKeyRef,
     childTaskByParentRef,
     inspectorTaskByAddressRef,
-    childPollTokensRef,
-    activeChildTaskIdByParentRef,
-    activeInspectorTaskIdRef,
-    inspectorPollTokenRef,
     resetSceneState,
     applySceneChildrenTaskState,
     applyInspectorTaskState,
@@ -251,6 +245,10 @@ export function useSceneWorkspaceState({
     });
   }, [childTaskByParent, inspectorTaskByAddress, sceneMutationState.task, sceneWorkspace]);
 
+  const isSceneMutationPending = useCallback((operation: RuntimeSceneMutationOperation) => {
+    return (sceneMutationState.pendingOperations[operation] ?? 0) > 0;
+  }, [sceneMutationState.pendingOperations]);
+
   return {
     sceneWorkspace,
     refreshSceneWorkspace,
@@ -293,6 +291,7 @@ export function useSceneWorkspaceState({
     deleteSceneComponent,
     loadSceneByBuildIndex,
     sceneMutationState,
+    isSceneMutationPending,
     activeSceneTask: sceneMutationState.task,
     sceneTasks,
     sceneRootsByHandle,

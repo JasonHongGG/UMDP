@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type {
-  RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectInspectorSnapshot,
   RuntimeSceneObjectInspectorTaskState,
-  RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
@@ -19,36 +16,96 @@ import {
   isTerminalInspectorTaskStatus,
   logSceneError,
   logScenePerf,
-  waitForNextPaint,
 } from './sceneWorkspaceStatePatches';
-import { EMPTY_MUTATION_STATE, type SceneMutationState } from './useSceneWorkspaceStore';
 
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function compareSceneWorkspaceVersion(
+  left: Pick<SceneWorkspaceState, 'resourceRevision' | 'mutationEpoch'>,
+  right: Pick<SceneWorkspaceState, 'resourceRevision' | 'mutationEpoch'>,
+) {
+  if (left.resourceRevision !== right.resourceRevision) {
+    return left.resourceRevision - right.resourceRevision;
+  }
+
+  return left.mutationEpoch - right.mutationEpoch;
+}
+
+function isOlderSceneTask(
+  currentTask: Pick<RuntimeSceneObjectChildrenTaskState, 'mutationEpoch' | 'taskId' | 'resourceRevision'>,
+  nextTask: Pick<RuntimeSceneObjectChildrenTaskState, 'mutationEpoch' | 'taskId' | 'resourceRevision'>,
+) {
+  if (currentTask.mutationEpoch !== nextTask.mutationEpoch) {
+    return currentTask.mutationEpoch > nextTask.mutationEpoch;
+  }
+
+  if (currentTask.taskId !== nextTask.taskId) {
+    return currentTask.taskId > nextTask.taskId;
+  }
+
+  return currentTask.resourceRevision > nextTask.resourceRevision;
+}
+
+function shouldReuseChildrenTask(
+  taskState: RuntimeSceneObjectChildrenTaskState,
+  latestMutationEpoch: number,
+  force: boolean,
+) {
+  if (force) {
+    return false;
+  }
+
+  if (taskState.mutationEpoch < latestMutationEpoch) {
+    return false;
+  }
+
+  if (taskState.resourceState.freshness === 'fresh'
+    && taskState.status === 'ready'
+    && taskState.loadedCount >= taskState.totalCount) {
+    return true;
+  }
+
+  return taskState.resourceState.freshness === 'refreshing' || !isTerminalChildrenTaskStatus(taskState.status);
+}
+
+function shouldReuseInspectorTask(
+  taskState: RuntimeSceneObjectInspectorTaskState,
+  latestMutationEpoch: number,
+  force: boolean,
+) {
+  if (force) {
+    return false;
+  }
+
+  if (taskState.mutationEpoch < latestMutationEpoch) {
+    return false;
+  }
+
+  if (taskState.resourceState.freshness === 'fresh'
+    && taskState.status === 'ready'
+    && taskState.header) {
+    return true;
+  }
+
+  return taskState.resourceState.freshness === 'refreshing' || !isTerminalInspectorTaskStatus(taskState.status);
 }
 
 interface UseSceneWorkspaceSyncOptions {
   repository: SceneGateway;
   workspaceLifecycle: WorkspaceLifecycleState;
   active: boolean;
+  sceneWorkspace: SceneWorkspaceState;
   selectedObjectAddress: string | null;
   setSceneWorkspace: Dispatch<SetStateAction<SceneWorkspaceState>>;
-  setChildrenByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneNodeSummary[]>>>;
-  setChildTaskByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectChildrenTaskState>>>;
   setLoadingChildrenByParent: Dispatch<SetStateAction<Record<string, boolean>>>;
   setChildErrorByParent: Dispatch<SetStateAction<Record<string, string | null>>>;
-  setInspectorsByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectInspectorSnapshot>>>;
-  setInspectorTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectInspectorTaskState>>>;
   setInspectorLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
   setInspectorErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
-  setSceneMutationState: Dispatch<SetStateAction<SceneMutationState>>;
   processKeyRef: MutableRefObject<string | null>;
   childTaskByParentRef: MutableRefObject<Record<string, RuntimeSceneObjectChildrenTaskState>>;
   inspectorTaskByAddressRef: MutableRefObject<Record<string, RuntimeSceneObjectInspectorTaskState>>;
-  childPollTokensRef: MutableRefObject<Record<string, number>>;
-  activeChildTaskIdByParentRef: MutableRefObject<Record<string, number | null>>;
-  activeInspectorTaskIdRef: MutableRefObject<number | null>;
-  inspectorPollTokenRef: MutableRefObject<number>;
   resetSceneState: () => void;
   applySceneChildrenTaskState: (taskState: RuntimeSceneObjectChildrenTaskState) => void;
   applyInspectorTaskState: (taskState: RuntimeSceneObjectInspectorTaskState) => void;
@@ -58,48 +115,56 @@ export function useSceneWorkspaceSync({
   repository,
   workspaceLifecycle,
   active,
+  sceneWorkspace,
   selectedObjectAddress,
   setSceneWorkspace,
-  setChildrenByParent,
-  setChildTaskByParent,
   setLoadingChildrenByParent,
   setChildErrorByParent,
-  setInspectorsByAddress,
-  setInspectorTaskByAddress,
   setInspectorLoadingByAddress,
   setInspectorErrorByAddress,
-  setSceneMutationState,
   processKeyRef,
   childTaskByParentRef,
   inspectorTaskByAddressRef,
-  childPollTokensRef,
-  activeChildTaskIdByParentRef,
-  activeInspectorTaskIdRef,
-  inspectorPollTokenRef,
   resetSceneState,
   applySceneChildrenTaskState,
   applyInspectorTaskState,
 }: UseSceneWorkspaceSyncOptions) {
   const currentSceneSessionKey = workspaceLifecycle.runtimeSession.sessionKey ?? null;
   const currentSceneSessionKeyRef = useRef<string | null>(currentSceneSessionKey);
-  const latestSceneWorkspaceRevisionRef = useRef(0);
+  const latestSceneWorkspaceVersionRef = useRef({
+    resourceRevision: sceneWorkspace.resourceRevision,
+    mutationEpoch: sceneWorkspace.mutationEpoch,
+  });
 
   useEffect(() => {
     currentSceneSessionKeyRef.current = currentSceneSessionKey;
   }, [currentSceneSessionKey]);
+
+  useEffect(() => {
+    latestSceneWorkspaceVersionRef.current = {
+      resourceRevision: sceneWorkspace.resourceRevision,
+      mutationEpoch: sceneWorkspace.mutationEpoch,
+    };
+  }, [sceneWorkspace.mutationEpoch, sceneWorkspace.resourceRevision]);
 
   const updateSceneWorkspace = useCallback((nextState: SetStateAction<SceneWorkspaceState>) => {
     setSceneWorkspace((previous) => {
       const resolved = typeof nextState === 'function'
         ? nextState(previous)
         : nextState;
-      latestSceneWorkspaceRevisionRef.current = resolved.resourceRevision;
+      latestSceneWorkspaceVersionRef.current = {
+        resourceRevision: resolved.resourceRevision,
+        mutationEpoch: resolved.mutationEpoch,
+      };
       return resolved;
     });
   }, [setSceneWorkspace]);
 
   const resetSceneWorkspaceState = useCallback(() => {
-    latestSceneWorkspaceRevisionRef.current = 0;
+    latestSceneWorkspaceVersionRef.current = {
+      resourceRevision: 0,
+      mutationEpoch: 0,
+    };
     resetSceneState();
   }, [resetSceneState]);
 
@@ -109,19 +174,54 @@ export function useSceneWorkspaceSync({
 
   const shouldAcceptSceneWorkspace = useCallback((workspace: SceneWorkspaceState) => {
     return matchesCurrentSceneSession(workspace.sessionKey)
-      && workspace.resourceRevision >= latestSceneWorkspaceRevisionRef.current;
+      && compareSceneWorkspaceVersion(workspace, latestSceneWorkspaceVersionRef.current) >= 0;
   }, [matchesCurrentSceneSession]);
+
+  const shouldAcceptChildrenTask = useCallback((taskState: RuntimeSceneObjectChildrenTaskState) => {
+    if (!matchesCurrentSceneSession(taskState.sessionKey)) {
+      return false;
+    }
+
+    if (taskState.mutationEpoch < latestSceneWorkspaceVersionRef.current.mutationEpoch) {
+      return false;
+    }
+
+    const currentTask = childTaskByParentRef.current[taskState.parentObjectAddress];
+    if (!currentTask) {
+      return true;
+    }
+
+    return !isOlderSceneTask(currentTask, taskState);
+  }, [childTaskByParentRef, matchesCurrentSceneSession]);
+
+  const shouldAcceptInspectorTask = useCallback((taskState: RuntimeSceneObjectInspectorTaskState) => {
+    if (!matchesCurrentSceneSession(taskState.sessionKey)) {
+      return false;
+    }
+
+    if (taskState.mutationEpoch < latestSceneWorkspaceVersionRef.current.mutationEpoch) {
+      return false;
+    }
+
+    const currentTask = inspectorTaskByAddressRef.current[taskState.objectAddress];
+    if (!currentTask) {
+      return true;
+    }
+
+    return !isOlderSceneTask(currentTask, taskState);
+  }, [inspectorTaskByAddressRef, matchesCurrentSceneSession]);
 
   const loadSceneObjectInspector = useCallback(async (objectAddress: string, force = false) => {
     const currentTask = inspectorTaskByAddressRef.current[objectAddress];
-    if (!force && currentTask && !isTerminalInspectorTaskStatus(currentTask.status)) {
+    if (currentTask && shouldReuseInspectorTask(
+      currentTask,
+      latestSceneWorkspaceVersionRef.current.mutationEpoch,
+      force,
+    )) {
       return;
     }
 
     const startedAt = nowMs();
-    const pollToken = inspectorPollTokenRef.current + 1;
-    inspectorPollTokenRef.current = pollToken;
-    activeInspectorTaskIdRef.current = null;
     setInspectorLoadingByAddress((previous) => ({
       ...previous,
       [objectAddress]: true,
@@ -133,11 +233,10 @@ export function useSceneWorkspaceSync({
 
     try {
       const taskState = await repository.startSceneObjectInspectorAnalysis(objectAddress);
-      if (inspectorPollTokenRef.current !== pollToken || !taskState) {
+      if (!taskState || !shouldAcceptInspectorTask(taskState)) {
         return;
       }
 
-      activeInspectorTaskIdRef.current = taskState.taskId;
       applyInspectorTaskState(taskState);
 
       if (taskState.header) {
@@ -156,21 +255,19 @@ export function useSceneWorkspaceSync({
         [objectAddress]: message,
       }));
     }
-  }, [activeInspectorTaskIdRef, applyInspectorTaskState, inspectorPollTokenRef, inspectorTaskByAddressRef, repository, setInspectorErrorByAddress, setInspectorLoadingByAddress]);
+  }, [applyInspectorTaskState, inspectorTaskByAddressRef, repository, setInspectorErrorByAddress, setInspectorLoadingByAddress, shouldAcceptInspectorTask]);
 
   const ensureSceneObjectChildrenLoaded = useCallback(async (objectAddress: string, force = false) => {
     const currentTask = childTaskByParentRef.current[objectAddress];
-    if (!force && currentTask && !isTerminalChildrenTaskStatus(currentTask.status)) {
-      return;
-    }
-    if (!force && currentTask?.status === 'ready' && currentTask.loadedCount >= currentTask.totalCount) {
+    if (currentTask && shouldReuseChildrenTask(
+      currentTask,
+      latestSceneWorkspaceVersionRef.current.mutationEpoch,
+      force,
+    )) {
       return;
     }
 
     const startedAt = nowMs();
-    const pollToken = (childPollTokensRef.current[objectAddress] ?? 0) + 1;
-    childPollTokensRef.current[objectAddress] = pollToken;
-    activeChildTaskIdByParentRef.current[objectAddress] = null;
     setLoadingChildrenByParent((previous) => ({
       ...previous,
       [objectAddress]: true,
@@ -181,13 +278,11 @@ export function useSceneWorkspaceSync({
     }));
 
     try {
-      await waitForNextPaint();
       const taskState = await repository.startSceneObjectChildrenAnalysis(objectAddress);
-      if ((childPollTokensRef.current[objectAddress] ?? 0) !== pollToken || !taskState) {
+      if (!taskState || !shouldAcceptChildrenTask(taskState)) {
         return;
       }
 
-      activeChildTaskIdByParentRef.current[objectAddress] = taskState.taskId;
       applySceneChildrenTaskState(taskState);
 
       logScenePerf(`getSceneObjectChildren:${objectAddress}`, startedAt, {
@@ -202,34 +297,18 @@ export function useSceneWorkspaceSync({
         [objectAddress]: message,
       }));
     }
-  }, [activeChildTaskIdByParentRef, applySceneChildrenTaskState, childPollTokensRef, childTaskByParentRef, repository, setChildErrorByParent, setLoadingChildrenByParent]);
+  }, [applySceneChildrenTaskState, childTaskByParentRef, repository, setChildErrorByParent, setLoadingChildrenByParent, shouldAcceptChildrenTask]);
 
-  const stopSceneObjectChildrenObservation = useCallback((objectAddress: string) => {
-    childPollTokensRef.current[objectAddress] = (childPollTokensRef.current[objectAddress] ?? 0) + 1;
-    delete activeChildTaskIdByParentRef.current[objectAddress];
-    setChildTaskByParent((previous) => {
-      if (!Object.prototype.hasOwnProperty.call(previous, objectAddress)) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[objectAddress];
-      return next;
-    });
-    setLoadingChildrenByParent((previous) => {
-      if (!previous[objectAddress]) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        [objectAddress]: false,
-      };
-    });
-  }, [activeChildTaskIdByParentRef, childPollTokensRef, setChildTaskByParent, setLoadingChildrenByParent]);
+  const stopSceneObjectChildrenObservation = useCallback((_objectAddress: string) => {
+    return;
+  }, []);
 
   const refreshSceneWorkspace = useCallback(async () => {
     if (!workspaceLifecycle.processSession || !workspaceLifecycle.hasSnapshot) {
+      return;
+    }
+
+    if (sceneWorkspace.refreshStatus === 'refreshing' || sceneWorkspace.resourceState.freshness === 'refreshing') {
       return;
     }
 
@@ -238,6 +317,12 @@ export function useSceneWorkspaceSync({
       ...previous,
       refreshStatus: 'refreshing',
       errorMessage: null,
+      resourceState: {
+        ...previous.resourceState,
+        freshness: previous.snapshot ? 'refreshing' : previous.resourceState.freshness,
+        isRetainingSnapshot: previous.snapshot != null,
+        errorMessage: null,
+      },
     }));
 
     try {
@@ -247,17 +332,6 @@ export function useSceneWorkspaceSync({
       }
 
       updateSceneWorkspace(next);
-      setChildrenByParent({});
-      setChildTaskByParent({});
-      setLoadingChildrenByParent({});
-      setChildErrorByParent({});
-      setInspectorsByAddress({});
-      setInspectorTaskByAddress({});
-      setInspectorLoadingByAddress({});
-      setInspectorErrorByAddress({});
-      setSceneMutationState(EMPTY_MUTATION_STATE);
-      childPollTokensRef.current = {};
-      activeChildTaskIdByParentRef.current = {};
       logScenePerf('refreshSceneWorkspace', startedAt, {
         sceneCount: next.snapshot?.scenes.length ?? 0,
       });
@@ -269,7 +343,7 @@ export function useSceneWorkspaceSync({
         errorMessage: message,
       }));
     }
-  }, [activeChildTaskIdByParentRef, childPollTokensRef, repository, setChildErrorByParent, setChildTaskByParent, setChildrenByParent, setInspectorErrorByAddress, setInspectorLoadingByAddress, setInspectorTaskByAddress, setInspectorsByAddress, setLoadingChildrenByParent, setSceneMutationState, shouldAcceptSceneWorkspace, updateSceneWorkspace, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
+  }, [repository, sceneWorkspace.refreshStatus, sceneWorkspace.resourceState.freshness, shouldAcceptSceneWorkspace, updateSceneWorkspace, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
 
   const loadSceneWorkspaceState = useCallback(async () => {
     const startedAt = nowMs();
@@ -320,12 +394,7 @@ export function useSceneWorkspaceSync({
     }).catch(() => undefined);
 
     onSceneObjectChildrenTaskUpdated((taskState) => {
-      if (disposed || !matchesCurrentSceneSession(taskState.sessionKey)) {
-        return;
-      }
-
-      const activeTaskId = activeChildTaskIdByParentRef.current[taskState.parentObjectAddress];
-      if (activeTaskId == null || taskState.taskId !== activeTaskId) {
+      if (disposed || !shouldAcceptChildrenTask(taskState)) {
         return;
       }
 
@@ -339,11 +408,7 @@ export function useSceneWorkspaceSync({
     }).catch(() => undefined);
 
     onSceneObjectInspectorTaskUpdated((taskState) => {
-      if (disposed || !matchesCurrentSceneSession(taskState.sessionKey)) {
-        return;
-      }
-
-      if (activeInspectorTaskIdRef.current == null || taskState.taskId !== activeInspectorTaskIdRef.current) {
+      if (disposed || !shouldAcceptInspectorTask(taskState)) {
         return;
       }
 
@@ -362,7 +427,7 @@ export function useSceneWorkspaceSync({
       disposeChildren?.();
       disposeInspector?.();
     };
-  }, [active, activeChildTaskIdByParentRef, activeInspectorTaskIdRef, applyInspectorTaskState, applySceneChildrenTaskState, matchesCurrentSceneSession, shouldAcceptSceneWorkspace, updateSceneWorkspace]);
+  }, [active, applyInspectorTaskState, applySceneChildrenTaskState, shouldAcceptChildrenTask, shouldAcceptInspectorTask, shouldAcceptSceneWorkspace, updateSceneWorkspace]);
 
   useEffect(() => {
     const processKey = workspaceLifecycle.runtimeSession.sessionKey
@@ -387,7 +452,7 @@ export function useSceneWorkspaceSync({
     }
 
     loadSceneWorkspaceState().then((state) => {
-      if (!state?.snapshot) {
+      if (!state?.snapshot || state.resourceState.freshness === 'empty') {
         refreshSceneWorkspace().catch(() => undefined);
       }
     }).catch(() => undefined);
@@ -399,15 +464,26 @@ export function useSceneWorkspaceSync({
     }
 
     loadSceneObjectInspector(selectedObjectAddress).catch(() => undefined);
-    return () => {
-      inspectorPollTokenRef.current += 1;
-      const activeTaskId = activeInspectorTaskIdRef.current;
-      activeInspectorTaskIdRef.current = null;
-      if (activeTaskId != null) {
-        repository.cancelSceneObjectInspectorAnalysis(activeTaskId).catch(() => undefined);
-      }
-    };
-  }, [active, activeInspectorTaskIdRef, inspectorPollTokenRef, loadSceneObjectInspector, repository, selectedObjectAddress]);
+  }, [active, loadSceneObjectInspector, selectedObjectAddress]);
+
+  useEffect(() => {
+    if (!active || !selectedObjectAddress) {
+      return;
+    }
+
+    const currentTask = inspectorTaskByAddressRef.current[selectedObjectAddress];
+    if (!currentTask) {
+      return;
+    }
+
+    if (currentTask.mutationEpoch < sceneWorkspace.mutationEpoch
+      || currentTask.isStale
+      || currentTask.resourceState.freshness === 'stale'
+      || currentTask.resourceState.freshness === 'error'
+      || currentTask.resourceState.freshness === 'empty') {
+      loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    }
+  }, [active, loadSceneObjectInspector, sceneWorkspace.mutationEpoch, selectedObjectAddress, inspectorTaskByAddressRef]);
 
   return {
     loadSceneObjectInspector,

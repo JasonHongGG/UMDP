@@ -1,5 +1,5 @@
+use super::common::{current_scene_session_key, log_scene_duration};
 use super::events::emit_scene_workspace_state;
-use super::{current_scene_session_key, log_scene_duration};
 use crate::domain::analysis_models::{
     RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenPageSnapshot, RuntimeSceneChildrenSnapshot,
     RuntimeSceneComponentsPageSnapshot, RuntimeSceneObjectInspectorHeaderSnapshot,
@@ -16,10 +16,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tauri::AppHandle;
 
-pub fn start_scene_refresh(
-    _app: &AppHandle,
-    state: &AppState,
-) -> Result<SceneWorkspaceState, String> {
+pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> Result<SceneWorkspaceState, String> {
     let started_at = Instant::now();
     present(ensure_attached_session(state).map(|_| ()))?;
     present(ensure_scene_query_runtime_ready(state))?;
@@ -28,7 +25,7 @@ pub fn start_scene_refresh(
         .scene()
         .workspace()
         .set_refreshing(session_key.clone());
-    emit_scene_workspace_state(_app, &workspace);
+    emit_scene_workspace_state(app, &workspace);
 
     let snapshot = match execute_runtime_operation(state, || load_scene_catalog(state)) {
         Ok(snapshot) => snapshot,
@@ -37,7 +34,7 @@ pub fn start_scene_refresh(
                 .scene()
                 .workspace()
                 .set_error(session_key.as_deref(), error.to_string());
-            emit_scene_workspace_state(_app, &workspace);
+            emit_scene_workspace_state(app, &workspace);
             return Err(error.into());
         }
     };
@@ -52,7 +49,7 @@ pub fn start_scene_refresh(
         .scene()
         .workspace()
         .set_snapshot(session_key.as_deref(), snapshot);
-    emit_scene_workspace_state(_app, &workspace);
+    emit_scene_workspace_state(app, &workspace);
     if current_scene_session_key(state) == session_key {
         state.scene().children().reset();
         state.scene().inspector().reset();
@@ -112,12 +109,11 @@ pub fn get_scene_object_inspector(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_catalog(state: &AppState) -> OperationResult<RuntimeSceneCatalogSnapshot> {
+pub(crate) fn load_scene_catalog(state: &AppState) -> OperationResult<RuntimeSceneCatalogSnapshot> {
     let started_at = Instant::now();
     let attached = ensure_attached_session(state)?;
     let runtime_session = require_runtime_session(state)?;
-    let snapshot =
-        native_scene::load_scene_catalog(runtime_session.as_ref()).map_err(OperationError::from)?;
+    let snapshot = native_scene::load_scene_catalog(runtime_session.as_ref()).map_err(OperationError::from)?;
     log_scene_duration(
         "load_scene_catalog",
         started_at,
@@ -126,7 +122,7 @@ pub(super) fn load_scene_catalog(state: &AppState) -> OperationResult<RuntimeSce
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_children(
+pub(crate) fn load_scene_children(
     state: &AppState,
     object_address: &str,
 ) -> OperationResult<RuntimeSceneChildrenSnapshot> {
@@ -148,7 +144,7 @@ pub(super) fn load_scene_children(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_children_page(
+pub(crate) fn load_scene_children_page(
     state: &AppState,
     object_address: &str,
     offset: usize,
@@ -179,7 +175,7 @@ pub(super) fn load_scene_children_page(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_inspector(
+pub(crate) fn load_scene_inspector(
     state: &AppState,
     object_address: &str,
 ) -> OperationResult<RuntimeSceneObjectInspectorSnapshot> {
@@ -202,7 +198,7 @@ pub(super) fn load_scene_inspector(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_inspector_header(
+pub(crate) fn load_scene_inspector_header(
     state: &AppState,
     object_address: &str,
 ) -> OperationResult<RuntimeSceneObjectInspectorHeaderSnapshot> {
@@ -220,7 +216,7 @@ pub(super) fn load_scene_inspector_header(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_inspector_children_page(
+pub(crate) fn load_scene_inspector_children_page(
     state: &AppState,
     object_address: &str,
     offset: usize,
@@ -251,7 +247,7 @@ pub(super) fn load_scene_inspector_children_page(
     Ok(snapshot)
 }
 
-pub(super) fn load_scene_inspector_components_page(
+pub(crate) fn load_scene_inspector_components_page(
     state: &AppState,
     object_address: &str,
     offset: usize,
@@ -282,7 +278,7 @@ pub(super) fn load_scene_inspector_components_page(
     Ok(snapshot)
 }
 
-pub(super) fn ensure_scene_query_runtime_ready(state: &AppState) -> OperationResult<()> {
+pub(crate) fn ensure_scene_query_runtime_ready(state: &AppState) -> OperationResult<()> {
     require_runtime_session(state)?;
     Ok(())
 }

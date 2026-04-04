@@ -112,8 +112,8 @@ pub struct SystemContractVersions {
 
 pub fn current_contract_versions() -> SystemContractVersions {
     SystemContractVersions {
-        tauri_command_version: 1,
-        analysis_schema_version: 2,
+        tauri_command_version: 2,
+        analysis_schema_version: 3,
         workflow_schema_version: 1,
     }
 }

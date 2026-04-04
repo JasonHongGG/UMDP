@@ -72,7 +72,7 @@ export function SceneInspectorView() {
     createSceneComponent,
     deleteSceneComponent,
     sceneMutationState,
-    activeSceneTask,
+    isSceneMutationPending,
   } = useSceneMutationState();
 
   const [newChildName, setNewChildName] = useState('GameObject');
@@ -168,6 +168,18 @@ export function SceneInspectorView() {
     && parsedLayer !== (sceneInspector.object.layer ?? 0);
   const currentParentAddress = sceneInspector?.parent?.objectAddress ?? null;
   const reparentDirty = sceneInspector != null && reparentTargetAddress !== currentParentAddress;
+  const toggleActivePending = isSceneMutationPending('set-active');
+  const renamePending = isSceneMutationPending('rename');
+  const duplicatePending = isSceneMutationPending('duplicate');
+  const deletePending = isSceneMutationPending('delete');
+  const tagPending = isSceneMutationPending('set-tag');
+  const layerPending = isSceneMutationPending('set-layer');
+  const transformPending = isSceneMutationPending('set-transform');
+  const componentMutationPending = isSceneMutationPending('add-component')
+    || isSceneMutationPending('remove-component')
+    || isSceneMutationPending('set-behaviour-enabled');
+  const createChildPending = isSceneMutationPending('create-child');
+  const reparentPending = isSceneMutationPending('reparent');
 
   const updateTransformAxis = (vectorKey: TransformVectorKey, axis: TransformAxis, nextValue: number, commit: boolean) => {
     const current = transformDraftRef.current;
@@ -260,7 +272,7 @@ export function SceneInspectorView() {
                 <button
                   type="button"
                   onClick={() => setSceneObjectActive(!(sceneInspector?.object.activeSelf ?? true)).catch(() => undefined)}
-                  disabled={sceneMutationState.loading}
+                  disabled={toggleActivePending}
                   className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all border ${
                     (sceneInspector?.object.activeSelf ?? true) 
                       ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.2)]' 
@@ -276,7 +288,7 @@ export function SceneInspectorView() {
                   onChange={(e) => setNameDraft(e.target.value)}
                   onBlur={() => nameDirty && renameSceneObject(nameDraft.trim()).catch(() => undefined)}
                   onKeyDown={(e) => e.key === 'Enter' && nameDirty && renameSceneObject(nameDraft.trim()).catch(() => undefined)}
-                  disabled={sceneMutationState.loading}
+                  disabled={renamePending}
                   className={`bg-transparent font-semibold text-white px-1 py-0.5 min-w-[150px] outline-none border border-transparent focus:border-cyan-500/50 hover:border-[#1c2838] rounded-sm transition-colors ${nameDirty ? 'text-cyan-300' : ''}`}
                 />
                 {sceneInspector?.object.isStatic && (
@@ -286,7 +298,7 @@ export function SceneInspectorView() {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => duplicateSceneObject().catch(() => undefined)}
-                  disabled={sceneMutationState.loading}
+                  disabled={duplicatePending}
                   className="p-1.5 rounded hover:bg-[#1a2636] text-slate-400 hover:text-slate-200 transition-colors"
                   title="Duplicate Object"
                 >
@@ -294,7 +306,7 @@ export function SceneInspectorView() {
                 </button>
                 <button
                   onClick={() => deleteSceneObject().catch(() => undefined)}
-                  disabled={sceneMutationState.loading}
+                  disabled={deletePending}
                   className="p-1.5 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors"
                   title="Delete Object"
                 >
@@ -319,7 +331,7 @@ export function SceneInspectorView() {
                 onChange={(e) => setTagDraft(e.target.value)}
                 onBlur={() => tagDirty && setSceneObjectTag(tagDraft).catch(() => undefined)}
                 onKeyDown={(e) => e.key === 'Enter' && tagDirty && setSceneObjectTag(tagDraft).catch(() => undefined)}
-                disabled={sceneMutationState.loading}
+                disabled={tagPending}
                 className="bg-[#10151c] border border-[#1a2636] rounded px-2 py-1 text-slate-300 outline-none focus:border-cyan-500/50"
               />
               <span className="text-slate-500 font-medium pl-3">Layer</span>
@@ -328,7 +340,7 @@ export function SceneInspectorView() {
                 onChange={(e) => setLayerDraft(e.target.value)}
                 onBlur={() => layerDirty && setSceneObjectLayer(parsedLayer).catch(() => undefined)}
                 onKeyDown={(e) => e.key === 'Enter' && layerDirty && setSceneObjectLayer(parsedLayer).catch(() => undefined)}
-                disabled={sceneMutationState.loading || !Number.isInteger(parsedLayer)}
+                disabled={layerPending || !Number.isInteger(parsedLayer)}
                 className="bg-[#10151c] border border-[#1a2636] rounded px-2 py-1 text-slate-300 outline-none focus:border-cyan-500/50"
               />
             </div>
@@ -356,7 +368,7 @@ export function SceneInspectorView() {
                     <div className="flex justify-end gap-2 pt-2 mt-1 border-t border-[#141b24]">
                       <button
                         onClick={() => {
-                          const nextTransformDraft = toTransformDraft(sceneInspector.transform);
+                          const nextTransformDraft = toTransformDraft(sceneInspector?.transform);
                           transformDraftRef.current = nextTransformDraft;
                           setTransformDraft(nextTransformDraft);
                         }}
@@ -366,6 +378,7 @@ export function SceneInspectorView() {
                       </button>
                       <button
                         onClick={() => setSceneObjectTransform(transformDraft).catch(() => undefined)}
+                        disabled={transformPending}
                         className="px-3 py-1.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-[11px] font-medium text-cyan-200 transition-colors border border-cyan-500/30"
                       >
                         Apply Changes
@@ -392,7 +405,7 @@ export function SceneInspectorView() {
                   </div>
                   <button
                     onClick={() => createSceneComponent(componentTypeName).then(() => setComponentTypeName('')).catch(() => undefined)}
-                    disabled={sceneMutationState.loading || !componentTypeName}
+                    disabled={componentMutationPending || !componentTypeName}
                     className="shrink-0 px-3 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-xs font-semibold border border-cyan-500/30 disabled:opacity-50 transition-colors"
                   >
                     Add
@@ -410,7 +423,7 @@ export function SceneInspectorView() {
                     <CompactComponentRow
                       key={component.componentAddress}
                       component={component}
-                      disabled={sceneMutationState.loading}
+                      disabled={componentMutationPending}
                       onToggleBehaviour={(enabled) => setSceneBehaviourEnabled(component.componentAddress, enabled).catch(() => undefined)}
                       onDelete={() => deleteSceneComponent(component.componentAddress).catch(() => undefined)}
                     />
@@ -431,7 +444,7 @@ export function SceneInspectorView() {
                   />
                   <button
                     onClick={() => createSceneChild(newChildName.trim() || 'GameObject').catch(() => undefined)}
-                    disabled={sceneMutationState.loading}
+                    disabled={createChildPending}
                     className="shrink-0 px-3 rounded bg-[#10151c] hover:bg-[#1a2636] text-slate-300 border border-[#1c2838] text-xs transition-colors font-medium flex items-center gap-1"
                   >
                     <Plus size={12} /> Create
@@ -512,7 +525,7 @@ export function SceneInspectorView() {
                   {reparentDirty && (
                     <button
                       onClick={applySelectedParent}
-                      disabled={sceneMutationState.loading}
+                      disabled={reparentPending}
                       className="w-full mt-2 py-1.5 rounded bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 text-[11px] font-bold hover:bg-cyan-500/30 transition-colors"
                     >
                       Apply Parent Changes
@@ -563,15 +576,27 @@ function CompactVectorEditor({ label, value, onAxisChange }: { label: string, va
     <div className="flex items-center gap-2 pl-2 pr-1">
       <div className="w-[80px] shrink-0 text-[11px] font-medium text-slate-400">{label}</div>
       <div className="flex-1 flex items-center gap-1 overflow-hidden">
-        <CompactNumberInput tone="x" value={value.x} onChange={(v) => onAxisChange('x', v, false)} onDragCommit={(v) => onAxisChange('x', v, true)} />
-        <CompactNumberInput tone="y" value={value.y} onChange={(v) => onAxisChange('y', v, false)} onDragCommit={(v) => onAxisChange('y', v, true)} />
-        <CompactNumberInput tone="z" value={value.z} onChange={(v) => onAxisChange('z', v, false)} onDragCommit={(v) => onAxisChange('z', v, true)} />
+        <CompactNumberInput tone="x" value={value.x} onChange={(v: number) => onAxisChange('x', v, false)} onDragCommit={(v: number) => onAxisChange('x', v, true)} />
+        <CompactNumberInput tone="y" value={value.y} onChange={(v: number) => onAxisChange('y', v, false)} onDragCommit={(v: number) => onAxisChange('y', v, true)} />
+        <CompactNumberInput tone="z" value={value.z} onChange={(v: number) => onAxisChange('z', v, false)} onDragCommit={(v: number) => onAxisChange('z', v, true)} />
       </div>
     </div>
   );
 }
 
-function CompactNumberInput({ tone, value, onChange, onDragCommit, step = 0.1 }: any) {
+function CompactNumberInput({
+  tone,
+  value,
+  onChange,
+  onDragCommit,
+  step = 0.1,
+}: {
+  tone: 'x' | 'y' | 'z';
+  value: number;
+  onChange: (value: number) => void;
+  onDragCommit?: (value: number) => void;
+  step?: number;
+}) {
   const [draft, setDraft] = useState(() => formatNumericDraft(value));
   const dragCleanupRef = useRef<(() => void) | null>(null);
 
@@ -641,7 +666,17 @@ function CompactNumberInput({ tone, value, onChange, onDragCommit, step = 0.1 }:
   );
 }
 
-function CompactComponentRow({ component, disabled, onToggleBehaviour, onDelete }: any) {
+function CompactComponentRow({
+  component,
+  disabled,
+  onToggleBehaviour,
+  onDelete,
+}: {
+  component: RuntimeSceneComponentSummary;
+  disabled: boolean;
+  onToggleBehaviour: (enabled: boolean) => void;
+  onDelete: () => void;
+}) {
   const isBehaviour = component.isBehaviour;
   const isEnabled = component.behaviourEnabled !== false;
 

@@ -1,5 +1,5 @@
 {
-  "tauriCommandVersion": 1,
-  "analysisSchemaVersion": 2,
+  "tauriCommandVersion": 2,
+  "analysisSchemaVersion": 3,
   "workflowSchemaVersion": 1
 }

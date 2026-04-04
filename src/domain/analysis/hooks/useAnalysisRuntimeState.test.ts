@@ -31,8 +31,18 @@ const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   sessionKey: null,
   refreshStatus: 'idle',
   errorMessage: null,
+  mutationEpoch: 0,
   snapshot: null,
   lastUpdatedAt: null,
+  resourceState: {
+    resourceKind: 'catalog',
+    resourceRevision: 0,
+    sessionKey: null,
+    freshness: 'empty',
+    lastSuccessfulAt: null,
+    isRetainingSnapshot: false,
+    errorMessage: null,
+  },
 };
 
 const EMPTY_SCENE_MUTATION_RESULT = {

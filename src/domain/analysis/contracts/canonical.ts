@@ -193,6 +193,20 @@ export interface RuntimeFieldSetResult {
 
 export type SceneRefreshStatus = 'idle' | 'refreshing' | 'ready' | 'error';
 
+export type SceneResourceFreshness = 'empty' | 'fresh' | 'refreshing' | 'stale' | 'error';
+
+export type RuntimeSceneResourceKind = 'catalog' | 'children' | 'inspector';
+
+export interface RuntimeSceneResourceState {
+  resourceKind: RuntimeSceneResourceKind;
+  resourceRevision: number;
+  sessionKey: string | null;
+  freshness: SceneResourceFreshness;
+  lastSuccessfulAt: string | null;
+  isRetainingSnapshot: boolean;
+  errorMessage: string | null;
+}
+
 export interface RuntimeVector3Snapshot {
   x: number;
   y: number;
@@ -316,6 +330,7 @@ export interface RuntimeSceneObjectChildrenTaskState {
   nextOffset: number | null;
   errorMessage: string | null;
   isStale: boolean;
+  resourceState: RuntimeSceneResourceState;
 }
 
 export interface RuntimeSceneComponentsPageSnapshot {
@@ -368,6 +383,7 @@ export interface RuntimeSceneObjectInspectorTaskState {
   componentsNextOffset: number | null;
   errorMessage: string | null;
   isStale: boolean;
+  resourceState: RuntimeSceneResourceState;
 }
 
 export interface RuntimeSceneObjectInspectorSnapshot {
@@ -429,6 +445,8 @@ export interface SceneWorkspaceState {
   sessionKey: string | null;
   refreshStatus: SceneRefreshStatus;
   errorMessage: string | null;
+  mutationEpoch: number;
   snapshot: RuntimeSceneCatalogSnapshot | null;
   lastUpdatedAt: string | null;
+  resourceState: RuntimeSceneResourceState;
 }

@@ -4,6 +4,7 @@ import type {
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectInspectorSnapshot,
   RuntimeSceneObjectInspectorTaskState,
+  RuntimeSceneResourceState,
   RuntimeSceneTransformSnapshot,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -19,9 +20,31 @@ export const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
   sessionKey: null,
   refreshStatus: 'idle',
   errorMessage: null,
+  mutationEpoch: 0,
   snapshot: null,
   lastUpdatedAt: null,
+  resourceState: {
+    resourceKind: 'catalog',
+    resourceRevision: 0,
+    sessionKey: null,
+    freshness: 'empty',
+    lastSuccessfulAt: null,
+    isRetainingSnapshot: false,
+    errorMessage: null,
+  },
 };
+
+export function createEmptySceneResourceState(resourceKind: RuntimeSceneResourceState['resourceKind']): RuntimeSceneResourceState {
+  return {
+    resourceKind,
+    resourceRevision: 0,
+    sessionKey: null,
+    freshness: 'empty',
+    lastSuccessfulAt: null,
+    isRetainingSnapshot: false,
+    errorMessage: null,
+  };
+}
 
 export function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);

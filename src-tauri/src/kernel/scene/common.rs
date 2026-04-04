@@ -5,7 +5,7 @@ use std::time::Instant;
 pub(crate) fn log_scene_duration(label: &str, started_at: Instant, details: &str) {
     logging::debug(
         "scene",
-        "scene_service",
+        "scene_kernel",
         &format!("{label} completed."),
         vec![
             ("durationMs", started_at.elapsed().as_millis().to_string()),

@@ -33,6 +33,73 @@ function sceneMutationTaskScope(operation: RuntimeSceneMutationOperation): Works
   return operation === 'load-scene' || operation === 'create-root' ? 'resource' : 'selection';
 }
 
+function incrementPendingOperations(
+  pendingOperations: SceneMutationState['pendingOperations'],
+  operation: RuntimeSceneMutationOperation,
+) {
+  return {
+    ...pendingOperations,
+    [operation]: (pendingOperations[operation] ?? 0) + 1,
+  };
+}
+
+function decrementPendingOperations(
+  pendingOperations: SceneMutationState['pendingOperations'],
+  operation: RuntimeSceneMutationOperation,
+) {
+  const nextCount = Math.max(0, (pendingOperations[operation] ?? 0) - 1);
+  if (nextCount > 0) {
+    return {
+      ...pendingOperations,
+      [operation]: nextCount,
+    };
+  }
+
+  const next = { ...pendingOperations };
+  delete next[operation];
+  return next;
+}
+
+function hasPendingOperations(pendingOperations: SceneMutationState['pendingOperations']) {
+  return Object.values(pendingOperations).some((count) => count > 0);
+}
+
+function markChildrenTaskStale(task: RuntimeSceneObjectChildrenTaskState): RuntimeSceneObjectChildrenTaskState {
+  const hasRetainedSnapshot = task.children.length > 0;
+  const resourceRevision = task.resourceRevision + 1;
+  return {
+    ...task,
+    resourceRevision,
+    status: hasRetainedSnapshot ? 'ready' : 'cancelled',
+    isStale: true,
+    updatedAt: new Date().toISOString(),
+    resourceState: {
+      ...task.resourceState,
+      resourceRevision,
+      freshness: hasRetainedSnapshot ? 'stale' : 'empty',
+      isRetainingSnapshot: hasRetainedSnapshot,
+    },
+  };
+}
+
+function markInspectorTaskStale(task: RuntimeSceneObjectInspectorTaskState): RuntimeSceneObjectInspectorTaskState {
+  const hasRetainedSnapshot = task.header != null || task.children.length > 0 || task.components.length > 0;
+  const resourceRevision = task.resourceRevision + 1;
+  return {
+    ...task,
+    resourceRevision,
+    status: hasRetainedSnapshot ? 'ready' : 'cancelled',
+    isStale: true,
+    updatedAt: new Date().toISOString(),
+    resourceState: {
+      ...task.resourceState,
+      resourceRevision,
+      freshness: hasRetainedSnapshot ? 'stale' : 'empty',
+      isRetainingSnapshot: hasRetainedSnapshot,
+    },
+  };
+}
+
 interface UseSceneMutationActionsOptions {
   repository: SceneGateway;
   selectedObjectAddress: string | null;
@@ -87,29 +154,40 @@ export function useSceneMutationActions({
         let touched = false;
         const next = { ...previous };
         impacted.forEach((address) => {
-          if (Object.prototype.hasOwnProperty.call(next, address)) {
-            delete next[address];
+          const task = next[address];
+          if (task) {
+            next[address] = markInspectorTaskStale(task);
             touched = true;
           }
         });
+        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
+          delete next[result.deletedObjectAddress];
+          touched = true;
+        }
         return touched ? next : previous;
       });
     }
 
     const hierarchyMutation = result.operation === 'create-child'
       || result.operation === 'duplicate'
-      || result.operation === 'delete';
+      || result.operation === 'delete'
+      || result.operation === 'reparent';
 
     if (hierarchyMutation && impacted.length > 0) {
       setChildTaskByParent((previous) => {
         let touched = false;
         const next = { ...previous };
         impacted.forEach((address) => {
-          if (Object.prototype.hasOwnProperty.call(next, address)) {
-            delete next[address];
+          const task = next[address];
+          if (task) {
+            next[address] = markChildrenTaskStale(task);
             touched = true;
           }
         });
+        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
+          delete next[result.deletedObjectAddress];
+          touched = true;
+        }
         return touched ? next : previous;
       });
     }
@@ -172,9 +250,29 @@ export function useSceneMutationActions({
       case 'set-tag':
       case 'set-layer':
       case 'set-hide-flags':
+      {
+        if (result.object) {
+          applySummaryPatch(result.object);
+        }
+        break;
+      }
       case 'reparent': {
         if (result.object) {
           applySummaryPatch(result.object);
+          setChildrenByParent((previous) => {
+            const withoutObject = removeNodeEverywhere(previous, result.object!.objectAddress);
+            if (!result.parentObjectAddress) {
+              return withoutObject;
+            }
+            return insertChildNode(withoutObject, result.parentObjectAddress, result.object);
+          });
+          setInspectorsByAddress((previous) => {
+            const withoutObject = removeNodeFromInspectors(previous, result.object!.objectAddress);
+            if (!result.parentObjectAddress) {
+              return withoutObject;
+            }
+            return insertChildIntoInspectors(withoutObject, result.parentObjectAddress, result.object);
+          });
         }
         break;
       }
@@ -207,52 +305,62 @@ export function useSceneMutationActions({
     const taskStartedAt = new Date().toISOString();
     sceneMutationTaskCounterRef.current += 1;
     const taskId = `scene-${operation}-${sceneMutationTaskCounterRef.current}`;
-    setSceneMutationState({
-      operation,
-      loading: true,
-      errorMessage: null,
-      task: {
-        taskId,
-        resourceKind: 'scene',
-        operationKey: `scene.${operation}`,
-        scope: sceneMutationTaskScope(operation),
-        status: 'running',
-        progress: {
-          completed: 0,
-          total: 1,
-          message: `Applying ${operation}`,
-        },
-        targetId: selectedObjectAddress,
-        startedAt: taskStartedAt,
-        updatedAt: taskStartedAt,
+    setSceneMutationState((previous) => {
+      const pendingOperations = incrementPendingOperations(previous.pendingOperations, operation);
+      return {
+        ...previous,
+        operation,
+        loading: true,
         errorMessage: null,
-      },
+        pendingOperations,
+        task: {
+          taskId,
+          resourceKind: 'scene',
+          operationKey: `scene.${operation}`,
+          scope: sceneMutationTaskScope(operation),
+          status: 'running',
+          progress: {
+            completed: 0,
+            total: 1,
+            message: `Applying ${operation}`,
+          },
+          targetId: selectedObjectAddress,
+          startedAt: taskStartedAt,
+          updatedAt: taskStartedAt,
+          errorMessage: null,
+        },
+      };
     });
 
     try {
       const result = await runner();
       applySceneMutation(result);
       const updatedAt = new Date().toISOString();
-      setSceneMutationState({
-        operation,
-        loading: false,
-        errorMessage: null,
-        task: {
-          taskId,
-          resourceKind: 'scene',
-          operationKey: `scene.${operation}`,
-          scope: sceneMutationTaskScope(operation),
-          status: 'success',
-          progress: {
-            completed: 1,
-            total: 1,
-            message: `Completed ${operation}`,
-          },
-          targetId: result.preferredSelectionAddress ?? result.targetObjectAddress ?? selectedObjectAddress,
-          startedAt: taskStartedAt,
-          updatedAt,
+      setSceneMutationState((previous) => {
+        const pendingOperations = decrementPendingOperations(previous.pendingOperations, operation);
+        return {
+          ...previous,
+          operation,
+          loading: hasPendingOperations(pendingOperations),
           errorMessage: null,
-        },
+          pendingOperations,
+          task: {
+            taskId,
+            resourceKind: 'scene',
+            operationKey: `scene.${operation}`,
+            scope: sceneMutationTaskScope(operation),
+            status: 'success',
+            progress: {
+              completed: 1,
+              total: 1,
+              message: `Completed ${operation}`,
+            },
+            targetId: result.preferredSelectionAddress ?? result.targetObjectAddress ?? selectedObjectAddress,
+            startedAt: taskStartedAt,
+            updatedAt,
+            errorMessage: null,
+          },
+        };
       });
       logScenePerf(`sceneMutation:${operation}`, startedAt, {
         targetObjectAddress: result.targetObjectAddress,
@@ -262,26 +370,31 @@ export function useSceneMutationActions({
     } catch (error) {
       const message = logSceneError(`scene mutation failed: ${operation}`, error);
       const updatedAt = new Date().toISOString();
-      setSceneMutationState({
-        operation,
-        loading: false,
-        errorMessage: message,
-        task: {
-          taskId,
-          resourceKind: 'scene',
-          operationKey: `scene.${operation}`,
-          scope: sceneMutationTaskScope(operation),
-          status: 'error',
-          progress: {
-            completed: 0,
-            total: 1,
-            message: `Failed ${operation}`,
-          },
-          targetId: selectedObjectAddress,
-          startedAt: taskStartedAt,
-          updatedAt,
+      setSceneMutationState((previous) => {
+        const pendingOperations = decrementPendingOperations(previous.pendingOperations, operation);
+        return {
+          ...previous,
+          operation,
+          loading: hasPendingOperations(pendingOperations),
           errorMessage: message,
-        },
+          pendingOperations,
+          task: {
+            taskId,
+            resourceKind: 'scene',
+            operationKey: `scene.${operation}`,
+            scope: sceneMutationTaskScope(operation),
+            status: 'error',
+            progress: {
+              completed: 0,
+              total: 1,
+              message: `Failed ${operation}`,
+            },
+            targetId: selectedObjectAddress,
+            startedAt: taskStartedAt,
+            updatedAt,
+            errorMessage: message,
+          },
+        };
       });
       throw error;
     }
@@ -380,8 +493,10 @@ export function useSceneMutationActions({
       return null;
     }
 
-    return runMutation('set-active', () => repository.setSceneObjectActive(selectedObjectAddress, activeSelf));
-  }, [repository, runMutation, selectedObjectAddress]);
+    const result = await runMutation('set-active', () => repository.setSceneObjectActive(selectedObjectAddress, activeSelf));
+    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    return result;
+  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectTransform = useCallback(async (transformUpdate: RuntimeSceneTransformUpdate) => {
     if (!selectedObjectAddress) {

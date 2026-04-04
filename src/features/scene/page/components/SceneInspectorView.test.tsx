@@ -27,6 +27,10 @@ function findButtonByText(container: HTMLElement, text: string) {
   return Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes(text)) ?? null;
 }
 
+function findButtonByTextInDocument(text: string) {
+  return Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes(text)) ?? null;
+}
+
 async function flushEffects() {
   await act(async () => {
     await Promise.resolve();
@@ -91,6 +95,10 @@ describe('SceneInspectorView', () => {
 
     mockUseSceneInspectorState.mockReturnValue({
       setSelectedObjectAddress: vi.fn(),
+      sceneTabs: [],
+      activeSceneTabIndex: -1,
+      handleCloseTab: vi.fn(),
+      setActiveSceneTabIndex: vi.fn(),
       sceneInspector: createSceneInspectorSnapshot({
         object: player,
         parent: gameplayRoot,
@@ -123,10 +131,12 @@ describe('SceneInspectorView', () => {
       setSceneBehaviourEnabled: vi.fn().mockResolvedValue(null),
       createSceneComponent: vi.fn().mockResolvedValue(null),
       deleteSceneComponent: vi.fn().mockResolvedValue(null),
+      isSceneMutationPending: vi.fn().mockReturnValue(false),
       sceneMutationState: {
         operation: null,
         loading: false,
         errorMessage: null,
+        pendingOperations: {},
       },
     });
   });
@@ -148,7 +158,15 @@ describe('SceneInspectorView', () => {
     });
     await flushEffects();
 
-    const copyButton = findButtonByText(container, 'Copy Path');
+    const reparentAccordion = findButtonByText(container, 'Hierarchy Path & Reparenting');
+    expect(reparentAccordion).not.toBeNull();
+
+    await act(async () => {
+      reparentAccordion!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const copyButton = container.querySelector('button[title="Copy Path"]') as HTMLButtonElement | null;
     expect(copyButton).not.toBeNull();
 
     await act(async () => {
@@ -158,7 +176,6 @@ describe('SceneInspectorView', () => {
 
     expect(clipboardWriteText).toHaveBeenCalledWith('GameplayRoot/Player');
     expect(container.textContent).toContain('Static');
-    expect(container.textContent).toContain('Hierarchy path copied.');
   });
 
   it('applies reparenting from the searchable loaded-node candidate list', async () => {
@@ -167,7 +184,15 @@ describe('SceneInspectorView', () => {
     });
     await flushEffects();
 
-    const searchInput = container.querySelector('input[placeholder="Search parent by loaded name or path"]') as HTMLInputElement | null;
+    const reparentAccordion = findButtonByText(container, 'Hierarchy Path & Reparenting');
+    expect(reparentAccordion).not.toBeNull();
+
+    await act(async () => {
+      reparentAccordion!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const searchInput = container.querySelector('input[placeholder="Search node..."]') as HTMLInputElement | null;
     expect(searchInput).not.toBeNull();
 
     await act(async () => {
@@ -176,15 +201,24 @@ describe('SceneInspectorView', () => {
     });
     await flushEffects();
 
-    const candidateButton = findButtonByText(container, 'UILayer');
-    const applyButton = findButtonByText(container, 'Apply Parent');
+    const selectTrigger = findButtonByText(container, 'GameplayRoot (GameplayRoot)');
+    expect(selectTrigger).not.toBeNull();
+
+    await act(async () => {
+      selectTrigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushEffects();
+
+    const candidateButton = findButtonByTextInDocument('UILayer');
     expect(candidateButton).not.toBeNull();
-    expect(applyButton).not.toBeNull();
 
     await act(async () => {
       candidateButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flushEffects();
+
+    const applyButton = findButtonByText(container, 'Apply Parent Changes');
+    expect(applyButton).not.toBeNull();
 
     await act(async () => {
       applyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -200,7 +234,7 @@ describe('SceneInspectorView', () => {
     });
     await flushEffects();
 
-    const dragHandles = Array.from(container.querySelectorAll('button[aria-label="Drag X value"]'));
+    const dragHandles = Array.from(container.querySelectorAll('div.cursor-ew-resize'));
     expect(dragHandles.length).toBeGreaterThan(0);
 
     await act(async () => {
@@ -220,7 +254,43 @@ describe('SceneInspectorView', () => {
 
     expect(setSceneObjectTransform).toHaveBeenCalledTimes(1);
     expect(setSceneObjectTransform).toHaveBeenCalledWith(expect.objectContaining({
-      worldPosition: expect.objectContaining({ x: 1.2 }),
+      localPosition: expect.objectContaining({ x: 1.3 }),
     }));
+  });
+
+  it('only blocks the matching control when a local mutation is pending', async () => {
+    mockUseSceneMutationState.mockReturnValue({
+      createSceneChild: vi.fn().mockResolvedValue(null),
+      duplicateSceneObject: vi.fn().mockResolvedValue(null),
+      deleteSceneObject: vi.fn().mockResolvedValue(null),
+      renameSceneObject: vi.fn().mockResolvedValue(null),
+      setSceneObjectTag: vi.fn().mockResolvedValue(null),
+      setSceneObjectLayer: vi.fn().mockResolvedValue(null),
+      setSceneObjectHideFlags: vi.fn().mockResolvedValue(null),
+      reparentSceneObject: vi.fn().mockResolvedValue(null),
+      setSceneObjectActive: vi.fn().mockResolvedValue(null),
+      setSceneObjectTransform: vi.fn().mockResolvedValue(null),
+      setSceneBehaviourEnabled: vi.fn().mockResolvedValue(null),
+      createSceneComponent: vi.fn().mockResolvedValue(null),
+      deleteSceneComponent: vi.fn().mockResolvedValue(null),
+      isSceneMutationPending: (operation: string) => operation === 'set-active',
+      sceneMutationState: {
+        operation: 'set-active',
+        loading: true,
+        errorMessage: null,
+        pendingOperations: { 'set-active': 1 },
+      },
+    });
+
+    await act(async () => {
+      root.render(createElement(SceneInspectorView));
+    });
+    await flushEffects();
+
+    const toggleButton = container.querySelector('button[title="Enable/Disable Object"]') as HTMLButtonElement | null;
+    const nameInput = container.querySelector('input[type="text"]') as HTMLInputElement | null;
+
+    expect(toggleButton?.disabled).toBe(true);
+    expect(nameInput?.disabled).toBe(false);
   });
 });

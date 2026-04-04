@@ -84,8 +84,10 @@ export function SceneHierarchyPanel() {
   const {
     createSceneRoot,
     loadSceneByBuildIndex,
-    sceneMutationState,
+    isSceneMutationPending,
   } = useSceneMutationState();
+  const createRootPending = isSceneMutationPending('create-root');
+  const loadScenePending = isSceneMutationPending('load-scene');
 
   const [fallbackSearchQuery, setFallbackSearchQuery] = useState('');
   const sceneHierarchySearchQuery = sceneTreeState.sceneHierarchySearchQuery ?? fallbackSearchQuery;
@@ -423,7 +425,7 @@ export function SceneHierarchyPanel() {
                     </div>
                     <button
                       onClick={() => loadSceneByBuildIndex(scene.buildIndex).catch(() => undefined)}
-                      disabled={sceneMutationState.loading || scene.isLoaded}
+                      disabled={loadScenePending || scene.isLoaded}
                       className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <span className="inline-flex items-center gap-2"><Play size={12} />{scene.isLoaded ? 'Loaded' : 'Load'}</span>
@@ -473,7 +475,7 @@ export function SceneHierarchyPanel() {
               <SceneVirtualRow
                 item={metric.item}
                 selectedObjectAddress={selectedObjectAddress}
-                sceneMutationLoading={sceneMutationState.loading}
+                createRootPending={createRootPending}
                 onSelect={(node) => openTabForSceneObject({
                   objectAddress: node.objectAddress,
                   name: node.name,
@@ -501,7 +503,7 @@ export function SceneHierarchyPanel() {
 function SceneVirtualRow({
   item,
   selectedObjectAddress,
-  sceneMutationLoading,
+  createRootPending,
   onSelect,
   onToggleScene,
   onToggleNode,
@@ -512,7 +514,7 @@ function SceneVirtualRow({
 }: {
   item: SceneListItem;
   selectedObjectAddress: string | null;
-  sceneMutationLoading: boolean;
+  createRootPending: boolean;
   onSelect: (node: { objectAddress: string; name: string; sceneName?: string; sceneKind?: string; }) => void;
   onToggleScene: (sceneHandle: number) => void;
   onToggleNode: (node: RuntimeSceneNodeSummary) => void;
@@ -555,7 +557,7 @@ function SceneVirtualRow({
                 />
                 <button
                   onClick={() => onCreateRoot(item.scene.sceneHandle, item.rootName.trim() || 'GameObject').catch(() => undefined)}
-                  disabled={sceneMutationLoading}
+                  disabled={createRootPending}
                   className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create
@@ -607,8 +609,6 @@ function SceneVirtualRow({
               <button onClick={() => onSelect({
                 objectAddress: item.node.objectAddress,
                 name: item.node.name,
-                sceneName: item.scene?.name,
-                sceneKind: item.scene?.sceneKind,
               })} className="min-w-0 flex-1 text-left">
                 <div className={`text-sm truncate ${searchMatched ? 'text-cyan-200' : 'text-slate-200'}`}>{item.node.name}</div>
                 <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
