@@ -2,10 +2,11 @@ use crate::domain::analysis_models::{
     RuntimeQuaternionSnapshot, RuntimeSceneBuildSettingsEntry, RuntimeSceneCatalogSnapshot,
     RuntimeSceneChildrenPageSnapshot, RuntimeSceneChildrenSnapshot, RuntimeSceneComponentSummary,
     RuntimeSceneComponentsPageSnapshot, RuntimeSceneDescriptor, RuntimeSceneHierarchyPathEntry,
-    RuntimeSceneKind, RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
-    RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot,
-    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneSelectionHint, RuntimeSceneTransformSnapshot,
-    RuntimeSceneTransformUpdate, RuntimeVector3Snapshot,
+    RuntimeSceneKind, RuntimeSceneMouseTargetHit, RuntimeSceneMutationOperation,
+    RuntimeSceneMutationResult, RuntimeSceneNodeSummary,
+    RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneObjectInspectorSnapshot,
+    RuntimeSceneSelectionHint, RuntimeSceneTransformSnapshot, RuntimeSceneTransformUpdate,
+    RuntimeScreenPoint, RuntimeVector3Snapshot,
 };
 use crate::infrastructure::clock::current_timestamp;
 use crate::infrastructure::native::memory::{RemoteAllocation, RemoteMemory};
@@ -53,6 +54,7 @@ include!("mutation.rs");
 include!("runtime.rs");
 include!("projection.rs");
 include!("helpers.rs");
+include!("picker.rs");
 
 #[cfg(test)]
 mod tests;

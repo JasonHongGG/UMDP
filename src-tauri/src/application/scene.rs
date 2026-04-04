@@ -1,10 +1,11 @@
 use crate::domain::analysis_models::{
-    RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
+    ProcessWindowCandidate, RuntimeSceneChildrenSnapshot, RuntimeSceneMousePickerSnapshot,
+    RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
     RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
 use crate::domain::operation::OperationResult;
-use crate::kernel::scene::{mutation, refresh, tasks};
+use crate::kernel::scene::{mutation, picker, refresh, tasks};
 use crate::state::AppState;
 use tauri::AppHandle;
 
@@ -26,6 +27,36 @@ pub fn get_scene_workspace_state(state: &AppState) -> SceneWorkspaceState {
         .scene()
         .workspace()
         .current_for(session_key.as_deref())
+}
+
+pub fn list_scene_picker_windows(state: &AppState) -> OperationResult<Vec<ProcessWindowCandidate>> {
+    picker::list_scene_picker_windows(state)
+}
+
+pub fn get_scene_mouse_picker_state(state: &AppState) -> RuntimeSceneMousePickerSnapshot {
+    picker::get_scene_mouse_picker_state(state)
+}
+
+pub fn set_scene_mouse_picker_target(
+    app: &AppHandle,
+    state: &AppState,
+    window_handle: Option<&str>,
+) -> OperationResult<RuntimeSceneMousePickerSnapshot> {
+    picker::set_scene_mouse_picker_target(app, state, window_handle)
+}
+
+pub fn start_scene_mouse_picker(
+    app: &AppHandle,
+    state: &AppState,
+) -> OperationResult<RuntimeSceneMousePickerSnapshot> {
+    picker::start_scene_mouse_picker(app, state)
+}
+
+pub fn stop_scene_mouse_picker(
+    app: &AppHandle,
+    state: &AppState,
+) -> RuntimeSceneMousePickerSnapshot {
+    picker::stop_scene_mouse_picker(app, state)
 }
 
 pub fn start_scene_object_children_analysis(

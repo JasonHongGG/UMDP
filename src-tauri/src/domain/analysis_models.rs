@@ -28,6 +28,38 @@ pub struct ProcessSession {
     pub runtime: RuntimeFlavor,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeScreenPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeScreenRect {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessWindowCandidate {
+    pub pid: u32,
+    pub window_handle: String,
+    pub title: String,
+    pub class_name: String,
+    pub window_rect: RuntimeScreenRect,
+    pub client_rect: RuntimeScreenRect,
+    pub is_visible: bool,
+    pub is_minimized: bool,
+    pub is_foreground: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisSnapshot {
@@ -623,6 +655,56 @@ pub struct RuntimeSceneMutationResult {
     pub behaviour_enabled: Option<bool>,
     pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
     pub transform: Option<RuntimeSceneTransformSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneMousePickerStatus {
+    Idle,
+    Armed,
+    Tracking,
+    Error,
+}
+
+impl Default for RuntimeSceneMousePickerStatus {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneMouseTargetHit {
+    pub observed_at: String,
+    pub object_address: String,
+    pub object_name: String,
+    pub transform_address: Option<String>,
+    pub scene_handle: Option<i32>,
+    pub scene_name: Option<String>,
+    pub scene_kind: Option<RuntimeSceneKind>,
+    pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
+    pub distance: Option<f32>,
+    pub screen_position: RuntimeScreenPoint,
+    pub client_position: RuntimeScreenPoint,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneMousePickerSnapshot {
+    pub resource_revision: u64,
+    pub session_key: Option<String>,
+    pub status: RuntimeSceneMousePickerStatus,
+    pub status_detail: Option<String>,
+    pub is_running: bool,
+    pub target_window: Option<ProcessWindowCandidate>,
+    pub cursor_screen_position: Option<RuntimeScreenPoint>,
+    pub cursor_client_position: Option<RuntimeScreenPoint>,
+    pub cursor_inside_client: bool,
+    pub hover_hit: Option<RuntimeSceneMouseTargetHit>,
+    pub last_pick: Option<RuntimeSceneMouseTargetHit>,
+    pub recent_picks: Vec<RuntimeSceneMouseTargetHit>,
+    pub last_updated_at: Option<String>,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

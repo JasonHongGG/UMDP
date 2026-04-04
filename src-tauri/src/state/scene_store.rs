@@ -1,13 +1,18 @@
 use crate::domain::analysis_models::{
-    RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenTaskStatus, RuntimeSceneComponentSummary,
-    RuntimeSceneInspectorTaskStatus, RuntimeSceneNodeSummary, RuntimeSceneObjectChildrenTaskState,
-    RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneObjectInspectorTaskState,
-    RuntimeSceneResourceKind, RuntimeSceneResourceState, SceneRefreshStatus,
+    ProcessWindowCandidate, RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenTaskStatus,
+    RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus,
+    RuntimeSceneMousePickerSnapshot, RuntimeSceneMousePickerStatus,
+    RuntimeSceneMouseTargetHit, RuntimeSceneNodeSummary,
+    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorHeaderSnapshot,
+    RuntimeSceneObjectInspectorTaskState, RuntimeSceneResourceKind,
+    RuntimeSceneResourceState, RuntimeScreenPoint, SceneRefreshStatus,
     SceneResourceFreshness, SceneWorkspaceState,
 };
 use crate::infrastructure::clock::current_timestamp;
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 fn same_session_key(left: Option<&str>, right: Option<&str>) -> bool {
     left == right
@@ -386,6 +391,97 @@ fn ensure_inspector_session(store: &mut SceneInspectorStore, session_key: Option
         active_session_key: session_key.map(str::to_owned),
         ..SceneInspectorStore::default()
     };
+}
+
+const MAX_RECENT_SCENE_MOUSE_PICKS: usize = 8;
+
+#[derive(Default)]
+struct SceneMousePickerStore {
+    active_session_key: Option<String>,
+    snapshot: RuntimeSceneMousePickerSnapshot,
+    next_worker_id: u64,
+    active_worker_id: Option<u64>,
+    cancel_flag: Option<Arc<AtomicBool>>,
+}
+
+pub struct SceneMousePickerStart {
+    pub snapshot: RuntimeSceneMousePickerSnapshot,
+    pub worker_id: Option<u64>,
+    pub cancel_flag: Option<Arc<AtomicBool>>,
+}
+
+#[derive(Default)]
+pub struct SceneMousePickerState {
+    store: Mutex<SceneMousePickerStore>,
+}
+
+fn default_scene_mouse_picker_snapshot(session_key: Option<&str>) -> RuntimeSceneMousePickerSnapshot {
+    RuntimeSceneMousePickerSnapshot {
+        session_key: session_key.map(str::to_owned),
+        ..RuntimeSceneMousePickerSnapshot::default()
+    }
+}
+
+fn bump_scene_mouse_picker_revision(snapshot: &mut RuntimeSceneMousePickerSnapshot) {
+    snapshot.resource_revision += 1;
+    snapshot.last_updated_at = Some(current_timestamp());
+}
+
+fn ensure_scene_mouse_picker_session(
+    store: &mut SceneMousePickerStore,
+    session_key: Option<&str>,
+) {
+    if same_session_key(store.active_session_key.as_deref(), session_key) {
+        return;
+    }
+
+    if let Some(cancel_flag) = store.cancel_flag.take() {
+        cancel_flag.store(true, Ordering::Relaxed);
+    }
+
+    *store = SceneMousePickerStore {
+        active_session_key: session_key.map(str::to_owned),
+        snapshot: default_scene_mouse_picker_snapshot(session_key),
+        ..SceneMousePickerStore::default()
+    };
+}
+
+fn clear_scene_mouse_picker_preview(snapshot: &mut RuntimeSceneMousePickerSnapshot) {
+    snapshot.cursor_screen_position = None;
+    snapshot.cursor_client_position = None;
+    snapshot.cursor_inside_client = false;
+    snapshot.hover_hit = None;
+}
+
+fn set_scene_mouse_picker_idle(snapshot: &mut RuntimeSceneMousePickerSnapshot, detail: Option<String>) {
+    snapshot.is_running = false;
+    snapshot.status = RuntimeSceneMousePickerStatus::Idle;
+    snapshot.status_detail = detail;
+    snapshot.error_message = None;
+    clear_scene_mouse_picker_preview(snapshot);
+}
+
+fn set_scene_mouse_picker_armed(
+    snapshot: &mut RuntimeSceneMousePickerSnapshot,
+    detail: impl Into<String>,
+) {
+    snapshot.is_running = true;
+    snapshot.status = RuntimeSceneMousePickerStatus::Armed;
+    snapshot.status_detail = Some(detail.into());
+    snapshot.error_message = None;
+}
+
+fn push_recent_scene_mouse_pick(
+    recent_picks: &mut Vec<RuntimeSceneMouseTargetHit>,
+    hit: RuntimeSceneMouseTargetHit,
+) {
+    recent_picks.retain(|entry| {
+        entry.object_address != hit.object_address
+            || entry.scene_handle != hit.scene_handle
+            || entry.transform_address != hit.transform_address
+    });
+    recent_picks.insert(0, hit);
+    recent_picks.truncate(MAX_RECENT_SCENE_MOUSE_PICKS);
 }
 
 impl SceneChildrenState {
@@ -1211,4 +1307,219 @@ impl SceneInspectorState {
     pub fn reset(&self) {
         *self.store.lock() = SceneInspectorStore::default();
     }
+}
+
+impl SceneMousePickerState {
+    pub fn current_for(
+        &self,
+        session_key: Option<&str>,
+    ) -> RuntimeSceneMousePickerSnapshot {
+        let store = self.store.lock();
+        if same_session_key(store.active_session_key.as_deref(), session_key) {
+            store.snapshot.clone()
+        } else {
+            default_scene_mouse_picker_snapshot(session_key)
+        }
+    }
+
+    pub fn set_target_window(
+        &self,
+        session_key: Option<String>,
+        target_window: Option<ProcessWindowCandidate>,
+    ) -> RuntimeSceneMousePickerSnapshot {
+        let mut store = self.store.lock();
+        ensure_scene_mouse_picker_session(&mut store, session_key.as_deref());
+
+        store.snapshot.session_key = store.active_session_key.clone();
+        store.snapshot.target_window = target_window;
+        if store.snapshot.target_window.is_none() {
+            clear_scene_mouse_picker_preview(&mut store.snapshot);
+            if store.snapshot.is_running {
+                set_scene_mouse_picker_armed(
+                    &mut store.snapshot,
+                    "Select a game window to continue picking.",
+                );
+            } else {
+                set_scene_mouse_picker_idle(&mut store.snapshot, None);
+            }
+            store.snapshot.last_pick = None;
+        }
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        store.snapshot.clone()
+    }
+
+    pub fn start(
+        &self,
+        session_key: Option<String>,
+    ) -> Result<SceneMousePickerStart, String> {
+        let mut store = self.store.lock();
+        ensure_scene_mouse_picker_session(&mut store, session_key.as_deref());
+
+        if store.snapshot.target_window.is_none() {
+            return Err("Scene picker requires a selected target window".to_string());
+        }
+
+        if store.active_worker_id.is_some() {
+            set_scene_mouse_picker_armed(
+                &mut store.snapshot,
+                "Move the cursor over the target window and click a visible object.",
+            );
+            bump_scene_mouse_picker_revision(&mut store.snapshot);
+            return Ok(SceneMousePickerStart {
+                snapshot: store.snapshot.clone(),
+                worker_id: None,
+                cancel_flag: None,
+            });
+        }
+
+        store.next_worker_id += 1;
+        let worker_id = store.next_worker_id;
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        store.active_worker_id = Some(worker_id);
+        store.cancel_flag = Some(cancel_flag.clone());
+        set_scene_mouse_picker_armed(
+            &mut store.snapshot,
+            "Move the cursor over the target window and click a visible object.",
+        );
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+
+        Ok(SceneMousePickerStart {
+            snapshot: store.snapshot.clone(),
+            worker_id: Some(worker_id),
+            cancel_flag: Some(cancel_flag),
+        })
+    }
+
+    pub fn stop(&self, session_key: Option<&str>) -> RuntimeSceneMousePickerSnapshot {
+        let mut store = self.store.lock();
+        ensure_scene_mouse_picker_session(&mut store, session_key);
+
+        if let Some(cancel_flag) = store.cancel_flag.take() {
+            cancel_flag.store(true, Ordering::Relaxed);
+        }
+        store.active_worker_id = None;
+        set_scene_mouse_picker_idle(&mut store.snapshot, None);
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        store.snapshot.clone()
+    }
+
+    pub fn current_target_window(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+    ) -> Option<ProcessWindowCandidate> {
+        let store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        store.snapshot.target_window.clone()
+    }
+
+    pub fn apply_observation(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+        target_window: ProcessWindowCandidate,
+        cursor_screen_position: RuntimeScreenPoint,
+        cursor_client_position: Option<RuntimeScreenPoint>,
+        hover_hit: Option<RuntimeSceneMouseTargetHit>,
+        status_detail: String,
+    ) -> Option<RuntimeSceneMousePickerSnapshot> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        store.snapshot.session_key = store.active_session_key.clone();
+        store.snapshot.target_window = Some(target_window);
+        store.snapshot.cursor_screen_position = Some(cursor_screen_position);
+        store.snapshot.cursor_inside_client = cursor_client_position.is_some();
+        store.snapshot.cursor_client_position = cursor_client_position;
+        store.snapshot.hover_hit = hover_hit;
+        store.snapshot.is_running = true;
+        store.snapshot.status = if store.snapshot.cursor_inside_client {
+            RuntimeSceneMousePickerStatus::Tracking
+        } else {
+            RuntimeSceneMousePickerStatus::Armed
+        };
+        store.snapshot.status_detail = Some(status_detail);
+        store.snapshot.error_message = None;
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        Some(store.snapshot.clone())
+    }
+
+    pub fn record_pick(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+        picked_hit: Option<RuntimeSceneMouseTargetHit>,
+        status_detail: String,
+    ) -> Option<RuntimeSceneMousePickerSnapshot> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        store.snapshot.last_pick = picked_hit.clone();
+        if let Some(hit) = picked_hit {
+            push_recent_scene_mouse_pick(&mut store.snapshot.recent_picks, hit);
+        }
+        store.snapshot.status_detail = Some(status_detail);
+        store.snapshot.error_message = None;
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        Some(store.snapshot.clone())
+    }
+
+    pub fn fail(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+        error_message: String,
+    ) -> Option<RuntimeSceneMousePickerSnapshot> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        if let Some(cancel_flag) = store.cancel_flag.take() {
+            cancel_flag.store(true, Ordering::Relaxed);
+        }
+        store.active_worker_id = None;
+        store.snapshot.is_running = false;
+        store.snapshot.status = RuntimeSceneMousePickerStatus::Error;
+        store.snapshot.status_detail = Some(error_message.clone());
+        store.snapshot.error_message = Some(error_message);
+        clear_scene_mouse_picker_preview(&mut store.snapshot);
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        Some(store.snapshot.clone())
+    }
+
+    pub fn finish_worker(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneMousePickerSnapshot> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        store.cancel_flag = None;
+        store.active_worker_id = None;
+        set_scene_mouse_picker_idle(&mut store.snapshot, None);
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        Some(store.snapshot.clone())
+    }
+
 }

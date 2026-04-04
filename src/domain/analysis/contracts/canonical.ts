@@ -16,6 +16,32 @@ export interface ProcessSession {
   runtime: RuntimeFlavor;
 }
 
+export interface RuntimeScreenPoint {
+  x: number;
+  y: number;
+}
+
+export interface RuntimeScreenRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+export interface ProcessWindowCandidate {
+  pid: number;
+  windowHandle: string;
+  title: string;
+  className: string;
+  windowRect: RuntimeScreenRect;
+  clientRect: RuntimeScreenRect;
+  isVisible: boolean;
+  isMinimized: boolean;
+  isForeground: boolean;
+}
+
 export interface AnalysisSnapshot {
   schemaVersion: 1;
   generatedAt: string;
@@ -438,6 +464,39 @@ export interface RuntimeSceneMutationResult {
   behaviourEnabled: boolean | null;
   hierarchyPath: RuntimeSceneHierarchyPathEntry[];
   transform: RuntimeSceneTransformSnapshot | null;
+}
+
+export type RuntimeSceneMousePickerStatus = 'idle' | 'armed' | 'tracking' | 'error';
+
+export interface RuntimeSceneMouseTargetHit {
+  observedAt: string;
+  objectAddress: string;
+  objectName: string;
+  transformAddress: string | null;
+  sceneHandle: number | null;
+  sceneName: string | null;
+  sceneKind: RuntimeSceneKind | null;
+  hierarchyPath: RuntimeSceneHierarchyPathEntry[];
+  distance: number | null;
+  screenPosition: RuntimeScreenPoint;
+  clientPosition: RuntimeScreenPoint;
+}
+
+export interface RuntimeSceneMousePickerSnapshot {
+  resourceRevision: number;
+  sessionKey: string | null;
+  status: RuntimeSceneMousePickerStatus;
+  statusDetail: string | null;
+  isRunning: boolean;
+  targetWindow: ProcessWindowCandidate | null;
+  cursorScreenPosition: RuntimeScreenPoint | null;
+  cursorClientPosition: RuntimeScreenPoint | null;
+  cursorInsideClient: boolean;
+  hoverHit: RuntimeSceneMouseTargetHit | null;
+  lastPick: RuntimeSceneMouseTargetHit | null;
+  recentPicks: RuntimeSceneMouseTargetHit[];
+  lastUpdatedAt: string | null;
+  errorMessage: string | null;
 }
 
 export interface SceneWorkspaceState {

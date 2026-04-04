@@ -5,7 +5,7 @@ pub mod workspace_store;
 
 pub use analysis_store::AnalysisState;
 pub use runtime_kernel_store::RuntimeKernelState;
-pub use scene_store::{SceneChildrenState, SceneInspectorState, SceneState};
+pub use scene_store::{SceneChildrenState, SceneInspectorState, SceneMousePickerState, SceneState};
 pub use workspace_store::WorkspaceState;
 
 #[derive(Default)]
@@ -40,6 +40,7 @@ pub struct SceneModuleState {
     workspace: SceneState,
     children: SceneChildrenState,
     inspector: SceneInspectorState,
+    picker: SceneMousePickerState,
 }
 
 impl SceneModuleState {
@@ -53,6 +54,10 @@ impl SceneModuleState {
 
     pub fn inspector(&self) -> &SceneInspectorState {
         &self.inspector
+    }
+
+    pub fn picker(&self) -> &SceneMousePickerState {
+        &self.picker
     }
 }
 

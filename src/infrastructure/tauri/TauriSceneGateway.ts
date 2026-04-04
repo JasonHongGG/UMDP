@@ -1,6 +1,8 @@
 import type { SceneGateway, ReparentSceneObjectRequest } from '@/domain/scene/gateway';
 import type {
+  ProcessWindowCandidate,
   RuntimeSceneChildrenSnapshot,
+  RuntimeSceneMousePickerSnapshot,
   RuntimeSceneMutationResult,
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectInspectorSnapshot,
@@ -19,6 +21,25 @@ export function createTauriSceneGateway(): SceneGateway {
     },
     getSceneWorkspaceState() {
       return client.invoke<SceneWorkspaceState>({ label: 'get_scene_workspace_state', command: 'get_scene_workspace_state' });
+    },
+    listScenePickerWindows() {
+      return client.invoke<ProcessWindowCandidate[]>({ label: 'list_scene_picker_windows', command: 'list_scene_picker_windows' });
+    },
+    getSceneMousePickerState() {
+      return client.invoke<RuntimeSceneMousePickerSnapshot>({ label: 'get_scene_mouse_picker_state', command: 'get_scene_mouse_picker_state', logSuccess: false });
+    },
+    setSceneMousePickerTarget(windowHandle: string | null) {
+      return client.invoke<RuntimeSceneMousePickerSnapshot>({
+        label: 'set_scene_mouse_picker_target',
+        command: 'set_scene_mouse_picker_target',
+        args: { windowHandle },
+      });
+    },
+    startSceneMousePicker() {
+      return client.invoke<RuntimeSceneMousePickerSnapshot>({ label: 'start_scene_mouse_picker', command: 'start_scene_mouse_picker' });
+    },
+    stopSceneMousePicker() {
+      return client.invoke<RuntimeSceneMousePickerSnapshot>({ label: 'stop_scene_mouse_picker', command: 'stop_scene_mouse_picker' });
     },
     getSceneObjectChildren(objectAddress: string) {
       return client.invoke<RuntimeSceneChildrenSnapshot>({ label: 'get_scene_object_children', command: 'get_scene_object_children', args: { objectAddress } });

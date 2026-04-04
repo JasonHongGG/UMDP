@@ -1,6 +1,7 @@
 use crate::application::scene as scene_application;
 use crate::domain::analysis_models::{
-    RuntimeSceneChildrenSnapshot, RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
+    ProcessWindowCandidate, RuntimeSceneChildrenSnapshot, RuntimeSceneMousePickerSnapshot,
+    RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
     RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
     RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
@@ -72,6 +73,78 @@ pub async fn start_scene_refresh(
 #[tauri::command]
 pub fn get_scene_workspace_state(state: State<'_, AppState>) -> CommandEnvelope<SceneWorkspaceState> {
     command_success(scene_application::get_scene_workspace_state(&state))
+}
+
+#[tauri::command]
+pub fn list_scene_picker_windows(
+    state: State<'_, AppState>,
+) -> CommandEnvelope<Vec<ProcessWindowCandidate>> {
+    command_result(
+        scene_application::list_scene_picker_windows(&state),
+        "scene.list-picker-windows",
+    )
+}
+
+#[tauri::command]
+pub fn get_scene_mouse_picker_state(
+    state: State<'_, AppState>,
+) -> CommandEnvelope<RuntimeSceneMousePickerSnapshot> {
+    command_success(scene_application::get_scene_mouse_picker_state(&state))
+}
+
+#[tauri::command]
+pub fn set_scene_mouse_picker_target(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    window_handle: Option<String>,
+) -> CommandEnvelope<RuntimeSceneMousePickerSnapshot> {
+    let started_at = Instant::now();
+    let result = scene_application::set_scene_mouse_picker_target(
+        &app,
+        &state,
+        window_handle.as_deref(),
+    );
+    log_scene_command_result(
+        "set_scene_mouse_picker_target",
+        started_at,
+        &result,
+        vec![field(
+            "windowHandle",
+            window_handle.clone().unwrap_or_else(|| "null".to_string()),
+        )],
+        |snapshot| {
+            vec![field(
+                "status",
+                format!("{:?}", snapshot.status),
+            )]
+        },
+    );
+    command_result(result, "scene.set-mouse-picker-target")
+}
+
+#[tauri::command]
+pub fn start_scene_mouse_picker(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandEnvelope<RuntimeSceneMousePickerSnapshot> {
+    let started_at = Instant::now();
+    let result = scene_application::start_scene_mouse_picker(&app, &state);
+    log_scene_command_result(
+        "start_scene_mouse_picker",
+        started_at,
+        &result,
+        Vec::new(),
+        |snapshot| vec![field("status", format!("{:?}", snapshot.status))],
+    );
+    command_result(result, "scene.start-mouse-picker")
+}
+
+#[tauri::command]
+pub fn stop_scene_mouse_picker(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandEnvelope<RuntimeSceneMousePickerSnapshot> {
+    command_success(scene_application::stop_scene_mouse_picker(&app, &state))
 }
 
 #[tauri::command]

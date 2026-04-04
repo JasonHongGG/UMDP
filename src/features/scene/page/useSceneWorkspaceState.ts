@@ -1,6 +1,9 @@
 import React, { useMemo, useCallback } from 'react';
 import type {
+  ProcessWindowCandidate,
   RuntimeSceneMutationOperation,
+  RuntimeSceneMousePickerSnapshot,
+  RuntimeSceneMouseTargetHit,
   RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
@@ -15,6 +18,7 @@ import { collectSceneWorkspaceTasks } from './sceneWorkspaceTasks';
 import type { LoadedSceneGraph, LoadedSceneSearchProjection } from './loadedSceneNodes';
 import { EMPTY_MUTATION_STATE, type SceneMutationState, useSceneWorkspaceStore } from './useSceneWorkspaceStore';
 import { useSceneMutationActions } from './useSceneMutationActions';
+import { useSceneMousePickerState } from './useSceneMousePickerState';
 import { useSceneWorkspaceSync } from './useSceneWorkspaceSync';
 import type { SceneInspectorTab } from './useSceneWorkspaceStore';
 
@@ -64,6 +68,15 @@ export interface SceneWorkspaceStateResult {
   activeSceneTask: WorkspaceTaskSnapshot | null;
   sceneTasks: WorkspaceTaskSnapshot[];
   sceneRootsByHandle: Record<number, RuntimeSceneNodeSummary[]>;
+  scenePickerWindows: ProcessWindowCandidate[];
+  scenePickerWindowsLoading: boolean;
+  scenePickerWindowsError: string | null;
+  sceneMousePickerState: RuntimeSceneMousePickerSnapshot;
+  refreshScenePickerWindows: () => Promise<ProcessWindowCandidate[]>;
+  setSceneMousePickerTarget: (windowHandle: string | null) => Promise<void>;
+  startSceneMousePicker: () => Promise<void>;
+  stopSceneMousePicker: () => Promise<void>;
+  openSceneMousePickHit: (hit: RuntimeSceneMouseTargetHit) => void;
 }
 
 export function useSceneWorkspaceState({
@@ -202,6 +215,15 @@ export function useSceneWorkspaceState({
     });
   }, [setActiveSceneTabIndex, setSceneTabs, setSelectedObjectAddress]);
 
+  const openSceneMousePickHit = useCallback((hit: RuntimeSceneMouseTargetHit) => {
+    openTabForSceneObject({
+      objectAddress: hit.objectAddress,
+      name: hit.objectName,
+      sceneName: hit.sceneName ?? undefined,
+      sceneKind: hit.sceneKind ?? undefined,
+    });
+  }, [openTabForSceneObject]);
+
   const handleCloseTab = useCallback((index: number, event: React.MouseEvent) => {
     event.stopPropagation();
     setSceneTabs((previous) => {
@@ -235,6 +257,22 @@ export function useSceneWorkspaceState({
   const handleSetSelectedObjectAddress = useCallback((value: string | null) => {
     setSelectedObjectAddress(value);
   }, [setSelectedObjectAddress]);
+
+  const {
+    scenePickerWindows,
+    scenePickerWindowsLoading,
+    scenePickerWindowsError,
+    sceneMousePickerState,
+    refreshScenePickerWindows,
+    setSceneMousePickerTarget,
+    startSceneMousePicker,
+    stopSceneMousePicker,
+  } = useSceneMousePickerState({
+    repository,
+    workspaceLifecycle,
+    active,
+    onPickHit: openSceneMousePickHit,
+  });
 
   const sceneTasks = useMemo(() => {
     return collectSceneWorkspaceTasks({
@@ -295,5 +333,14 @@ export function useSceneWorkspaceState({
     activeSceneTask: sceneMutationState.task,
     sceneTasks,
     sceneRootsByHandle,
+    scenePickerWindows,
+    scenePickerWindowsLoading,
+    scenePickerWindowsError,
+    sceneMousePickerState,
+    refreshScenePickerWindows,
+    setSceneMousePickerTarget,
+    startSceneMousePicker,
+    stopSceneMousePicker,
+    openSceneMousePickHit,
   };
 }

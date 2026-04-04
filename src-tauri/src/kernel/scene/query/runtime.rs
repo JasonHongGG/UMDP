@@ -411,6 +411,36 @@ impl<'a> SceneQueryKernel<'a> {
         Ok(value != 0)
     }
 
+    fn invoke_float(
+        &self,
+        method: &NativeMethodRecord,
+        instance_address: Option<NativeAddress>,
+        arguments: &[SceneInvokeArgument],
+    ) -> Result<f32, String> {
+        let result_object = self.invoke_raw(method, instance_address, arguments)?;
+        let bytes = self
+            .runtime_api
+            .try_read_unboxed_bytes(result_object, std::mem::size_of::<f32>())?
+            .ok_or_else(|| {
+                format!(
+                    "{} [{}]: scene float invoke returned no value",
+                    method.name, method.signature
+                )
+            })?;
+        if bytes.len() != std::mem::size_of::<f32>() {
+            return Err(format!(
+                "{} [{}]: invalid float result payload",
+                method.name, method.signature
+            ));
+        }
+
+        Ok(f32::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| "invalid float payload".to_string())?,
+        ))
+    }
+
     fn try_invoke_string(
         &self,
         method: &NativeMethodRecord,

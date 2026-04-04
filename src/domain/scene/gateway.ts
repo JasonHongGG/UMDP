@@ -1,5 +1,7 @@
 import type {
+  ProcessWindowCandidate,
   RuntimeSceneChildrenSnapshot,
+  RuntimeSceneMousePickerSnapshot,
   RuntimeSceneMutationResult,
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectInspectorTaskState,
@@ -17,6 +19,11 @@ export interface ReparentSceneObjectRequest {
 export interface SceneGateway {
   startSceneRefresh(): Promise<SceneWorkspaceState>;
   getSceneWorkspaceState(): Promise<SceneWorkspaceState>;
+  listScenePickerWindows(): Promise<ProcessWindowCandidate[]>;
+  getSceneMousePickerState(): Promise<RuntimeSceneMousePickerSnapshot>;
+  setSceneMousePickerTarget(windowHandle: string | null): Promise<RuntimeSceneMousePickerSnapshot>;
+  startSceneMousePicker(): Promise<RuntimeSceneMousePickerSnapshot>;
+  stopSceneMousePicker(): Promise<RuntimeSceneMousePickerSnapshot>;
   getSceneObjectChildren(objectAddress: string): Promise<RuntimeSceneChildrenSnapshot>;
   startSceneObjectChildrenAnalysis(objectAddress: string): Promise<RuntimeSceneObjectChildrenTaskState | null>;
   getSceneObjectChildrenState(objectAddress: string): Promise<RuntimeSceneObjectChildrenTaskState | null>;

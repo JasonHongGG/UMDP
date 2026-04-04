@@ -22,6 +22,7 @@ vi.mock('@/infrastructure/tauri/TauriSceneEvents', () => ({
   }),
   onSceneObjectChildrenTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
   onSceneObjectInspectorTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
+  onSceneMousePickerStateUpdated: vi.fn().mockResolvedValue(() => undefined),
 }));
 
 interface HookSnapshot {
@@ -72,10 +73,31 @@ function createRepository(): SceneGateway {
       buildSettingsScenes: [],
     },
   });
+  const emptyMousePickerState = {
+    resourceRevision: 0,
+    sessionKey: 'session-1',
+    status: 'idle',
+    statusDetail: null,
+    isRunning: false,
+    targetWindow: null,
+    cursorScreenPosition: null,
+    cursorClientPosition: null,
+    cursorInsideClient: false,
+    hoverHit: null,
+    lastPick: null,
+    recentPicks: [],
+    lastUpdatedAt: null,
+    errorMessage: null,
+  };
 
   return {
     getSceneWorkspaceState: vi.fn().mockResolvedValue(workspace),
     startSceneRefresh: vi.fn().mockResolvedValue(workspace),
+    listScenePickerWindows: vi.fn().mockResolvedValue([]),
+    getSceneMousePickerState: vi.fn().mockResolvedValue(emptyMousePickerState),
+    setSceneMousePickerTarget: vi.fn().mockResolvedValue(emptyMousePickerState),
+    startSceneMousePicker: vi.fn().mockResolvedValue(emptyMousePickerState),
+    stopSceneMousePicker: vi.fn().mockResolvedValue(emptyMousePickerState),
     startSceneObjectChildrenAnalysis: vi.fn().mockResolvedValue(null),
     cancelSceneObjectChildrenAnalysis: vi.fn(),
     cancelSceneObjectInspectorAnalysis: vi.fn(),

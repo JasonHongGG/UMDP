@@ -198,3 +198,13 @@ pub fn load_scene_by_build_index(
     let mut kernel = SceneQueryKernel::new(runtime_session)?;
     kernel.load_scene_by_build_index(build_index)
 }
+
+pub fn pick_scene_object_at(
+    runtime_session: &RuntimeSession,
+    client_position: RuntimeScreenPoint,
+    screen_position: RuntimeScreenPoint,
+    client_height: i32,
+) -> Result<Option<RuntimeSceneMouseTargetHit>, String> {
+    let mut kernel = SceneQueryKernel::new(runtime_session)?;
+    kernel.pick_scene_object_at(client_position, screen_position, client_height)
+}

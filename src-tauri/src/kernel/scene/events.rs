@@ -1,5 +1,6 @@
 use crate::domain::analysis_models::{
-    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorTaskState, SceneWorkspaceState,
+    RuntimeSceneMousePickerSnapshot, RuntimeSceneObjectChildrenTaskState,
+    RuntimeSceneObjectInspectorTaskState, SceneWorkspaceState,
 };
 use crate::infrastructure::logging;
 use tauri::{AppHandle, Emitter};
@@ -7,6 +8,7 @@ use tauri::{AppHandle, Emitter};
 const SCENE_WORKSPACE_STATE_UPDATED_EVENT: &str = "scene-workspace-state-updated";
 const SCENE_CHILDREN_TASK_UPDATED_EVENT: &str = "scene-children-task-updated";
 const SCENE_INSPECTOR_TASK_UPDATED_EVENT: &str = "scene-inspector-task-updated";
+const SCENE_MOUSE_PICKER_STATE_UPDATED_EVENT: &str = "scene-mouse-picker-state-updated";
 
 pub(crate) fn emit_scene_workspace_state(app: &AppHandle, workspace: &SceneWorkspaceState) {
     if let Err(error) = app.emit(SCENE_WORKSPACE_STATE_UPDATED_EVENT, workspace.clone()) {
@@ -50,6 +52,23 @@ pub(crate) fn emit_scene_inspector_task_state(
             "Scene inspector task event emission failed.",
             vec![
                 ("event", SCENE_INSPECTOR_TASK_UPDATED_EVENT.to_string()),
+                ("error", error.to_string()),
+            ],
+        );
+    }
+}
+
+pub(crate) fn emit_scene_mouse_picker_state(
+    app: &AppHandle,
+    snapshot: &RuntimeSceneMousePickerSnapshot,
+) {
+    if let Err(error) = app.emit(SCENE_MOUSE_PICKER_STATE_UPDATED_EVENT, snapshot.clone()) {
+        logging::error(
+            "scene",
+            "scene_events",
+            "Scene mouse picker event emission failed.",
+            vec![
+                ("event", SCENE_MOUSE_PICKER_STATE_UPDATED_EVENT.to_string()),
                 ("error", error.to_string()),
             ],
         );

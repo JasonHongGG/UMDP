@@ -152,3 +152,29 @@ export function useSceneMutationState() {
     activeSceneTask,
   };
 }
+
+export function useSceneMousePickerState() {
+  const {
+    scenePickerWindows,
+    scenePickerWindowsLoading,
+    scenePickerWindowsError,
+    sceneMousePickerState,
+    refreshScenePickerWindows,
+    setSceneMousePickerTarget,
+    startSceneMousePicker,
+    stopSceneMousePicker,
+    openSceneMousePickHit,
+  } = useSceneWorkspace();
+
+  return {
+    scenePickerWindows,
+    scenePickerWindowsLoading,
+    scenePickerWindowsError,
+    sceneMousePickerState,
+    refreshScenePickerWindows,
+    setSceneMousePickerTarget,
+    startSceneMousePicker,
+    stopSceneMousePicker,
+    openSceneMousePickHit,
+  };
+}
