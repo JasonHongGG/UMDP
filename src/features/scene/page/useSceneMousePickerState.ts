@@ -1,30 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type {
   ProcessWindowCandidate,
   RuntimeSceneMousePickerSnapshot,
-  RuntimeSceneMouseTargetHit,
 } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { onSceneMousePickerStateUpdated } from '@/infrastructure/tauri/TauriSceneEvents';
 import { recommendScenePickerWindow } from './sceneMousePickerWindows';
+import { EMPTY_SCENE_MOUSE_PICKER_STATE } from './useSceneWorkspaceStore';
 
-const EMPTY_SCENE_MOUSE_PICKER_STATE: RuntimeSceneMousePickerSnapshot = {
-  resourceRevision: 0,
-  sessionKey: null,
-  status: 'idle',
-  statusDetail: null,
-  isRunning: false,
-  targetWindow: null,
-  cursorScreenPosition: null,
-  cursorClientPosition: null,
-  cursorInsideClient: false,
-  currentCandidate: null,
-  committedPick: null,
-  recentPicks: [],
-  lastUpdatedAt: null,
-  errorMessage: null,
-};
+const MAX_RECENT_SCENE_MOUSE_HITS = 5;
 
 function normalizeSceneMousePickerError(error: unknown) {
   if (error instanceof Error) {
@@ -32,6 +17,26 @@ function normalizeSceneMousePickerError(error: unknown) {
   }
 
   return String(error);
+}
+
+function normalizeSceneMousePickerSnapshot(nextState: RuntimeSceneMousePickerSnapshot): RuntimeSceneMousePickerSnapshot {
+  const recentHits: RuntimeSceneMousePickerSnapshot['recentHits'] = [];
+  const seenObjectAddresses = new Set<string>();
+
+  nextState.recentHits.forEach((hit) => {
+    const objectAddress = hit.objectAddress.trim();
+    if (!objectAddress || seenObjectAddresses.has(objectAddress)) {
+      return;
+    }
+
+    seenObjectAddresses.add(objectAddress);
+    recentHits.push(hit);
+  });
+
+  return {
+    ...nextState,
+    recentHits: recentHits.slice(0, MAX_RECENT_SCENE_MOUSE_HITS),
+  };
 }
 
 export interface SceneMousePickerStateResult {
@@ -43,30 +48,37 @@ export interface SceneMousePickerStateResult {
   setSceneMousePickerTarget: (windowHandle: string | null) => Promise<void>;
   startSceneMousePicker: () => Promise<void>;
   stopSceneMousePicker: () => Promise<void>;
-  openSceneMousePickHit: (hit: RuntimeSceneMouseTargetHit) => void;
 }
 
 export function useSceneMousePickerState({
   repository,
   workspaceLifecycle,
   active,
-  onPickHit,
+  scenePickerWindows,
+  setScenePickerWindows,
+  scenePickerWindowsLoading,
+  setScenePickerWindowsLoading,
+  scenePickerWindowsError,
+  setScenePickerWindowsError,
+  sceneMousePickerState,
+  setSceneMousePickerState,
 }: {
   repository: SceneGateway;
   workspaceLifecycle: WorkspaceLifecycleState;
   active: boolean;
-  onPickHit: (hit: RuntimeSceneMouseTargetHit) => void;
+  scenePickerWindows: ProcessWindowCandidate[];
+  setScenePickerWindows: Dispatch<SetStateAction<ProcessWindowCandidate[]>>;
+  scenePickerWindowsLoading: boolean;
+  setScenePickerWindowsLoading: Dispatch<SetStateAction<boolean>>;
+  scenePickerWindowsError: string | null;
+  setScenePickerWindowsError: Dispatch<SetStateAction<string | null>>;
+  sceneMousePickerState: RuntimeSceneMousePickerSnapshot;
+  setSceneMousePickerState: Dispatch<SetStateAction<RuntimeSceneMousePickerSnapshot>>;
 }): SceneMousePickerStateResult {
-  const [scenePickerWindows, setScenePickerWindows] = useState<ProcessWindowCandidate[]>([]);
-  const [scenePickerWindowsLoading, setScenePickerWindowsLoading] = useState(false);
-  const [scenePickerWindowsError, setScenePickerWindowsError] = useState<string | null>(null);
-  const [sceneMousePickerState, setSceneMousePickerState] = useState<RuntimeSceneMousePickerSnapshot>(EMPTY_SCENE_MOUSE_PICKER_STATE);
-
   const currentSessionKey = workspaceLifecycle.runtimeSession.sessionKey ?? null;
   const attachedProcessId = workspaceLifecycle.processSession?.pid ?? null;
   const hasAttachedSceneProcess = attachedProcessId != null && workspaceLifecycle.hasSnapshot;
   const currentSessionKeyRef = useRef<string | null>(currentSessionKey);
-  const handledPickKeyRef = useRef<string | null>(null);
   const autoTargetedSessionKeyRef = useRef<string | null>(null);
   const latestPickerRevisionRef = useRef(0);
 
@@ -75,7 +87,6 @@ export function useSceneMousePickerState({
   }, [currentSessionKey]);
 
   useEffect(() => {
-    handledPickKeyRef.current = null;
     autoTargetedSessionKeyRef.current = null;
     latestPickerRevisionRef.current = 0;
     setScenePickerWindows([]);
@@ -91,16 +102,18 @@ export function useSceneMousePickerState({
   }, []);
 
   const applySceneMousePickerState = useCallback((nextState: RuntimeSceneMousePickerSnapshot) => {
-    if (!matchesCurrentSceneSession(nextState.sessionKey)) {
+    const normalizedState = normalizeSceneMousePickerSnapshot(nextState);
+
+    if (!matchesCurrentSceneSession(normalizedState.sessionKey)) {
       return;
     }
 
-    if (nextState.resourceRevision < latestPickerRevisionRef.current) {
+    if (normalizedState.resourceRevision < latestPickerRevisionRef.current) {
       return;
     }
 
-    latestPickerRevisionRef.current = nextState.resourceRevision;
-    setSceneMousePickerState(nextState);
+    latestPickerRevisionRef.current = normalizedState.resourceRevision;
+    setSceneMousePickerState(normalizedState);
   }, [matchesCurrentSceneSession]);
 
   const applySceneMousePickerError = useCallback((message: string) => {
@@ -163,10 +176,6 @@ export function useSceneMousePickerState({
       throw error;
     }
   }, [applySceneMousePickerError, applySceneMousePickerState, repository]);
-
-  const openSceneMousePickHit = useCallback((hit: RuntimeSceneMouseTargetHit) => {
-    onPickHit(hit);
-  }, [onPickHit]);
 
   useEffect(() => {
     if (!active) {
@@ -235,21 +244,6 @@ export function useSceneMousePickerState({
     });
   }, [active, currentSessionKey, sceneMousePickerState.targetWindow, scenePickerWindows, scenePickerWindowsLoading, setSceneMousePickerTarget]);
 
-  useEffect(() => {
-    const committedPick = sceneMousePickerState.committedPick;
-    if (!committedPick) {
-      return;
-    }
-
-    const pickKey = `${committedPick.objectAddress}:${committedPick.observedAt}`;
-    if (handledPickKeyRef.current === pickKey) {
-      return;
-    }
-
-    handledPickKeyRef.current = pickKey;
-    onPickHit(committedPick);
-  }, [onPickHit, sceneMousePickerState.committedPick]);
-
   return {
     scenePickerWindows,
     scenePickerWindowsLoading,
@@ -259,6 +253,5 @@ export function useSceneMousePickerState({
     setSceneMousePickerTarget,
     startSceneMousePicker,
     stopSceneMousePicker,
-    openSceneMousePickHit,
   };
 }

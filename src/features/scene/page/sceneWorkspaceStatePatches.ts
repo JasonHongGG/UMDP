@@ -31,6 +31,7 @@ export const EMPTY_SCENE_WORKSPACE_STATE: SceneWorkspaceState = {
     freshness: 'empty',
     lastSuccessfulAt: null,
     isRetainingSnapshot: false,
+    snapshotKind: 'empty',
     errorMessage: null,
   },
 };
@@ -43,8 +44,13 @@ export function createEmptySceneResourceState(resourceKind: RuntimeSceneResource
     freshness: 'empty',
     lastSuccessfulAt: null,
     isRetainingSnapshot: false,
+    snapshotKind: 'empty',
     errorMessage: null,
   };
+}
+
+export function hasFreshSceneResourceSnapshot(resourceState: RuntimeSceneResourceState | null | undefined) {
+  return resourceState?.snapshotKind === 'fresh';
 }
 
 export function toErrorMessage(error: unknown) {

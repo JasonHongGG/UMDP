@@ -1,4 +1,8 @@
-import type { RuntimeSceneNodeSummary, SceneWorkspaceState } from '@/domain/analysis/contracts';
+import type {
+  RuntimeSceneNodeSummary,
+  RuntimeSceneObjectHeaderTaskState,
+  SceneWorkspaceState,
+} from '@/domain/analysis/contracts';
 
 export interface LoadedSceneNodeRecord {
   sceneHandle: number;
@@ -30,20 +34,216 @@ export interface LoadedSceneSearchProjection {
 export function buildLoadedSceneGraph(
   sceneWorkspace: SceneWorkspaceState,
   childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
+  headerTaskByAddress: Record<string, RuntimeSceneObjectHeaderTaskState> = {},
 ): LoadedSceneGraph {
   const scenes = sceneWorkspace.snapshot?.scenes ?? [];
   const records: LoadedSceneNodeRecord[] = [];
   const recordByAddress = new Map<string, LoadedSceneNodeRecord>();
+  const nodeByAddress = new Map<string, {
+    sceneHandle: number | null;
+    sceneName: string | null;
+    parentAddress: string | null;
+    summary: RuntimeSceneNodeSummary;
+    childAddresses: string[];
+  }>();
 
-  const visitNode = (
+  const mergeSummary = (
+    existing: RuntimeSceneNodeSummary,
+    incoming: RuntimeSceneNodeSummary,
+  ): RuntimeSceneNodeSummary => ({
+    objectAddress: existing.objectAddress,
+    transformAddress: incoming.transformAddress ?? existing.transformAddress ?? null,
+    parentObjectAddress: incoming.parentObjectAddress ?? existing.parentObjectAddress ?? null,
+    name: incoming.name || existing.name,
+    activeSelf: incoming.activeSelf,
+    isStatic: incoming.isStatic ?? existing.isStatic ?? null,
+    childCount: Math.max(existing.childCount, incoming.childCount),
+    hasChildren: existing.hasChildren || incoming.hasChildren,
+    componentCount: incoming.componentCount ?? existing.componentCount ?? null,
+    layer: incoming.layer ?? existing.layer ?? null,
+    tag: incoming.tag ?? existing.tag ?? null,
+    hideFlags: incoming.hideFlags ?? existing.hideFlags ?? null,
+    path: incoming.path ?? existing.path ?? null,
+  });
+
+  const createPlaceholderSummary = (
+    objectAddress: string,
+    name: string,
+    parentObjectAddress: string | null,
+  ): RuntimeSceneNodeSummary => ({
+    objectAddress,
+    transformAddress: null,
+    parentObjectAddress,
+    name,
+    activeSelf: true,
+    isStatic: null,
+    childCount: 0,
+    hasChildren: false,
+    componentCount: null,
+    layer: null,
+    tag: null,
+    hideFlags: null,
+    path: null,
+  });
+
+  const ensureNode = (
+    summary: RuntimeSceneNodeSummary,
+    sceneHandle: number | null,
+    sceneName: string | null,
+    parentAddress: string | null,
+  ) => {
+    const existing = nodeByAddress.get(summary.objectAddress);
+    if (existing) {
+      existing.summary = mergeSummary(existing.summary, summary);
+      existing.sceneHandle = existing.sceneHandle ?? sceneHandle;
+      existing.sceneName = existing.sceneName ?? sceneName;
+      existing.parentAddress = existing.parentAddress ?? parentAddress ?? summary.parentObjectAddress ?? null;
+      existing.summary = {
+        ...existing.summary,
+        parentObjectAddress: existing.parentAddress,
+      };
+      return existing;
+    }
+
+    const created = {
+      sceneHandle,
+      sceneName,
+      parentAddress: parentAddress ?? summary.parentObjectAddress ?? null,
+      summary: {
+        ...summary,
+        parentObjectAddress: parentAddress ?? summary.parentObjectAddress ?? null,
+      },
+      childAddresses: [] as string[],
+    };
+    nodeByAddress.set(summary.objectAddress, created);
+    return created;
+  };
+
+  const linkNodes = (parentAddress: string, childAddress: string) => {
+    const parent = nodeByAddress.get(parentAddress);
+    const child = nodeByAddress.get(childAddress);
+    if (!parent || !child) {
+      return;
+    }
+
+    if (!parent.childAddresses.includes(childAddress)) {
+      parent.childAddresses.push(childAddress);
+    }
+
+    child.parentAddress = parentAddress;
+    child.summary = {
+      ...child.summary,
+      parentObjectAddress: parentAddress,
+    };
+  };
+
+  const visitCatalogNode = (
     sceneHandle: number,
     sceneName: string,
     node: RuntimeSceneNodeSummary,
+    parentAddress: string | null,
+  ) => {
+    ensureNode(node, sceneHandle, sceneName, parentAddress);
+    if (parentAddress) {
+      linkNodes(parentAddress, node.objectAddress);
+    }
+
+    const children = childrenByParent[node.objectAddress] ?? [];
+    children.forEach((child) => visitCatalogNode(sceneHandle, sceneName, child, node.objectAddress));
+  };
+
+  scenes.forEach((scene) => {
+    scene.roots.forEach((node) => visitCatalogNode(scene.sceneHandle, scene.name, node, null));
+  });
+
+  Object.values(headerTaskByAddress).forEach((taskState) => {
+    const header = taskState.header;
+    if (!header) {
+      return;
+    }
+
+    const sceneHandle = header.sceneHandle ?? null;
+    const sceneName = header.sceneName ?? (sceneHandle == null ? null : `Scene ${sceneHandle}`);
+    let previousAddress: string | null = null;
+
+    header.hierarchyPath.forEach((entry) => {
+      const summary = entry.objectAddress === header.object.objectAddress
+        ? header.object
+        : header.parent && header.parent.objectAddress === entry.objectAddress
+          ? header.parent
+          : createPlaceholderSummary(entry.objectAddress, entry.name, previousAddress);
+      ensureNode(summary, sceneHandle, sceneName, previousAddress);
+      if (previousAddress) {
+        linkNodes(previousAddress, entry.objectAddress);
+      }
+      previousAddress = entry.objectAddress;
+    });
+
+    const objectNode = ensureNode(header.object, sceneHandle, sceneName, header.object.parentObjectAddress);
+    if (header.parent) {
+      ensureNode(header.parent, sceneHandle, sceneName, header.parent.parentObjectAddress);
+      linkNodes(header.parent.objectAddress, header.object.objectAddress);
+    } else if (previousAddress && previousAddress !== header.object.objectAddress) {
+      linkNodes(previousAddress, header.object.objectAddress);
+    }
+
+    if (objectNode.parentAddress == null && header.hierarchyPath.length > 1) {
+      const fallbackParent = header.hierarchyPath[header.hierarchyPath.length - 2]?.objectAddress ?? null;
+      if (fallbackParent) {
+        linkNodes(fallbackParent, header.object.objectAddress);
+      }
+    }
+  });
+
+  nodeByAddress.forEach((node) => {
+    const childCount = Math.max(node.summary.childCount, node.childAddresses.length);
+    node.summary = {
+      ...node.summary,
+      childCount,
+      hasChildren: node.summary.hasChildren || childCount > 0,
+      parentObjectAddress: node.parentAddress,
+    };
+  });
+
+  const rootAddressesBySceneHandle = new Map<number, string[]>();
+  const pushRootAddress = (sceneHandle: number, objectAddress: string) => {
+    const roots = rootAddressesBySceneHandle.get(sceneHandle) ?? [];
+    if (!roots.includes(objectAddress)) {
+      rootAddressesBySceneHandle.set(sceneHandle, [...roots, objectAddress]);
+    }
+  };
+
+  scenes.forEach((scene) => {
+    scene.roots.forEach((root) => pushRootAddress(scene.sceneHandle, root.objectAddress));
+  });
+
+  nodeByAddress.forEach((node, objectAddress) => {
+    if (node.sceneHandle == null) {
+      return;
+    }
+
+    if (!node.parentAddress || !nodeByAddress.has(node.parentAddress)) {
+      pushRootAddress(node.sceneHandle, objectAddress);
+    }
+  });
+
+  const visited = new Set<string>();
+  const visitNode = (
+    sceneHandle: number,
+    sceneName: string,
+    objectAddress: string,
     depth: number,
     ancestors: string[],
     ancestorAddresses: string[],
   ) => {
-    const pathSegments = [...ancestors, node.name];
+    const accumulated = nodeByAddress.get(objectAddress);
+    if (!accumulated || visited.has(objectAddress)) {
+      return;
+    }
+
+    visited.add(objectAddress);
+
+    const pathSegments = [...ancestors, accumulated.summary.name];
     const canonicalPath = pathSegments.join('/');
     const displayPath = pathSegments.join(' / ');
 
@@ -52,34 +252,49 @@ export function buildLoadedSceneGraph(
       sceneName,
       depth,
       ancestorAddresses,
-      node,
+      node: {
+        ...accumulated.summary,
+        path: accumulated.summary.path ?? canonicalPath,
+      },
       canonicalPath,
       displayPath,
       searchText: [
         sceneName,
-        node.name,
+        accumulated.summary.name,
         displayPath,
-        node.tag ?? '',
-        node.layer == null ? '' : String(node.layer),
+        accumulated.summary.tag ?? '',
+        accumulated.summary.layer == null ? '' : String(accumulated.summary.layer),
       ].join(' ').toLowerCase(),
     };
 
     records.push(record);
-    recordByAddress.set(node.objectAddress, record);
+    recordByAddress.set(objectAddress, record);
 
-    const children = childrenByParent[node.objectAddress] ?? [];
-    children.forEach((child) => visitNode(
+    accumulated.childAddresses.forEach((childAddress) => visitNode(
       sceneHandle,
       sceneName,
-      child,
+      childAddress,
       depth + 1,
       pathSegments,
-      [...ancestorAddresses, node.objectAddress],
+      [...ancestorAddresses, objectAddress],
     ));
   };
 
   scenes.forEach((scene) => {
-    scene.roots.forEach((node) => visitNode(scene.sceneHandle, scene.name, node, 0, [], []));
+    (rootAddressesBySceneHandle.get(scene.sceneHandle) ?? []).forEach((objectAddress) => {
+      visitNode(scene.sceneHandle, scene.name, objectAddress, 0, [], []);
+    });
+  });
+
+  rootAddressesBySceneHandle.forEach((rootAddresses, sceneHandle) => {
+    if (scenes.some((scene) => scene.sceneHandle === sceneHandle)) {
+      return;
+    }
+
+    const sceneName = nodeByAddress.get(rootAddresses[0])?.sceneName ?? `Scene ${sceneHandle}`;
+    rootAddresses.forEach((objectAddress) => {
+      visitNode(sceneHandle, sceneName, objectAddress, 0, [], []);
+    });
   });
 
   return {

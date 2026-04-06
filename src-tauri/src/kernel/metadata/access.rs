@@ -5,7 +5,7 @@ use crate::state::AppState;
 pub fn ensure_metadata_snapshot(state: &AppState) -> OperationResult<AnalysisSnapshot> {
     state
         .workspace()
-        .analysis()
+    .lifecycle()
         .metadata_snapshot()
         .ok_or_else(OperationError::metadata_unavailable)
 }

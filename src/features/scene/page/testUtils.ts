@@ -15,6 +15,7 @@ export function createSceneResourceState(overrides: Partial<RuntimeSceneResource
     freshness: 'fresh',
     lastSuccessfulAt: '2026-03-30T00:00:00.000Z',
     isRetainingSnapshot: true,
+    snapshotKind: 'fresh',
     errorMessage: null,
     ...overrides,
   };
@@ -67,6 +68,7 @@ export function createSceneWorkspaceState(overrides: Partial<SceneWorkspaceState
       freshness: 'fresh',
       lastSuccessfulAt: '2026-03-30T00:00:00.000Z',
       isRetainingSnapshot: true,
+      snapshotKind: 'fresh',
       errorMessage: null,
     }),
     snapshot: {

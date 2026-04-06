@@ -348,6 +348,20 @@ impl Default for RuntimeSceneResourceKind {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneSnapshotKind {
+    Empty,
+    Retained,
+    Fresh,
+}
+
+impl Default for RuntimeSceneSnapshotKind {
+    fn default() -> Self {
+        Self::Empty
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneResourceState {
@@ -357,6 +371,7 @@ pub struct RuntimeSceneResourceState {
     pub freshness: SceneResourceFreshness,
     pub last_successful_at: Option<String>,
     pub is_retaining_snapshot: bool,
+    pub snapshot_kind: RuntimeSceneSnapshotKind,
     pub error_message: Option<String>,
 }
 
@@ -675,8 +690,7 @@ pub struct RuntimeSceneMutationResult {
 pub enum RuntimeSceneMousePickerStatus {
     Idle,
     Armed,
-    TrackingCandidate,
-    Committed,
+    Observing,
     Cancelled,
     Error,
 }
@@ -715,9 +729,8 @@ pub struct RuntimeSceneMousePickerSnapshot {
     pub cursor_screen_position: Option<RuntimeScreenPoint>,
     pub cursor_client_position: Option<RuntimeScreenPoint>,
     pub cursor_inside_client: bool,
-    pub current_candidate: Option<RuntimeSceneMouseTargetHit>,
-    pub committed_pick: Option<RuntimeSceneMouseTargetHit>,
-    pub recent_picks: Vec<RuntimeSceneMouseTargetHit>,
+    pub hover_hit: Option<RuntimeSceneMouseTargetHit>,
+    pub recent_hits: Vec<RuntimeSceneMouseTargetHit>,
     pub last_updated_at: Option<String>,
     pub error_message: Option<String>,
 }

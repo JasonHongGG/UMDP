@@ -136,14 +136,6 @@ pub fn start_scene_object_header_analysis(
     Ok(task_start.state)
 }
 
-pub fn preload_scene_object_header(
-    app: &AppHandle,
-    state: &AppState,
-    object_address: &str,
-) {
-    let _ = start_scene_object_header_analysis(app, state, object_address);
-}
-
 pub fn get_scene_object_header_state(
     state: &AppState,
     object_address: &str,

@@ -1,6 +1,5 @@
 use super::common::current_scene_session_key;
 use super::events::emit_scene_mouse_picker_state;
-use super::tasks::preload_scene_object_header;
 use crate::domain::analysis_models::{
     ProcessWindowCandidate, RuntimeSceneMousePickerSnapshot, RuntimeSceneMouseTargetHit,
     RuntimeScreenPoint, RuntimeScreenRect,
@@ -109,7 +108,6 @@ fn run_scene_mouse_picker_worker(
     session_key: Option<String>,
     cancel_flag: Arc<AtomicBool>,
 ) {
-    let mut was_left_button_down = false;
     let mut was_escape_down = false;
 
     while !cancel_flag.load(Ordering::Relaxed) {
@@ -136,12 +134,10 @@ fn run_scene_mouse_picker_worker(
                 return;
             }
         };
-        let is_left_button_down = windowing::is_left_mouse_button_down();
-        let just_pressed = is_left_button_down && !was_left_button_down;
-        was_left_button_down = is_left_button_down;
-        let is_escape_down = windowing::is_escape_key_down();
-        let just_pressed_escape = is_escape_down && !was_escape_down;
-        was_escape_down = is_escape_down;
+        let escape_key_state = windowing::get_escape_key_state();
+        let just_pressed_escape = escape_key_state.pressed_since_last_poll
+            || (escape_key_state.is_down && !was_escape_down);
+        was_escape_down = escape_key_state.is_down;
 
         if just_pressed_escape {
             if let Some(snapshot) = state.scene().picker().cancel(
@@ -174,11 +170,6 @@ fn run_scene_mouse_picker_worker(
             &cursor_screen_position,
             &refreshed_window.client_rect,
         );
-        let cursor_inside_client = cursor_client_position.is_some();
-        let previous_hover_hit = state
-            .scene()
-            .picker()
-            .current_candidate(worker_id, session_key.as_deref());
         let hover_hit = match &cursor_client_position {
             Some(cursor_client_position) => {
                 match pick_scene_mouse_hit(
@@ -199,13 +190,13 @@ fn run_scene_mouse_picker_worker(
 
         let observation_detail = match (&cursor_client_position, &hover_hit) {
             (Some(_), Some(hit)) => format!(
-                "Left click to lock {}. Press Escape to cancel.",
+                "Observing {}. Recent refreshes automatically. Press Escape to stop.",
                 hit.object_name
             ),
             (Some(_), None) => {
-                "No collider-backed world object is under the cursor.".to_string()
+                "No collider-backed world object is under the cursor. Press Escape to stop.".to_string()
             }
-            (None, _) => "Move the cursor inside the target window. Press Escape to cancel.".to_string(),
+            (None, _) => "Move the cursor inside the target window. Press Escape to stop.".to_string(),
         };
         emit_picker_observation(
             app,
@@ -218,35 +209,6 @@ fn run_scene_mouse_picker_worker(
             hover_hit.clone(),
             observation_detail,
         );
-
-        if just_pressed {
-            let picked_hit = if cursor_inside_client {
-                hover_hit.clone().or(previous_hover_hit)
-            } else {
-                None
-            };
-            let pick_detail = match &picked_hit {
-                Some(hit) => format!("Locked {}. Loading Scene object header.", hit.object_name),
-                None if cursor_inside_client => {
-                    "Click missed. Scene picker stopped without locking an object.".to_string()
-                }
-                None => "Click was outside the target window. Scene picker stopped.".to_string(),
-            };
-            if let Some(snapshot) = state.scene().picker().commit_pick(
-                worker_id,
-                session_key.as_deref(),
-                picked_hit,
-                pick_detail,
-            ) {
-                emit_scene_mouse_picker_state(app, &snapshot);
-                if let Some(committed_pick) = snapshot.committed_pick.as_ref() {
-                    preload_scene_object_header(app, state, &committed_pick.object_address);
-                }
-                if !snapshot.is_running {
-                    break;
-                }
-            }
-        }
 
         thread::sleep(Duration::from_millis(SCENE_MOUSE_PICKER_POLL_INTERVAL_MS));
     }

@@ -217,6 +217,12 @@ describe('frontend architecture boundaries', () => {
     expect(contents.includes('@/infrastructure/tauri/TauriSceneEvents')).toBe(false);
   });
 
+  it('keeps scene mouse picker state owned by the scene workspace store', () => {
+    const pickerContents = readFileSync(join(SRC_ROOT, 'features', 'scene', 'page', 'useSceneMousePickerState.ts'), 'utf8');
+
+    expect(pickerContents.includes('useState(')).toBe(false);
+  });
+
   it('removes legacy shared workspace context and composition files', () => {
     const legacyFiles = [
       'domain/analysis/AnalysisWorkspaceContext.tsx',

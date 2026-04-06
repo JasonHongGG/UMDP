@@ -2,28 +2,14 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import type {
   RuntimeSceneMutationOperation,
   RuntimeSceneMutationResult,
-  RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectComponentsTaskState,
   RuntimeSceneObjectHeaderTaskState,
-  RuntimeSceneObjectInspectorSnapshot,
   RuntimeSceneTransformUpdate,
-  SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
 import type { WorkspaceTaskScope } from '@/shared/contracts';
-import {
-  insertChildIntoInspectors,
-  insertChildNode,
-  insertRootNode,
-  logSceneError,
-  logScenePerf,
-  patchInspectorTransform,
-  removeChildNode,
-  removeNodeEverywhere,
-  removeNodeFromInspectors,
-  removeRootNode,
-} from './sceneWorkspaceStatePatches';
+import { logSceneError, logScenePerf } from './sceneWorkspaceStatePatches';
 import type { SceneMutationState, SceneObjectActiveIntentState } from './useSceneWorkspaceStore';
 
 function nowMs() {
@@ -194,6 +180,7 @@ function markChildrenTaskStale(task: RuntimeSceneObjectChildrenTaskState): Runti
       resourceRevision,
       freshness: hasRetainedSnapshot ? 'stale' : 'empty',
       isRetainingSnapshot: hasRetainedSnapshot,
+      snapshotKind: hasRetainedSnapshot ? 'retained' : 'empty',
     },
   };
 }
@@ -212,6 +199,7 @@ function markHeaderTaskStale(task: RuntimeSceneObjectHeaderTaskState): RuntimeSc
       resourceRevision,
       freshness: hasRetainedSnapshot ? 'stale' : 'empty',
       isRetainingSnapshot: hasRetainedSnapshot,
+      snapshotKind: hasRetainedSnapshot ? 'retained' : 'empty',
     },
   };
 }
@@ -230,6 +218,7 @@ function markComponentsTaskStale(task: RuntimeSceneObjectComponentsTaskState): R
       resourceRevision,
       freshness: hasRetainedSnapshot ? 'stale' : 'empty',
       isRetainingSnapshot: hasRetainedSnapshot,
+      snapshotKind: hasRetainedSnapshot ? 'retained' : 'empty',
     },
   };
 }
@@ -240,10 +229,7 @@ interface UseSceneMutationActionsOptions {
   setSelectedObjectAddress: (value: string | null) => void;
   refreshSceneWorkspace: () => Promise<void>;
   loadSceneObjectResources: (objectAddress: string, force?: boolean) => Promise<void>;
-  setSceneWorkspace: Dispatch<SetStateAction<SceneWorkspaceState>>;
-  setChildrenByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneNodeSummary[]>>>;
   setChildTaskByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectChildrenTaskState>>>;
-  setInspectorsByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectInspectorSnapshot>>>;
   setHeaderTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectHeaderTaskState>>>;
   setHeaderErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
   setHeaderLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
@@ -252,8 +238,6 @@ interface UseSceneMutationActionsOptions {
   setComponentsLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
   setSceneMutationState: Dispatch<SetStateAction<SceneMutationState>>;
   sceneMutationTaskCounterRef: MutableRefObject<number>;
-  applySummaryPatch: (summary: RuntimeSceneNodeSummary) => void;
-  bumpParentChildCount: (objectAddress: string, delta: number) => void;
 }
 
 export function useSceneMutationActions({
@@ -262,10 +246,7 @@ export function useSceneMutationActions({
   setSelectedObjectAddress,
   refreshSceneWorkspace,
   loadSceneObjectResources,
-  setSceneWorkspace,
-  setChildrenByParent,
   setChildTaskByParent,
-  setInspectorsByAddress,
   setHeaderTaskByAddress,
   setHeaderErrorByAddress,
   setHeaderLoadingByAddress,
@@ -274,8 +255,6 @@ export function useSceneMutationActions({
   setComponentsLoadingByAddress,
   setSceneMutationState,
   sceneMutationTaskCounterRef,
-  applySummaryPatch,
-  bumpParentChildCount,
 }: UseSceneMutationActionsOptions) {
   const mutationQueueRef = useRef<SceneQueuedMutation[]>([]);
   const currentMutationRef = useRef<SceneQueuedMutation | null>(null);
@@ -283,19 +262,44 @@ export function useSceneMutationActions({
 
   const applySceneMutation = useCallback((result: RuntimeSceneMutationResult) => {
     const normalizedObject = normalizeMutationResultObject(result);
-
-    if (normalizedObject) {
-      applySummaryPatch(normalizedObject);
-    }
-
-    const impacted = [
+    const impacted = Array.from(new Set([
       result.targetObjectAddress,
       result.parentObjectAddress,
       result.deletedObjectAddress,
-      normalizedObject?.objectAddress,
-    ].filter((value): value is string => Boolean(value));
+      normalizedObject?.objectAddress ?? null,
+    ].filter((value): value is string => Boolean(value))));
+    const hierarchyMutation = result.operation === 'create-child'
+      || result.operation === 'create-root'
+      || result.operation === 'duplicate'
+      || result.operation === 'delete'
+      || result.operation === 'reparent'
+      || result.operation === 'load-scene';
 
-    if (impacted.length > 0) {
+    if (hierarchyMutation) {
+      setChildTaskByParent(() => ({}));
+    } else if (impacted.length > 0) {
+      setChildTaskByParent((previous) => {
+        let touched = false;
+        const next = { ...previous };
+        impacted.forEach((address) => {
+          const task = next[address];
+          if (task) {
+            next[address] = markChildrenTaskStale(task);
+            touched = true;
+          }
+        });
+        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
+          delete next[result.deletedObjectAddress];
+          touched = true;
+        }
+        return touched ? next : previous;
+      });
+    }
+
+    if (hierarchyMutation && result.operation === 'load-scene') {
+      setHeaderTaskByAddress(() => ({}));
+      setComponentsTaskByAddress(() => ({}));
+    } else if (impacted.length > 0) {
       setHeaderTaskByAddress((previous) => {
         let touched = false;
         const next = { ...previous };
@@ -331,152 +335,77 @@ export function useSceneMutationActions({
       });
     }
 
-    const hierarchyMutation = result.operation === 'create-child'
-      || result.operation === 'duplicate'
-      || result.operation === 'delete'
-      || result.operation === 'reparent';
-
-    if (hierarchyMutation && impacted.length > 0) {
-      setChildTaskByParent((previous) => {
-        let touched = false;
-        const next = { ...previous };
-        impacted.forEach((address) => {
-          const task = next[address];
-          if (task) {
-            next[address] = markChildrenTaskStale(task);
-            touched = true;
-          }
-        });
-        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
-          delete next[result.deletedObjectAddress];
-          touched = true;
+    if (result.deletedObjectAddress) {
+      setHeaderErrorByAddress((previous) => {
+        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
+          return previous;
         }
-        return touched ? next : previous;
+
+        const next = { ...previous };
+        delete next[result.deletedObjectAddress!];
+        return next;
+      });
+      setHeaderLoadingByAddress((previous) => {
+        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
+          return previous;
+        }
+
+        const next = { ...previous };
+        delete next[result.deletedObjectAddress!];
+        return next;
+      });
+      setComponentsErrorByAddress((previous) => {
+        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
+          return previous;
+        }
+
+        const next = { ...previous };
+        delete next[result.deletedObjectAddress!];
+        return next;
+      });
+      setComponentsLoadingByAddress((previous) => {
+        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
+          return previous;
+        }
+
+        const next = { ...previous };
+        delete next[result.deletedObjectAddress!];
+        return next;
       });
     }
 
-    switch (result.operation) {
-      case 'create-child': {
-        if (result.parentObjectAddress && result.object) {
-          bumpParentChildCount(result.parentObjectAddress, 1);
-          setChildrenByParent((previous) => insertChildNode(previous, result.parentObjectAddress!, result.object));
-          setInspectorsByAddress((previous) => insertChildIntoInspectors(previous, result.parentObjectAddress!, result.object));
-        }
-        break;
-      }
-      case 'create-root': {
-        setSceneWorkspace((previous) => insertRootNode(previous, result.sceneHandle, result.object));
-        break;
-      }
-      case 'duplicate': {
-        if (result.parentObjectAddress && result.object) {
-          bumpParentChildCount(result.parentObjectAddress, 1);
-          setChildrenByParent((previous) => insertChildNode(previous, result.parentObjectAddress!, result.object));
-          setInspectorsByAddress((previous) => insertChildIntoInspectors(previous, result.parentObjectAddress!, result.object));
-        } else {
-          setSceneWorkspace((previous) => insertRootNode(previous, result.sceneHandle, result.object));
-        }
-        break;
-      }
-      case 'delete': {
-        if (result.parentObjectAddress) {
-          bumpParentChildCount(result.parentObjectAddress, -1);
-          setChildrenByParent((previous) => removeChildNode(previous, result.parentObjectAddress!, result.deletedObjectAddress));
-        } else {
-          setSceneWorkspace((previous) => removeRootNode(previous, result.sceneHandle, result.deletedObjectAddress));
+    if (result.operation === 'load-scene') {
+      setSceneMutationState((previous) => ({
+        ...previous,
+        activeOverrideByObject: {},
+      }));
+    } else if (result.operation === 'set-active' && normalizedObject) {
+      setSceneMutationState((previous) => ({
+        ...previous,
+        activeOverrideByObject: {
+          ...previous.activeOverrideByObject,
+          [normalizedObject.objectAddress]: normalizedObject.activeSelf,
+        },
+      }));
+    } else if (result.deletedObjectAddress) {
+      setSceneMutationState((previous) => {
+        if (!Object.prototype.hasOwnProperty.call(previous.activeOverrideByObject, result.deletedObjectAddress!)) {
+          return previous;
         }
 
-        setChildrenByParent((previous) => removeNodeEverywhere(previous, result.deletedObjectAddress));
-        setInspectorsByAddress((previous) => removeNodeFromInspectors(previous, result.deletedObjectAddress));
-        setHeaderErrorByAddress((previous) => {
-          if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
-            return previous;
-          }
-
-          const next = { ...previous };
-          delete next[result.deletedObjectAddress];
-          return next;
-        });
-        setHeaderLoadingByAddress((previous) => {
-          if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
-            return previous;
-          }
-
-          const next = { ...previous };
-          delete next[result.deletedObjectAddress];
-          return next;
-        });
-        setComponentsErrorByAddress((previous) => {
-          if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
-            return previous;
-          }
-
-          const next = { ...previous };
-          delete next[result.deletedObjectAddress];
-          return next;
-        });
-        setComponentsLoadingByAddress((previous) => {
-          if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
-            return previous;
-          }
-
-          const next = { ...previous };
-          delete next[result.deletedObjectAddress];
-          return next;
-        });
-        break;
-      }
-      case 'set-active':
-      case 'rename':
-      case 'set-tag':
-      case 'set-layer':
-      case 'set-hide-flags':
-      {
-        if (result.object) {
-          applySummaryPatch(result.object);
-        }
-        break;
-      }
-      case 'reparent': {
-        if (normalizedObject) {
-          applySummaryPatch(normalizedObject);
-          setChildrenByParent((previous) => {
-            const withoutObject = removeNodeEverywhere(previous, normalizedObject.objectAddress);
-            if (!result.parentObjectAddress) {
-              return withoutObject;
-            }
-            return insertChildNode(withoutObject, result.parentObjectAddress, normalizedObject);
-          });
-          setInspectorsByAddress((previous) => {
-            const withoutObject = removeNodeFromInspectors(previous, normalizedObject.objectAddress);
-            if (!result.parentObjectAddress) {
-              return withoutObject;
-            }
-            return insertChildIntoInspectors(withoutObject, result.parentObjectAddress, normalizedObject);
-          });
-        }
-        break;
-      }
-      case 'set-transform': {
-        if (result.targetObjectAddress && result.transform) {
-          setInspectorsByAddress((previous) => patchInspectorTransform(previous, result.targetObjectAddress!, result.transform!));
-        }
-        break;
-      }
-      case 'set-behaviour-enabled':
-      case 'add-component':
-      case 'remove-component':
-      case 'load-scene': {
-        break;
-      }
-      default:
-        break;
+        const nextActiveOverrideByObject = { ...previous.activeOverrideByObject };
+        delete nextActiveOverrideByObject[result.deletedObjectAddress!];
+        return {
+          ...previous,
+          activeOverrideByObject: nextActiveOverrideByObject,
+        };
+      });
     }
 
     if (result.preferredSelectionAddress !== undefined) {
       setSelectedObjectAddress(result.preferredSelectionAddress);
     }
-  }, [applySummaryPatch, bumpParentChildCount, setChildTaskByParent, setChildrenByParent, setComponentsErrorByAddress, setComponentsLoadingByAddress, setComponentsTaskByAddress, setHeaderErrorByAddress, setHeaderLoadingByAddress, setHeaderTaskByAddress, setInspectorsByAddress, setSceneWorkspace, setSelectedObjectAddress]);
+  }, [setChildTaskByParent, setComponentsErrorByAddress, setComponentsLoadingByAddress, setComponentsTaskByAddress, setHeaderErrorByAddress, setHeaderLoadingByAddress, setHeaderTaskByAddress, setSelectedObjectAddress]);
 
   const processMutationQueue = useCallback(async () => {
     if (processingMutationQueueRef.current) {
@@ -672,6 +601,12 @@ export function useSceneMutationActions({
     });
   }, [processMutationQueue, sceneMutationTaskCounterRef, setSceneMutationState]);
 
+  const refreshAndReload = useCallback(async (addresses: Array<string | null | undefined>) => {
+    await refreshSceneWorkspace();
+    const uniqueAddresses = Array.from(new Set(addresses.filter((value): value is string => Boolean(value))));
+    await Promise.all(uniqueAddresses.map((address) => loadSceneObjectResources(address, true)));
+  }, [loadSceneObjectResources, refreshSceneWorkspace]);
+
   const createSceneChild = useCallback(async (name: string) => {
     if (!selectedObjectAddress) {
       return null;
@@ -679,12 +614,23 @@ export function useSceneMutationActions({
 
     return runMutation('create-child', () => repository.createSceneChild(selectedObjectAddress, name), {
       targetObjectAddress: selectedObjectAddress,
+      afterSuccess: async (result) => {
+        await refreshAndReload([
+          result.parentObjectAddress,
+          result.preferredSelectionAddress,
+          result.targetObjectAddress,
+        ]);
+      },
     });
-  }, [repository, runMutation, selectedObjectAddress]);
+  }, [refreshAndReload, repository, runMutation, selectedObjectAddress]);
 
   const createSceneRoot = useCallback(async (sceneHandle: number, name: string) => {
-    return runMutation('create-root', () => repository.createSceneRoot(sceneHandle, name));
-  }, [repository, runMutation]);
+    return runMutation('create-root', () => repository.createSceneRoot(sceneHandle, name), {
+      afterSuccess: async (result) => {
+        await refreshAndReload([result.preferredSelectionAddress, result.targetObjectAddress]);
+      },
+    });
+  }, [refreshAndReload, repository, runMutation]);
 
   const duplicateSceneObject = useCallback(async () => {
     if (!selectedObjectAddress) {
@@ -693,8 +639,15 @@ export function useSceneMutationActions({
 
     return runMutation('duplicate', () => repository.duplicateSceneObject(selectedObjectAddress), {
       targetObjectAddress: selectedObjectAddress,
+      afterSuccess: async (result) => {
+        await refreshAndReload([
+          result.parentObjectAddress,
+          result.preferredSelectionAddress,
+          result.targetObjectAddress,
+        ]);
+      },
     });
-  }, [repository, runMutation, selectedObjectAddress]);
+  }, [refreshAndReload, repository, runMutation, selectedObjectAddress]);
 
   const deleteSceneObject = useCallback(async () => {
     if (!selectedObjectAddress) {
@@ -703,8 +656,11 @@ export function useSceneMutationActions({
 
     return runMutation('delete', () => repository.deleteSceneObject(selectedObjectAddress), {
       targetObjectAddress: selectedObjectAddress,
+      afterSuccess: async (result) => {
+        await refreshAndReload([result.parentObjectAddress, result.preferredSelectionAddress]);
+      },
     });
-  }, [repository, runMutation, selectedObjectAddress]);
+  }, [refreshAndReload, repository, runMutation, selectedObjectAddress]);
 
   const renameSceneObject = useCallback(async (name: string) => {
     if (!selectedObjectAddress) {
@@ -713,9 +669,7 @@ export function useSceneMutationActions({
 
     return runMutation('rename', () => repository.renameSceneObject(selectedObjectAddress, name), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -726,9 +680,7 @@ export function useSceneMutationActions({
 
     return runMutation('set-tag', () => repository.setSceneObjectTag(selectedObjectAddress, tag), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -739,9 +691,7 @@ export function useSceneMutationActions({
 
     return runMutation('set-layer', () => repository.setSceneObjectLayer(selectedObjectAddress, layer), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -752,9 +702,7 @@ export function useSceneMutationActions({
 
     return runMutation('set-hide-flags', () => repository.setSceneObjectHideFlags(selectedObjectAddress, hideFlags), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -770,13 +718,14 @@ export function useSceneMutationActions({
     }), {
       targetObjectAddress: selectedObjectAddress,
       afterSuccess: async (result) => {
-        await refreshSceneWorkspace();
-        if (result.preferredSelectionAddress) {
-          loadSceneObjectResources(result.preferredSelectionAddress, true).catch(() => undefined);
-        }
+        await refreshAndReload([
+          result.parentObjectAddress,
+          result.preferredSelectionAddress,
+          result.targetObjectAddress,
+        ]);
       },
     });
-  }, [loadSceneObjectResources, refreshSceneWorkspace, repository, runMutation, selectedObjectAddress, setSelectedObjectAddress]);
+  }, [refreshAndReload, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectActive = useCallback(async (activeSelf: boolean) => {
     if (!selectedObjectAddress) {
@@ -789,8 +738,9 @@ export function useSceneMutationActions({
         objectAddress: selectedObjectAddress,
         desiredActiveSelf: activeSelf,
       },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
-  }, [repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectTransform = useCallback(async (transformUpdate: RuntimeSceneTransformUpdate) => {
     if (!selectedObjectAddress) {
@@ -799,9 +749,7 @@ export function useSceneMutationActions({
 
     return runMutation('set-transform', () => repository.setSceneObjectTransform(selectedObjectAddress, transformUpdate), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -812,9 +760,7 @@ export function useSceneMutationActions({
 
     return runMutation('set-behaviour-enabled', () => repository.setSceneBehaviourEnabled(componentAddress, enabled), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -825,9 +771,7 @@ export function useSceneMutationActions({
 
     return runMutation('add-component', () => repository.createSceneComponent(selectedObjectAddress, componentTypeName), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -838,9 +782,7 @@ export function useSceneMutationActions({
 
     return runMutation('remove-component', () => repository.deleteSceneComponent(componentAddress), {
       targetObjectAddress: selectedObjectAddress,
-      afterSuccess: () => {
-        loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
-      },
+      afterSuccess: () => loadSceneObjectResources(selectedObjectAddress, true),
     });
   }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
@@ -850,7 +792,7 @@ export function useSceneMutationActions({
         await refreshSceneWorkspace();
       },
     });
-  }, [refreshSceneWorkspace, repository, runMutation, setSelectedObjectAddress]);
+  }, [refreshSceneWorkspace, repository, runMutation]);
 
   return {
     createSceneRoot,

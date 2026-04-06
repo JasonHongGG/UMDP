@@ -7,7 +7,7 @@ import type {
   RuntimeSceneNodeSummary,
 } from '@/domain/analysis/contracts';
 import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
-import { buildLoadedSceneGraph, createLoadedSceneSearchProjection } from '../loadedSceneNodes';
+import { createLoadedSceneSearchProjection } from '../loadedSceneNodes';
 import { useSceneMutationState, useSceneTreeState } from '../SceneWorkspaceContext';
 
 const VIRTUAL_OVERSCAN = 10;
@@ -24,6 +24,7 @@ type SceneListItem =
       kind: 'scene-header';
       scene: RuntimeSceneDescriptor;
       expanded: boolean;
+      rootCount: number;
     }
   | {
       key: string;
@@ -103,16 +104,43 @@ export function SceneHierarchyPanel() {
 
   const scenes: RuntimeSceneDescriptor[] = sceneWorkspace.snapshot?.scenes ?? [];
   const buildSettingsScenes: RuntimeSceneBuildSettingsEntry[] = sceneWorkspace.snapshot?.buildSettingsScenes ?? [];
+  const effectiveLoadedSceneGraph = sceneTreeState.loadedSceneGraph;
+  const graphRootsBySceneHandle = useMemo(() => {
+    const next = new Map<number, RuntimeSceneNodeSummary[]>();
+
+    effectiveLoadedSceneGraph.records.forEach((record) => {
+      if (record.depth !== 0) {
+        return;
+      }
+
+      const current = next.get(record.sceneHandle) ?? [];
+      if (current.some((node) => node.objectAddress === record.node.objectAddress)) {
+        return;
+      }
+
+      next.set(record.sceneHandle, [...current, record.node]);
+    });
+
+    return next;
+  }, [effectiveLoadedSceneGraph]);
   const summary = useMemo(() => {
     const sceneCount = scenes.length;
-    const rootCount = scenes.reduce((count: number, scene: RuntimeSceneDescriptor) => count + scene.roots.length, 0);
+    const rootCount = scenes.reduce((count: number, scene: RuntimeSceneDescriptor) => {
+      return count + (graphRootsBySceneHandle.get(scene.sceneHandle) ?? scene.roots).length;
+    }, 0);
     return { sceneCount, rootCount };
-  }, [scenes]);
+  }, [graphRootsBySceneHandle, scenes]);
   const deferredSearchQuery = useDeferredValue(sceneHierarchySearchQuery.trim().toLowerCase());
-  const fallbackSceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
   const searchState = sceneTreeState.sceneHierarchySearch
-    ?? createLoadedSceneSearchProjection(fallbackSceneGraph, deferredSearchQuery);
+    ?? createLoadedSceneSearchProjection(effectiveLoadedSceneGraph, deferredSearchQuery);
   const searchActive = searchState != null;
+  const selectedNodeRecord = useMemo(() => {
+    if (!selectedObjectAddress) {
+      return null;
+    }
+
+    return effectiveLoadedSceneGraph.recordByAddress.get(selectedObjectAddress) ?? null;
+  }, [effectiveLoadedSceneGraph, selectedObjectAddress]);
 
   const toggleScene = (sceneHandle: number) => {
     setExpandedSceneHandles((previous) => ({
@@ -212,9 +240,10 @@ export function SceneHierarchyPanel() {
     };
 
     scenes.forEach((scene: RuntimeSceneDescriptor) => {
+      const sceneRoots = graphRootsBySceneHandle.get(scene.sceneHandle) ?? scene.roots;
       const visibleRoots = searchState
-        ? scene.roots.filter((node: RuntimeSceneNodeSummary) => searchState.visibleNodeAddresses.has(node.objectAddress))
-        : scene.roots;
+        ? sceneRoots.filter((node: RuntimeSceneNodeSummary) => searchState.visibleNodeAddresses.has(node.objectAddress))
+        : sceneRoots;
 
       if (searchState && visibleRoots.length === 0) {
         return;
@@ -226,6 +255,7 @@ export function SceneHierarchyPanel() {
         kind: 'scene-header',
         scene,
         expanded,
+        rootCount: sceneRoots.length,
       });
 
       if (expanded) {
@@ -238,7 +268,7 @@ export function SceneHierarchyPanel() {
           });
         }
 
-        if (!searchState && scene.roots.length === 0) {
+        if (!searchState && sceneRoots.length === 0) {
           items.push({
             key: `scene-empty:${scene.sceneHandle}`,
             kind: 'scene-empty',
@@ -334,6 +364,43 @@ export function SceneHierarchyPanel() {
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedNodeRecord) {
+      return;
+    }
+
+    setExpandedSceneHandles((previous) => {
+      if (previous[selectedNodeRecord.sceneHandle] !== false) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [selectedNodeRecord.sceneHandle]: true,
+      };
+    });
+
+    if (selectedNodeRecord.ancestorAddresses.length === 0) {
+      return;
+    }
+
+    setExpandedNodes((previous) => {
+      let changed = false;
+      const next = { ...previous };
+
+      selectedNodeRecord.ancestorAddresses.forEach((objectAddress) => {
+        if (next[objectAddress]) {
+          return;
+        }
+
+        next[objectAddress] = true;
+        changed = true;
+      });
+
+      return changed ? next : previous;
+    });
+  }, [selectedNodeRecord]);
 
   useEffect(() => {
     if (!selectedObjectAddress || !scrollContainerRef.current) {
@@ -543,7 +610,7 @@ function SceneVirtualRow({
             <MapIcon size={15} className="text-cyan-300" />
             <span className="font-medium truncate">{item.scene.name}</span>
             <SceneKindBadge kind={item.scene.kind} />
-            <span className="ml-auto text-[11px] text-slate-500">{item.scene.roots.length} roots</span>
+            <span className="ml-auto text-[11px] text-slate-500">{item.rootCount} roots</span>
           </button>
         </div>
       );

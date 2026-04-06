@@ -18,7 +18,7 @@ pub fn finish_attach(state: &AppState, process_session: ProcessSession) {
 }
 
 pub fn fail_attach(state: &AppState, error: &OperationError) {
-    state.workspace().analysis().reset();
+    state.workspace().lifecycle().clear_metadata();
     reset_runtime_backing_state(state);
     state
         .workspace()
@@ -40,12 +40,12 @@ where
 }
 
 pub fn begin_snapshot_load(state: &AppState) {
-    let session = state.workspace().analysis().process_session();
+    let session = state.workspace().lifecycle().process_session();
     state.workspace().lifecycle().set_snapshot_loading(session);
 }
 
 pub fn finish_snapshot_load(state: &AppState) {
-    let session = state.workspace().analysis().process_session();
+    let session = state.workspace().lifecycle().process_session();
     let runtime_connected = state.runtime_kernel().session().has_session();
     state
         .workspace()

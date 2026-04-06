@@ -91,10 +91,6 @@ mod tests {
         let session = sample_session();
 
         workspace_kernel::begin_attach(&state);
-        state
-            .workspace()
-            .analysis()
-            .set_process_session(session.clone());
 
         let result = workspace_kernel::complete_attach_with_runtime_refresh(
             &state,
@@ -137,10 +133,6 @@ mod tests {
         let state = AppState::new();
         let session = sample_session();
 
-        state
-            .workspace()
-            .analysis()
-            .set_process_session(session.clone());
         workspace_kernel::finish_attach(&state, session.clone());
 
         let result = workspace_kernel::run_snapshot_load(&state, |_| {

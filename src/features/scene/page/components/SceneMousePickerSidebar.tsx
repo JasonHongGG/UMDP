@@ -22,10 +22,8 @@ interface SceneMousePickerSidebarProps {
 
 function statusClasses(status: RuntimeSceneMousePickerSnapshot['status']) {
   switch (status) {
-    case 'tracking-candidate':
+    case 'observing':
       return 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300';
-    case 'committed':
-      return 'border-cyan-500/30 bg-cyan-500/15 text-cyan-300';
     case 'armed':
       return 'border-amber-500/30 bg-amber-500/15 text-amber-300';
     case 'cancelled':
@@ -76,8 +74,7 @@ export function SceneMousePickerSidebar({
   openPickedHit,
 }: SceneMousePickerSidebarProps) {
   const selectedWindowHandle = pickerState.targetWindow?.windowHandle ?? null;
-  const hoverHit = pickerState.currentCandidate;
-  const lastPick = pickerState.committedPick;
+  const hoverHit = pickerState.hoverHit;
 
   return (
     <div className={`flex flex-col bg-[#070a0f]/95 backdrop-blur-xl relative z-20 shrink-0 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] overflow-hidden border-r border-[#1c2838] shadow-[10px_0_30px_rgba(0,0,0,0.5)] ${isOpen ? 'w-[360px]' : 'w-0 border-r-0 shadow-none opacity-0'}`}>
@@ -107,10 +104,10 @@ export function SceneMousePickerSidebar({
         <div className="rounded-xl border border-[#1c2838] bg-[#05080c]/75 p-3 space-y-2">
           <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Live Status</div>
           <div className="text-sm font-semibold text-slate-100 leading-tight">
-            {pickerState.statusDetail ?? 'Choose a target window, arm the picker, hover a collider-backed world object, then click once to open it.'}
+            {pickerState.statusDetail ?? 'Choose a target window, start the picker, and hover a collider-backed world object to refresh Hover and Recent automatically.'}
           </div>
           <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/8 px-3 py-2 text-[11px] leading-relaxed text-cyan-100/80">
-            Live hover is intentionally lightweight. Full inspector details load only after a successful click.
+            Hover updates stay lightweight. Opening the inspector is explicit and only happens when you click a Hover or Recent result here.
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 font-mono">
             <div className="rounded-lg bg-[#0a0f16]/80 border border-[#1c2838] px-2.5 py-2">
@@ -138,7 +135,7 @@ export function SceneMousePickerSidebar({
                 className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-cyan-500/25 bg-cyan-500/10 text-xs font-bold uppercase tracking-[0.18em] text-cyan-300 hover:bg-cyan-500/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <MousePointerClick className="w-4 h-4" />
-                Arm Picker
+                Start Picker
               </button>
             )}
             {selectedWindowHandle ? (
@@ -209,7 +206,7 @@ export function SceneMousePickerSidebar({
         <section className="rounded-xl border border-[#1c2838] bg-[#05080c]/75 p-3 space-y-3">
           <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Hover Preview</div>
           <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
-            V1 only supports collider-backed world objects that <span className="font-mono text-slate-300">Physics.Raycast</span> can hit.
+            The picker continuously watches collider-backed world objects that <span className="font-mono text-slate-300">Physics.Raycast</span> can hit and refreshes Recent automatically.
           </div>
           {hoverHit ? (
             <div className="space-y-2">
@@ -227,28 +224,18 @@ export function SceneMousePickerSidebar({
             </div>
           ) : (
             <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-4 text-xs text-slate-500 leading-relaxed">
-              Choose a target window, arm the picker, move the cursor over a collider-backed world object, then click once to open it.
+              Choose a target window, start the picker, and move the cursor over a collider-backed world object. Recent will refresh without requiring a click.
             </div>
           )}
-
-          {lastPick ? (
-            <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/70 px-3 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1">Last Pick</div>
-              <button onClick={() => openPickedHit(lastPick)} className="text-left w-full">
-                <div className="text-sm font-semibold text-slate-100 truncate">{lastPick.objectName}</div>
-                <div className="mt-1 text-[11px] text-slate-400 truncate">{formatHitPath(lastPick)}</div>
-              </button>
-            </div>
-          ) : null}
         </section>
 
         <section className="rounded-xl border border-[#1c2838] bg-[#05080c]/75 p-3 space-y-3">
-          <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Recent Picks</div>
-          {pickerState.recentPicks.length > 0 ? (
+          <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Recent Hits</div>
+          {pickerState.recentHits.length > 0 ? (
             <div className="space-y-2">
-              {pickerState.recentPicks.map((hit) => (
+              {pickerState.recentHits.map((hit) => (
                 <button
-                  key={`${hit.objectAddress}:${hit.observedAt}`}
+                  key={hit.objectAddress}
                   onClick={() => openPickedHit(hit)}
                   className="w-full text-left rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-2.5 hover:border-cyan-500/20 hover:bg-[#0a0f16]/90 transition-colors"
                 >
@@ -259,7 +246,7 @@ export function SceneMousePickerSidebar({
             </div>
           ) : (
             <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-4 text-xs text-slate-500 leading-relaxed">
-              Successful picks stay here for the current runtime session, so you can reopen them without clicking the game window again.
+              The picker keeps the latest 5 hovered objects for the current runtime session. Re-hovering an object refreshes it to the top instead of duplicating it.
             </div>
           )}
         </section>

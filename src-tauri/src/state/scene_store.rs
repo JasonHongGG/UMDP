@@ -6,7 +6,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectComponentsTaskState, RuntimeSceneObjectComponentsTaskStatus,
     RuntimeSceneObjectHeaderTaskState, RuntimeSceneObjectHeaderTaskStatus,
     RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneResourceKind,
-    RuntimeSceneResourceState, RuntimeScreenPoint, SceneRefreshStatus,
+    RuntimeSceneResourceState, RuntimeSceneSnapshotKind, RuntimeScreenPoint, SceneRefreshStatus,
     SceneResourceFreshness, SceneWorkspaceState,
 };
 use crate::infrastructure::clock::current_timestamp;
@@ -57,6 +57,22 @@ fn create_scene_resource_state(
     }
 }
 
+fn retained_snapshot_kind(has_snapshot: bool) -> RuntimeSceneSnapshotKind {
+    if has_snapshot {
+        RuntimeSceneSnapshotKind::Retained
+    } else {
+        RuntimeSceneSnapshotKind::Empty
+    }
+}
+
+fn fresh_snapshot_kind(has_snapshot: bool) -> RuntimeSceneSnapshotKind {
+    if has_snapshot {
+        RuntimeSceneSnapshotKind::Fresh
+    } else {
+        RuntimeSceneSnapshotKind::Empty
+    }
+}
+
 fn patch_resource_state(
     resource_state: &mut RuntimeSceneResourceState,
     resource_kind: RuntimeSceneResourceKind,
@@ -65,6 +81,7 @@ fn patch_resource_state(
     freshness: SceneResourceFreshness,
     last_successful_at: Option<String>,
     is_retaining_snapshot: bool,
+    snapshot_kind: RuntimeSceneSnapshotKind,
     error_message: Option<String>,
 ) {
     resource_state.resource_kind = resource_kind;
@@ -73,6 +90,7 @@ fn patch_resource_state(
     resource_state.freshness = freshness;
     resource_state.last_successful_at = last_successful_at;
     resource_state.is_retaining_snapshot = is_retaining_snapshot;
+    resource_state.snapshot_kind = snapshot_kind;
     resource_state.error_message = error_message;
 }
 
@@ -81,6 +99,7 @@ fn patch_workspace_resource_state(
     freshness: SceneResourceFreshness,
     last_successful_at: Option<String>,
     is_retaining_snapshot: bool,
+    snapshot_kind: RuntimeSceneSnapshotKind,
     error_message: Option<String>,
 ) {
     let session_key = workspace.session_key.clone();
@@ -92,6 +111,7 @@ fn patch_workspace_resource_state(
         freshness,
         last_successful_at,
         is_retaining_snapshot,
+        snapshot_kind,
         error_message,
     );
 }
@@ -101,6 +121,7 @@ fn patch_children_task_resource_state(
     freshness: SceneResourceFreshness,
     last_successful_at: Option<String>,
     is_retaining_snapshot: bool,
+    snapshot_kind: RuntimeSceneSnapshotKind,
     error_message: Option<String>,
 ) {
     let session_key = task.session_key.clone();
@@ -112,6 +133,7 @@ fn patch_children_task_resource_state(
         freshness,
         last_successful_at,
         is_retaining_snapshot,
+        snapshot_kind,
         error_message,
     );
 }
@@ -121,6 +143,7 @@ fn patch_header_task_resource_state(
     freshness: SceneResourceFreshness,
     last_successful_at: Option<String>,
     is_retaining_snapshot: bool,
+    snapshot_kind: RuntimeSceneSnapshotKind,
     error_message: Option<String>,
 ) {
     let session_key = task.session_key.clone();
@@ -132,6 +155,7 @@ fn patch_header_task_resource_state(
         freshness,
         last_successful_at,
         is_retaining_snapshot,
+        snapshot_kind,
         error_message,
     );
 }
@@ -141,6 +165,7 @@ fn patch_components_task_resource_state(
     freshness: SceneResourceFreshness,
     last_successful_at: Option<String>,
     is_retaining_snapshot: bool,
+    snapshot_kind: RuntimeSceneSnapshotKind,
     error_message: Option<String>,
 ) {
     let session_key = task.session_key.clone();
@@ -152,6 +177,7 @@ fn patch_components_task_resource_state(
         freshness,
         last_successful_at,
         is_retaining_snapshot,
+        snapshot_kind,
         error_message,
     );
 }
@@ -199,6 +225,7 @@ impl SceneState {
             SceneResourceFreshness::Refreshing,
             last_successful_at,
             is_retaining_snapshot,
+            retained_snapshot_kind(is_retaining_snapshot),
             None,
         );
         workspace.clone()
@@ -224,6 +251,7 @@ impl SceneState {
             SceneResourceFreshness::Fresh,
             last_successful_at,
             true,
+            RuntimeSceneSnapshotKind::Fresh,
             None,
         );
         workspace.clone()
@@ -254,6 +282,7 @@ impl SceneState {
             freshness,
             last_successful_at,
             has_snapshot,
+            retained_snapshot_kind(has_snapshot),
             Some(error),
         );
         workspace.clone()
@@ -282,6 +311,7 @@ impl SceneState {
             freshness,
             last_successful_at,
             has_snapshot,
+            retained_snapshot_kind(has_snapshot),
             error_message,
         );
         workspace.clone()
@@ -456,7 +486,7 @@ fn ensure_components_session(store: &mut SceneObjectComponentsStore, session_key
     };
 }
 
-const MAX_RECENT_SCENE_MOUSE_PICKS: usize = 8;
+const MAX_RECENT_SCENE_MOUSE_PICKS: usize = 5;
 
 #[derive(Default)]
 struct SceneMousePickerStore {
@@ -513,7 +543,7 @@ fn clear_scene_mouse_picker_preview(snapshot: &mut RuntimeSceneMousePickerSnapsh
     snapshot.cursor_screen_position = None;
     snapshot.cursor_client_position = None;
     snapshot.cursor_inside_client = false;
-    snapshot.current_candidate = None;
+    snapshot.hover_hit = None;
 }
 
 fn set_scene_mouse_picker_idle(snapshot: &mut RuntimeSceneMousePickerSnapshot, detail: Option<String>) {
@@ -546,16 +576,12 @@ fn set_scene_mouse_picker_cancelled(
 }
 
 fn push_recent_scene_mouse_pick(
-    recent_picks: &mut Vec<RuntimeSceneMouseTargetHit>,
+    recent_hits: &mut Vec<RuntimeSceneMouseTargetHit>,
     hit: RuntimeSceneMouseTargetHit,
 ) {
-    recent_picks.retain(|entry| {
-        entry.object_address != hit.object_address
-            || entry.scene_handle != hit.scene_handle
-            || entry.transform_address != hit.transform_address
-    });
-    recent_picks.insert(0, hit);
-    recent_picks.truncate(MAX_RECENT_SCENE_MOUSE_PICKS);
+    recent_hits.retain(|entry| entry.object_address != hit.object_address);
+    recent_hits.insert(0, hit);
+    recent_hits.truncate(MAX_RECENT_SCENE_MOUSE_PICKS);
 }
 
 impl SceneChildrenState {
@@ -631,6 +657,7 @@ impl SceneChildrenState {
                     SceneResourceFreshness::Fresh,
                     Some(cached.last_successful_at.clone()),
                     true,
+                    RuntimeSceneSnapshotKind::Fresh,
                     None,
                 );
                 store
@@ -658,6 +685,7 @@ impl SceneChildrenState {
             freshness,
             last_successful_at,
             is_retaining_snapshot,
+            retained_snapshot_kind(is_retaining_snapshot),
             None,
         );
         store
@@ -709,6 +737,7 @@ impl SceneChildrenState {
             freshness,
             last_successful_at,
             has_retained,
+            retained_snapshot_kind(has_retained),
             error_message,
         );
         Some(current.clone())
@@ -768,6 +797,7 @@ impl SceneChildrenState {
             freshness,
             last_successful_at,
             has_retained,
+            RuntimeSceneSnapshotKind::Fresh,
             None,
         );
         Some(current.clone())
@@ -805,6 +835,7 @@ impl SceneChildrenState {
             SceneResourceFreshness::Fresh,
             Some(current.updated_at.clone()),
             !current.children.is_empty(),
+            fresh_snapshot_kind(!current.children.is_empty()),
             None,
         );
 
@@ -865,6 +896,7 @@ impl SceneChildrenState {
             freshness,
             last_successful_at,
             has_retained,
+            retained_snapshot_kind(has_retained),
             Some(error_message),
         );
         Some(current.clone())
@@ -922,6 +954,7 @@ impl SceneChildrenState {
                     freshness,
                     last_successful_at,
                     has_retained,
+                    retained_snapshot_kind(has_retained),
                     error_message,
                 );
             }
@@ -1002,6 +1035,7 @@ impl SceneObjectHeaderState {
                     SceneResourceFreshness::Fresh,
                     Some(cached.last_successful_at),
                     true,
+                    RuntimeSceneSnapshotKind::Fresh,
                     None,
                 );
                 store.tasks_by_object.insert(object_address, state.clone());
@@ -1027,6 +1061,7 @@ impl SceneObjectHeaderState {
             freshness,
             last_successful_at,
             is_retaining_snapshot,
+            retained_snapshot_kind(is_retaining_snapshot),
             None,
         );
         store.tasks_by_object.insert(object_address, state.clone());
@@ -1076,6 +1111,7 @@ impl SceneObjectHeaderState {
             freshness,
             last_successful_at,
             has_retained,
+            retained_snapshot_kind(has_retained),
             error_message,
         );
         Some(current.clone())
@@ -1115,6 +1151,7 @@ impl SceneObjectHeaderState {
                 SceneResourceFreshness::Fresh,
                 Some(current.updated_at.clone()),
                 true,
+                RuntimeSceneSnapshotKind::Fresh,
                 None,
             );
             current.clone()
@@ -1176,6 +1213,7 @@ impl SceneObjectHeaderState {
             freshness,
             last_successful_at,
             has_retained,
+            retained_snapshot_kind(has_retained),
             Some(error_message),
         );
         Some(current.clone())
@@ -1249,6 +1287,7 @@ impl SceneObjectHeaderState {
                     freshness,
                     last_successful_at,
                     has_retained,
+                    retained_snapshot_kind(has_retained),
                     error_message,
                 );
             }
@@ -1333,6 +1372,7 @@ impl SceneObjectComponentsState {
                     SceneResourceFreshness::Fresh,
                     Some(cached.last_successful_at),
                     true,
+                    RuntimeSceneSnapshotKind::Fresh,
                     None,
                 );
                 store.tasks_by_object.insert(object_address, state.clone());
@@ -1358,6 +1398,7 @@ impl SceneObjectComponentsState {
             freshness,
             last_successful_at,
             is_retaining_snapshot,
+            retained_snapshot_kind(is_retaining_snapshot),
             None,
         );
         store.tasks_by_object.insert(object_address, state.clone());
@@ -1407,6 +1448,7 @@ impl SceneObjectComponentsState {
             freshness,
             last_successful_at,
             has_retained,
+            retained_snapshot_kind(has_retained),
             error_message,
         );
         Some(current.clone())
@@ -1466,6 +1508,7 @@ impl SceneObjectComponentsState {
             freshness,
             last_successful_at,
             has_retained,
+            RuntimeSceneSnapshotKind::Fresh,
             None,
         );
         Some(current.clone())
@@ -1504,6 +1547,7 @@ impl SceneObjectComponentsState {
             SceneResourceFreshness::Fresh,
             Some(current.updated_at.clone()),
             has_retained,
+            fresh_snapshot_kind(has_retained),
             None,
         );
 
@@ -1564,6 +1608,7 @@ impl SceneObjectComponentsState {
             freshness,
             last_successful_at,
             has_retained,
+            retained_snapshot_kind(has_retained),
             Some(error_message),
         );
         Some(current.clone())
@@ -1619,6 +1664,7 @@ impl SceneObjectComponentsState {
                     freshness,
                     last_successful_at,
                     has_retained,
+                    retained_snapshot_kind(has_retained),
                     error_message,
                 );
             }
@@ -1690,7 +1736,7 @@ impl SceneMousePickerState {
         if store.active_worker_id.is_some() {
             set_scene_mouse_picker_armed(
                 &mut store.snapshot,
-                "Move the cursor over the target window and click a visible object.",
+                "Move the cursor over the target window. Hovered objects refresh Recent automatically.",
             );
             bump_scene_mouse_picker_revision(&mut store.snapshot);
             return Ok(SceneMousePickerStart {
@@ -1707,7 +1753,7 @@ impl SceneMousePickerState {
         store.cancel_flag = Some(cancel_flag.clone());
         set_scene_mouse_picker_armed(
             &mut store.snapshot,
-            "Move the cursor over the target window and click a visible object.",
+            "Move the cursor over the target window. Hovered objects refresh Recent automatically.",
         );
         bump_scene_mouse_picker_revision(&mut store.snapshot);
 
@@ -1746,21 +1792,6 @@ impl SceneMousePickerState {
         store.snapshot.target_window.clone()
     }
 
-    pub fn current_candidate(
-        &self,
-        worker_id: u64,
-        session_key: Option<&str>,
-    ) -> Option<RuntimeSceneMouseTargetHit> {
-        let store = self.store.lock();
-        if !same_session_key(store.active_session_key.as_deref(), session_key)
-            || store.active_worker_id != Some(worker_id)
-        {
-            return None;
-        }
-
-        store.snapshot.current_candidate.clone()
-    }
-
     pub fn apply_observation(
         &self,
         worker_id: u64,
@@ -1768,7 +1799,7 @@ impl SceneMousePickerState {
         target_window: ProcessWindowCandidate,
         cursor_screen_position: RuntimeScreenPoint,
         cursor_client_position: Option<RuntimeScreenPoint>,
-        current_candidate: Option<RuntimeSceneMouseTargetHit>,
+        hover_hit: Option<RuntimeSceneMouseTargetHit>,
         status_detail: String,
     ) -> Option<RuntimeSceneMousePickerSnapshot> {
         let mut store = self.store.lock();
@@ -1783,53 +1814,18 @@ impl SceneMousePickerState {
         store.snapshot.cursor_screen_position = Some(cursor_screen_position);
         store.snapshot.cursor_inside_client = cursor_client_position.is_some();
         store.snapshot.cursor_client_position = cursor_client_position;
-        store.snapshot.current_candidate = current_candidate;
+        store.snapshot.hover_hit = hover_hit.clone();
+        if let Some(hit) = hover_hit {
+            push_recent_scene_mouse_pick(&mut store.snapshot.recent_hits, hit);
+        }
         store.snapshot.is_running = true;
         store.snapshot.status = if store.snapshot.cursor_inside_client {
-            RuntimeSceneMousePickerStatus::TrackingCandidate
+            RuntimeSceneMousePickerStatus::Observing
         } else {
             RuntimeSceneMousePickerStatus::Armed
         };
         store.snapshot.status_detail = Some(status_detail);
         store.snapshot.error_message = None;
-        bump_scene_mouse_picker_revision(&mut store.snapshot);
-        Some(store.snapshot.clone())
-    }
-
-    pub fn commit_pick(
-        &self,
-        worker_id: u64,
-        session_key: Option<&str>,
-        picked_hit: Option<RuntimeSceneMouseTargetHit>,
-        status_detail: String,
-    ) -> Option<RuntimeSceneMousePickerSnapshot> {
-        let mut store = self.store.lock();
-        if !same_session_key(store.active_session_key.as_deref(), session_key)
-            || store.active_worker_id != Some(worker_id)
-        {
-            return None;
-        }
-
-        if let Some(mut hit) = picked_hit {
-            hit.observed_at = current_timestamp();
-            store.snapshot.current_candidate = Some(hit.clone());
-            store.snapshot.committed_pick = Some(hit.clone());
-            push_recent_scene_mouse_pick(&mut store.snapshot.recent_picks, hit);
-            if let Some(cancel_flag) = store.cancel_flag.take() {
-                cancel_flag.store(true, Ordering::Relaxed);
-            }
-            store.active_worker_id = None;
-            store.snapshot.is_running = false;
-            store.snapshot.status = RuntimeSceneMousePickerStatus::Committed;
-            store.snapshot.status_detail = Some(status_detail);
-            store.snapshot.error_message = None;
-        } else {
-            if let Some(cancel_flag) = store.cancel_flag.take() {
-                cancel_flag.store(true, Ordering::Relaxed);
-            }
-            store.active_worker_id = None;
-            set_scene_mouse_picker_cancelled(&mut store.snapshot, status_detail);
-        }
         bump_scene_mouse_picker_revision(&mut store.snapshot);
         Some(store.snapshot.clone())
     }

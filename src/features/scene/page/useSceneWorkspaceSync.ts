@@ -177,6 +177,9 @@ export function useSceneWorkspaceSync({
     resourceRevision: sceneWorkspace.resourceRevision,
     mutationEpoch: sceneWorkspace.mutationEpoch,
   });
+  const sceneWorkspaceRefreshStatusRef = useRef(sceneWorkspace.refreshStatus);
+  const sceneWorkspaceFreshnessRef = useRef(sceneWorkspace.resourceState.freshness);
+  const hydratedProcessKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     currentSceneSessionKeyRef.current = currentSceneSessionKey;
@@ -188,6 +191,11 @@ export function useSceneWorkspaceSync({
       mutationEpoch: sceneWorkspace.mutationEpoch,
     };
   }, [sceneWorkspace.mutationEpoch, sceneWorkspace.resourceRevision]);
+
+  useEffect(() => {
+    sceneWorkspaceRefreshStatusRef.current = sceneWorkspace.refreshStatus;
+    sceneWorkspaceFreshnessRef.current = sceneWorkspace.resourceState.freshness;
+  }, [sceneWorkspace.refreshStatus, sceneWorkspace.resourceState.freshness]);
 
   const updateSceneWorkspace = useCallback((nextState: SetStateAction<SceneWorkspaceState>) => {
     setSceneWorkspace((previous) => {
@@ -277,7 +285,7 @@ export function useSceneWorkspaceSync({
       latestSceneWorkspaceVersionRef.current.mutationEpoch,
       force,
     )) {
-      return;
+      return currentTask;
     }
 
     const startedAt = nowMs();
@@ -293,7 +301,7 @@ export function useSceneWorkspaceSync({
     try {
       const taskState = await repository.startSceneObjectHeaderAnalysis(objectAddress);
       if (!taskState || !shouldAcceptHeaderTask(taskState)) {
-        return;
+        return taskState;
       }
 
       applyHeaderTaskState(taskState);
@@ -303,12 +311,15 @@ export function useSceneWorkspaceSync({
           status: taskState.status,
         });
       }
+
+      return taskState;
     } catch (error) {
       const message = logSceneError(`getSceneObjectHeader failed for ${objectAddress}`, error);
       setHeaderErrorByAddress((previous) => ({
         ...previous,
         [objectAddress]: message,
       }));
+      return null;
     }
   }, [applyHeaderTaskState, headerTaskByAddressRef, repository, setHeaderErrorByAddress, setHeaderLoadingByAddress, shouldAcceptHeaderTask]);
 
@@ -449,7 +460,7 @@ export function useSceneWorkspaceSync({
       return;
     }
 
-    if (sceneWorkspace.refreshStatus === 'refreshing' || sceneWorkspace.resourceState.freshness === 'refreshing') {
+    if (sceneWorkspaceRefreshStatusRef.current === 'refreshing' || sceneWorkspaceFreshnessRef.current === 'refreshing') {
       return;
     }
 
@@ -462,6 +473,7 @@ export function useSceneWorkspaceSync({
         ...previous.resourceState,
         freshness: previous.snapshot ? 'refreshing' : previous.resourceState.freshness,
         isRetainingSnapshot: previous.snapshot != null,
+        snapshotKind: previous.snapshot ? 'retained' : 'empty',
         errorMessage: null,
       },
     }));
@@ -484,7 +496,7 @@ export function useSceneWorkspaceSync({
         errorMessage: message,
       }));
     }
-  }, [repository, sceneWorkspace.refreshStatus, sceneWorkspace.resourceState.freshness, shouldAcceptSceneWorkspace, updateSceneWorkspace, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
+  }, [repository, shouldAcceptSceneWorkspace, updateSceneWorkspace, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
 
   const loadSceneWorkspaceState = useCallback(async () => {
     const startedAt = nowMs();
@@ -594,26 +606,39 @@ export function useSceneWorkspaceSync({
 
     if (processKeyRef.current !== processKey) {
       processKeyRef.current = processKey;
+      hydratedProcessKeyRef.current = null;
       resetSceneWorkspaceState();
     }
   }, [processKeyRef, resetSceneWorkspaceState, workspaceLifecycle.processSession, workspaceLifecycle.runtimeSession.sessionKey]);
 
   useEffect(() => {
+    const processKey = workspaceLifecycle.runtimeSession.sessionKey
+      ?? (workspaceLifecycle.processSession
+        ? `${workspaceLifecycle.processSession.pid}:${workspaceLifecycle.processSession.processName}`
+        : null);
+
     if (!active) {
       return;
     }
 
     if (!workspaceLifecycle.processSession || !workspaceLifecycle.hasSnapshot) {
+      hydratedProcessKeyRef.current = null;
       resetSceneWorkspaceState();
       return;
     }
+
+    if (processKey && hydratedProcessKeyRef.current === processKey) {
+      return;
+    }
+
+    hydratedProcessKeyRef.current = processKey;
 
     loadSceneWorkspaceState().then((state) => {
       if (!state?.snapshot || state.resourceState.freshness === 'empty') {
         refreshSceneWorkspace().catch(() => undefined);
       }
     }).catch(() => undefined);
-  }, [active, loadSceneWorkspaceState, refreshSceneWorkspace, resetSceneWorkspaceState, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession]);
+  }, [active, loadSceneWorkspaceState, refreshSceneWorkspace, resetSceneWorkspaceState, workspaceLifecycle.hasSnapshot, workspaceLifecycle.processSession, workspaceLifecycle.runtimeSession.sessionKey]);
 
   useEffect(() => {
     if (!selectedObjectAddress || !active) {
@@ -658,6 +683,7 @@ export function useSceneWorkspaceSync({
   }, [active, childTaskByParentRef, componentsTaskByAddressRef, headerTaskByAddressRef, loadSceneObjectResources, sceneWorkspace.mutationEpoch, selectedObjectAddress]);
 
   return {
+    loadSceneObjectHeader,
     loadSceneObjectResources,
     ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation,

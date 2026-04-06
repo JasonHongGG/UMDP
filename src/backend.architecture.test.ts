@@ -80,14 +80,18 @@ describe('backend architecture boundaries', () => {
 
   it('keeps runtime and metadata access owned by kernel access modules', () => {
     expect(existsSync(join(RUST_SRC_ROOT, 'services', 'analysis', 'runtime_session_service.rs'))).toBe(false);
+    expect(existsSync(join(RUST_SRC_ROOT, 'state', 'analysis_store.rs'))).toBe(false);
     expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'metadata', 'mod.rs'))).toBe(true);
     expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'metadata', 'access.rs'))).toBe(true);
 
     const kernelMod = readRustFile('kernel', 'mod.rs');
     const workspaceMod = readRustFile('kernel', 'workspace', 'mod.rs');
+    const stateMod = readRustFile('state', 'mod.rs');
 
     expect(kernelMod).toContain('pub mod metadata;');
     expect(workspaceMod).toContain('pub mod access;');
+    expect(stateMod.includes('analysis_store')).toBe(false);
+    expect(stateMod.includes('analysis(')).toBe(false);
   });
 
   it('keeps runtime invoke, field-set, and overlay orchestration out of analysis services', () => {

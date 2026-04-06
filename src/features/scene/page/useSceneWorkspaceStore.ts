@@ -1,7 +1,9 @@
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef } from 'react';
 import type {
+  ProcessWindowCandidate,
   RuntimeSceneComponentSummary,
   RuntimeSceneMutationOperation,
+  RuntimeSceneMousePickerSnapshot,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
   RuntimeSceneObjectComponentsTaskState,
@@ -11,25 +13,11 @@ import type {
 } from '@/domain/analysis/contracts';
 import type { WorkspaceTaskSnapshot } from '@/shared/contracts';
 import {
-  adjustChildrenCounts,
-  adjustInspectorCounts,
-  adjustNodeChildCountInList,
-  buildInspectorSnapshot,
   EMPTY_SCENE_WORKSPACE_STATE,
+  hasFreshSceneResourceSnapshot,
   isTerminalComponentsTaskStatus,
   isTerminalChildrenTaskStatus,
   isTerminalHeaderTaskStatus,
-  mergeInspectorCaches,
-  patchChildrenWithSummaries,
-  patchChildrenWithSummary,
-  patchInspectorsWithSummaries,
-  patchInspectorsWithSummary,
-  patchInspectorTransform,
-  patchRootsWithSummaries,
-  patchRootsWithSummary,
-  sameComponentOrder,
-  sameNodeOrder,
-  syncInspectorComponentCount,
 } from './sceneWorkspaceStatePatches';
 import {
   buildLoadedSceneGraph,
@@ -37,6 +25,12 @@ import {
   type LoadedSceneGraph,
   type LoadedSceneSearchProjection,
 } from './loadedSceneNodes';
+import {
+  buildSceneChildrenByParent,
+  buildSceneEntityMap,
+  buildSceneInspectors,
+  type SceneEntityMap,
+} from './sceneWorkspaceModel';
 
 export type SceneInspectorTab = {
   objectAddress: string;
@@ -68,6 +62,7 @@ export type SceneMutationState = {
   task: WorkspaceTaskSnapshot | null;
   pendingOperations: Partial<Record<RuntimeSceneMutationOperation, number>>;
   activeIntentByObject: Record<string, SceneObjectActiveIntentState>;
+  activeOverrideByObject: Record<string, boolean>;
 };
 
 export const EMPTY_MUTATION_STATE: SceneMutationState = {
@@ -77,17 +72,33 @@ export const EMPTY_MUTATION_STATE: SceneMutationState = {
   task: null,
   pendingOperations: {},
   activeIntentByObject: {},
+  activeOverrideByObject: {},
+};
+
+export const EMPTY_SCENE_MOUSE_PICKER_STATE: RuntimeSceneMousePickerSnapshot = {
+  resourceRevision: 0,
+  sessionKey: null,
+  status: 'idle',
+  statusDetail: null,
+  isRunning: false,
+  targetWindow: null,
+  cursorScreenPosition: null,
+  cursorClientPosition: null,
+  cursorInsideClient: false,
+  hoverHit: null,
+  recentHits: [],
+  lastUpdatedAt: null,
+  errorMessage: null,
 };
 
 type SceneWorkspaceStoreState = {
   sceneWorkspace: SceneWorkspaceState;
   selectedObjectAddress: string | null;
   sceneHierarchySearchQuery: string;
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>;
+  sceneEntities: SceneEntityMap;
   childTaskByParent: Record<string, RuntimeSceneObjectChildrenTaskState>;
   loadingChildrenByParent: Record<string, boolean>;
   childErrorByParent: Record<string, string | null>;
-  inspectorsByAddress: Record<string, RuntimeSceneObjectInspectorSnapshot>;
   headerTaskByAddress: Record<string, RuntimeSceneObjectHeaderTaskState>;
   headerLoadingByAddress: Record<string, boolean>;
   headerErrorByAddress: Record<string, string | null>;
@@ -95,6 +106,10 @@ type SceneWorkspaceStoreState = {
   componentsLoadingByAddress: Record<string, boolean>;
   componentsErrorByAddress: Record<string, string | null>;
   sceneMutationState: SceneMutationState;
+  scenePickerWindows: ProcessWindowCandidate[];
+  scenePickerWindowsLoading: boolean;
+  scenePickerWindowsError: string | null;
+  sceneMousePickerState: RuntimeSceneMousePickerSnapshot;
   sceneTabs: SceneInspectorTab[];
   activeSceneTabIndex: number;
 };
@@ -106,11 +121,9 @@ type SceneWorkspaceStoreAction =
   | { type: 'setSceneWorkspace'; updater: SceneStateUpdater<SceneWorkspaceState> }
   | { type: 'setSelectedObjectAddress'; updater: SceneStateUpdater<string | null> }
   | { type: 'setSceneHierarchySearchQuery'; updater: SceneStateUpdater<string> }
-  | { type: 'setChildrenByParent'; updater: SceneStateUpdater<Record<string, RuntimeSceneNodeSummary[]>> }
   | { type: 'setChildTaskByParent'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectChildrenTaskState>> }
   | { type: 'setLoadingChildrenByParent'; updater: SceneStateUpdater<Record<string, boolean>> }
   | { type: 'setChildErrorByParent'; updater: SceneStateUpdater<Record<string, string | null>> }
-  | { type: 'setInspectorsByAddress'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectInspectorSnapshot>> }
   | { type: 'setHeaderTaskByAddress'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectHeaderTaskState>> }
   | { type: 'setHeaderLoadingByAddress'; updater: SceneStateUpdater<Record<string, boolean>> }
   | { type: 'setHeaderErrorByAddress'; updater: SceneStateUpdater<Record<string, string | null>> }
@@ -118,12 +131,13 @@ type SceneWorkspaceStoreAction =
   | { type: 'setComponentsLoadingByAddress'; updater: SceneStateUpdater<Record<string, boolean>> }
   | { type: 'setComponentsErrorByAddress'; updater: SceneStateUpdater<Record<string, string | null>> }
   | { type: 'setSceneMutationState'; updater: SceneStateUpdater<SceneMutationState> }
-  | { type: 'applySummaryPatch'; summary: RuntimeSceneNodeSummary }
-  | { type: 'applySummaryBatch'; summaries: RuntimeSceneNodeSummary[] }
+  | { type: 'setScenePickerWindows'; updater: SceneStateUpdater<ProcessWindowCandidate[]> }
+  | { type: 'setScenePickerWindowsLoading'; updater: SceneStateUpdater<boolean> }
+  | { type: 'setScenePickerWindowsError'; updater: SceneStateUpdater<string | null> }
+  | { type: 'setSceneMousePickerState'; updater: SceneStateUpdater<RuntimeSceneMousePickerSnapshot> }
   | { type: 'applySceneChildrenTaskState'; taskState: RuntimeSceneObjectChildrenTaskState }
   | { type: 'applyHeaderTaskState'; taskState: RuntimeSceneObjectHeaderTaskState }
   | { type: 'applyComponentsTaskState'; taskState: RuntimeSceneObjectComponentsTaskState }
-  | { type: 'bumpParentChildCount'; objectAddress: string; delta: number }
   | { type: 'setSceneTabs'; updater: SceneStateUpdater<SceneInspectorTab[]> }
   | { type: 'setActiveSceneTabIndex'; updater: SceneStateUpdater<number> };
 
@@ -148,7 +162,7 @@ const getSavedTabIndex = () => {
 const getSavedSelected = () => {
   try {
     const data = sessionStorage.getItem('mndp_scene_selected_address');
-    return data ? data : null;
+    return data || null;
   } catch {
     return null;
   }
@@ -158,11 +172,10 @@ const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
   sceneWorkspace: EMPTY_SCENE_WORKSPACE_STATE,
   selectedObjectAddress: null,
   sceneHierarchySearchQuery: '',
-  childrenByParent: {},
+  sceneEntities: {},
   childTaskByParent: {},
   loadingChildrenByParent: {},
   childErrorByParent: {},
-  inspectorsByAddress: {},
   headerTaskByAddress: {},
   headerLoadingByAddress: {},
   headerErrorByAddress: {},
@@ -170,6 +183,10 @@ const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
   componentsLoadingByAddress: {},
   componentsErrorByAddress: {},
   sceneMutationState: EMPTY_MUTATION_STATE,
+  scenePickerWindows: [],
+  scenePickerWindowsLoading: false,
+  scenePickerWindowsError: null,
+  sceneMousePickerState: EMPTY_SCENE_MOUSE_PICKER_STATE,
   sceneTabs: [],
   activeSceneTabIndex: -1,
 };
@@ -191,45 +208,12 @@ function resolveSceneStateUpdater<T>(previous: T, updater: SceneStateUpdater<T>)
   return updater;
 }
 
-function replaceSceneStoreValue<K extends keyof SceneWorkspaceStoreState>(
-  state: SceneWorkspaceStoreState,
-  key: K,
-  nextValue: SceneWorkspaceStoreState[K],
-): SceneWorkspaceStoreState {
-  if (Object.is(state[key], nextValue)) {
-    return state;
-  }
-
-  return {
-    ...state,
-    [key]: nextValue,
-  } as SceneWorkspaceStoreState;
-}
-
-function patchSummaryCollections(
-  sceneWorkspace: SceneWorkspaceState,
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  inspectorsByAddress: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  summary: RuntimeSceneNodeSummary,
-) {
-  return {
-    sceneWorkspace: patchRootsWithSummary(sceneWorkspace, summary),
-    childrenByParent: patchChildrenWithSummary(childrenByParent, summary),
-    inspectorsByAddress: patchInspectorsWithSummary(inspectorsByAddress, summary),
-  };
-}
-
-function patchSummaryBatchCollections(
-  sceneWorkspace: SceneWorkspaceState,
-  childrenByParent: Record<string, RuntimeSceneNodeSummary[]>,
-  inspectorsByAddress: Record<string, RuntimeSceneObjectInspectorSnapshot>,
-  summaries: RuntimeSceneNodeSummary[],
-) {
-  return {
-    sceneWorkspace: patchRootsWithSummaries(sceneWorkspace, summaries),
-    childrenByParent: patchChildrenWithSummaries(childrenByParent, summaries),
-    inspectorsByAddress: patchInspectorsWithSummaries(inspectorsByAddress, summaries),
-  };
+function rebuildSceneEntities(state: Pick<SceneWorkspaceStoreState, 'sceneWorkspace' | 'childTaskByParent' | 'headerTaskByAddress'>) {
+  return buildSceneEntityMap({
+    sceneWorkspace: state.sceneWorkspace,
+    childTaskByParent: state.childTaskByParent,
+    headerTaskByAddress: state.headerTaskByAddress,
+  });
 }
 
 function buildSceneInspectorComponentsPanelState(
@@ -245,7 +229,9 @@ function buildSceneInspectorComponentsPanelState(
 
   const taskState = componentsTaskByAddress[selectedObjectAddress] ?? null;
   const inspector = inspectorsByAddress[selectedObjectAddress] ?? null;
-  const components = taskState?.components ?? inspector?.components ?? [];
+  const components = hasFreshSceneResourceSnapshot(taskState?.resourceState)
+    ? (taskState?.components ?? inspector?.components ?? [])
+    : (inspector?.components ?? taskState?.components ?? []);
 
   return {
     objectAddress: selectedObjectAddress,
@@ -266,19 +252,27 @@ function sceneWorkspaceStoreReducer(
   action: SceneWorkspaceStoreAction,
 ): SceneWorkspaceStoreState {
   switch (action.type) {
-    case 'reset':
-      return {
+    case 'reset': {
+      const nextState: SceneWorkspaceStoreState = {
         ...EMPTY_SCENE_WORKSPACE_STORE_STATE,
         selectedObjectAddress: state.selectedObjectAddress,
         sceneTabs: state.sceneTabs,
         activeSceneTabIndex: state.activeSceneTabIndex,
       };
-    case 'setSceneWorkspace':
-      return replaceSceneStoreValue(
-        state,
-        'sceneWorkspace',
-        resolveSceneStateUpdater(state.sceneWorkspace, action.updater),
-      );
+      return nextState;
+    }
+    case 'setSceneWorkspace': {
+      const sceneWorkspace = resolveSceneStateUpdater(state.sceneWorkspace, action.updater);
+      return {
+        ...state,
+        sceneWorkspace,
+        sceneEntities: rebuildSceneEntities({
+          sceneWorkspace,
+          childTaskByParent: state.childTaskByParent,
+          headerTaskByAddress: state.headerTaskByAddress,
+        }),
+      };
+    }
     case 'setSelectedObjectAddress': {
       const nextAddress = resolveSceneStateUpdater(state.selectedObjectAddress, action.updater);
       if (nextAddress) {
@@ -286,317 +280,192 @@ function sceneWorkspaceStoreReducer(
       } else {
         sessionStorage.removeItem('mndp_scene_selected_address');
       }
-      return replaceSceneStoreValue(state, 'selectedObjectAddress', nextAddress);
+      return {
+        ...state,
+        selectedObjectAddress: nextAddress,
+      };
     }
     case 'setSceneHierarchySearchQuery':
-      return replaceSceneStoreValue(
-        state,
-        'sceneHierarchySearchQuery',
-        resolveSceneStateUpdater(state.sceneHierarchySearchQuery, action.updater),
-      );
-    case 'setChildrenByParent':
-      return replaceSceneStoreValue(
-        state,
-        'childrenByParent',
-        resolveSceneStateUpdater(state.childrenByParent, action.updater),
-      );
-    case 'setChildTaskByParent':
-      return replaceSceneStoreValue(
-        state,
-        'childTaskByParent',
-        resolveSceneStateUpdater(state.childTaskByParent, action.updater),
-      );
+      return {
+        ...state,
+        sceneHierarchySearchQuery: resolveSceneStateUpdater(state.sceneHierarchySearchQuery, action.updater),
+      };
+    case 'setChildTaskByParent': {
+      const childTaskByParent = resolveSceneStateUpdater(state.childTaskByParent, action.updater);
+      return {
+        ...state,
+        childTaskByParent,
+        sceneEntities: rebuildSceneEntities({
+          sceneWorkspace: state.sceneWorkspace,
+          childTaskByParent,
+          headerTaskByAddress: state.headerTaskByAddress,
+        }),
+      };
+    }
     case 'setLoadingChildrenByParent':
-      return replaceSceneStoreValue(
-        state,
-        'loadingChildrenByParent',
-        resolveSceneStateUpdater(state.loadingChildrenByParent, action.updater),
-      );
+      return {
+        ...state,
+        loadingChildrenByParent: resolveSceneStateUpdater(state.loadingChildrenByParent, action.updater),
+      };
     case 'setChildErrorByParent':
-      return replaceSceneStoreValue(
-        state,
-        'childErrorByParent',
-        resolveSceneStateUpdater(state.childErrorByParent, action.updater),
-      );
-    case 'setInspectorsByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'inspectorsByAddress',
-        resolveSceneStateUpdater(state.inspectorsByAddress, action.updater),
-      );
-    case 'setHeaderTaskByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'headerTaskByAddress',
-        resolveSceneStateUpdater(state.headerTaskByAddress, action.updater),
-      );
+      return {
+        ...state,
+        childErrorByParent: resolveSceneStateUpdater(state.childErrorByParent, action.updater),
+      };
+    case 'setHeaderTaskByAddress': {
+      const headerTaskByAddress = resolveSceneStateUpdater(state.headerTaskByAddress, action.updater);
+      return {
+        ...state,
+        headerTaskByAddress,
+        sceneEntities: rebuildSceneEntities({
+          sceneWorkspace: state.sceneWorkspace,
+          childTaskByParent: state.childTaskByParent,
+          headerTaskByAddress,
+        }),
+      };
+    }
     case 'setHeaderLoadingByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'headerLoadingByAddress',
-        resolveSceneStateUpdater(state.headerLoadingByAddress, action.updater),
-      );
+      return {
+        ...state,
+        headerLoadingByAddress: resolveSceneStateUpdater(state.headerLoadingByAddress, action.updater),
+      };
     case 'setHeaderErrorByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'headerErrorByAddress',
-        resolveSceneStateUpdater(state.headerErrorByAddress, action.updater),
-      );
+      return {
+        ...state,
+        headerErrorByAddress: resolveSceneStateUpdater(state.headerErrorByAddress, action.updater),
+      };
     case 'setComponentsTaskByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'componentsTaskByAddress',
-        resolveSceneStateUpdater(state.componentsTaskByAddress, action.updater),
-      );
+      return {
+        ...state,
+        componentsTaskByAddress: resolveSceneStateUpdater(state.componentsTaskByAddress, action.updater),
+      };
     case 'setComponentsLoadingByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'componentsLoadingByAddress',
-        resolveSceneStateUpdater(state.componentsLoadingByAddress, action.updater),
-      );
+      return {
+        ...state,
+        componentsLoadingByAddress: resolveSceneStateUpdater(state.componentsLoadingByAddress, action.updater),
+      };
     case 'setComponentsErrorByAddress':
-      return replaceSceneStoreValue(
-        state,
-        'componentsErrorByAddress',
-        resolveSceneStateUpdater(state.componentsErrorByAddress, action.updater),
-      );
+      return {
+        ...state,
+        componentsErrorByAddress: resolveSceneStateUpdater(state.componentsErrorByAddress, action.updater),
+      };
     case 'setSceneMutationState':
-      return replaceSceneStoreValue(
-        state,
-        'sceneMutationState',
-        resolveSceneStateUpdater(state.sceneMutationState, action.updater),
-      );
+      return {
+        ...state,
+        sceneMutationState: resolveSceneStateUpdater(state.sceneMutationState, action.updater),
+      };
+    case 'setScenePickerWindows':
+      return {
+        ...state,
+        scenePickerWindows: resolveSceneStateUpdater(state.scenePickerWindows, action.updater),
+      };
+    case 'setScenePickerWindowsLoading':
+      return {
+        ...state,
+        scenePickerWindowsLoading: resolveSceneStateUpdater(state.scenePickerWindowsLoading, action.updater),
+      };
+    case 'setScenePickerWindowsError':
+      return {
+        ...state,
+        scenePickerWindowsError: resolveSceneStateUpdater(state.scenePickerWindowsError, action.updater),
+      };
+    case 'setSceneMousePickerState':
+      return {
+        ...state,
+        sceneMousePickerState: resolveSceneStateUpdater(state.sceneMousePickerState, action.updater),
+      };
     case 'setSceneTabs': {
       const nextTabs = resolveSceneStateUpdater(state.sceneTabs, action.updater);
       sessionStorage.setItem('mndp_scene_tabs', JSON.stringify(nextTabs));
-      return replaceSceneStoreValue(state, 'sceneTabs', nextTabs);
+      return {
+        ...state,
+        sceneTabs: nextTabs,
+      };
     }
     case 'setActiveSceneTabIndex': {
       const nextIndex = resolveSceneStateUpdater(state.activeSceneTabIndex, action.updater);
       sessionStorage.setItem('mndp_scene_tab_index', String(nextIndex));
-      return replaceSceneStoreValue(state, 'activeSceneTabIndex', nextIndex);
-    }
-    case 'applySummaryPatch': {
-      const next = patchSummaryCollections(
-        state.sceneWorkspace,
-        state.childrenByParent,
-        state.inspectorsByAddress,
-        action.summary,
-      );
-
       return {
         ...state,
-        ...next,
-      };
-    }
-    case 'applySummaryBatch': {
-      if (action.summaries.length === 0) {
-        return state;
-      }
-
-      const next = patchSummaryBatchCollections(
-        state.sceneWorkspace,
-        state.childrenByParent,
-        state.inspectorsByAddress,
-        action.summaries,
-      );
-
-      return {
-        ...state,
-        ...next,
+        activeSceneTabIndex: nextIndex,
       };
     }
     case 'applySceneChildrenTaskState': {
-      const { taskState } = action;
-      const patched = patchSummaryBatchCollections(
-        state.sceneWorkspace,
-        state.childrenByParent,
-        state.inspectorsByAddress,
-        taskState.children,
-      );
-      const existing = patched.childrenByParent[taskState.parentObjectAddress] ?? [];
-      const nextChildrenByParent = sameNodeOrder(existing, taskState.children)
-        ? patched.childrenByParent
-        : {
-            ...patched.childrenByParent,
-            [taskState.parentObjectAddress]: taskState.children,
-          };
-      const cachedInspector = patched.inspectorsByAddress[taskState.parentObjectAddress];
-      const nextInspectorsByAddress = cachedInspector == null || sameNodeOrder(cachedInspector.children, taskState.children)
-        ? patched.inspectorsByAddress
-        : {
-            ...patched.inspectorsByAddress,
-            [taskState.parentObjectAddress]: {
-              ...cachedInspector,
-              children: taskState.children,
-            },
-          };
-
+      const childTaskByParent = {
+        ...state.childTaskByParent,
+        [action.taskState.parentObjectAddress]: action.taskState,
+      };
       return {
         ...state,
-        sceneWorkspace: patched.sceneWorkspace,
-        childrenByParent: nextChildrenByParent,
-        childTaskByParent: {
-          ...state.childTaskByParent,
-          [taskState.parentObjectAddress]: taskState,
-        },
+        childTaskByParent,
         loadingChildrenByParent: {
           ...state.loadingChildrenByParent,
-          [taskState.parentObjectAddress]: !isTerminalChildrenTaskStatus(taskState.status),
+          [action.taskState.parentObjectAddress]: !isTerminalChildrenTaskStatus(action.taskState.status),
         },
         childErrorByParent: {
           ...state.childErrorByParent,
-          [taskState.parentObjectAddress]: taskState.errorMessage,
+          [action.taskState.parentObjectAddress]: action.taskState.errorMessage,
         },
-        inspectorsByAddress: nextInspectorsByAddress,
+        sceneEntities: rebuildSceneEntities({
+          sceneWorkspace: state.sceneWorkspace,
+          childTaskByParent,
+          headerTaskByAddress: state.headerTaskByAddress,
+        }),
       };
     }
     case 'applyHeaderTaskState': {
-      const { taskState } = action;
-      const componentsTask = state.componentsTaskByAddress[taskState.objectAddress] ?? null;
-      const nextSnapshotBase = buildInspectorSnapshot(
-        taskState,
-        state.childrenByParent[taskState.objectAddress]
-          ?? state.inspectorsByAddress[taskState.objectAddress]?.children
-          ?? [],
-        componentsTask?.components
-          ?? state.inspectorsByAddress[taskState.objectAddress]?.components
-          ?? [],
-      );
-      const nextSnapshot = nextSnapshotBase
-        ? syncInspectorComponentCount(nextSnapshotBase, componentsTask?.totalCount)
-        : null;
-      if (!nextSnapshot) {
-        return {
-          ...state,
-          headerTaskByAddress: {
-            ...state.headerTaskByAddress,
-            [taskState.objectAddress]: taskState,
-          },
-          headerLoadingByAddress: {
-            ...state.headerLoadingByAddress,
-            [taskState.objectAddress]: !isTerminalHeaderTaskStatus(taskState.status),
-          },
-          headerErrorByAddress: {
-            ...state.headerErrorByAddress,
-            [taskState.objectAddress]: taskState.errorMessage,
-          },
-        };
-      }
-
-      let nextSceneWorkspace = state.sceneWorkspace;
-      let nextChildrenByParent = state.childrenByParent;
-      let nextInspectorsByAddress = state.inspectorsByAddress;
-
-      if (nextSnapshot.parent) {
-        const patchedParent = patchSummaryCollections(
-          nextSceneWorkspace,
-          nextChildrenByParent,
-          nextInspectorsByAddress,
-          nextSnapshot.parent,
-        );
-        nextSceneWorkspace = patchedParent.sceneWorkspace;
-        nextChildrenByParent = patchedParent.childrenByParent;
-        nextInspectorsByAddress = patchedParent.inspectorsByAddress;
-      }
-
-      const patchedObject = patchSummaryCollections(
-        nextSceneWorkspace,
-        nextChildrenByParent,
-        nextInspectorsByAddress,
-        nextSnapshot.object,
-      );
-      nextSceneWorkspace = patchedObject.sceneWorkspace;
-      nextChildrenByParent = patchedObject.childrenByParent;
-      nextInspectorsByAddress = mergeInspectorCaches(patchedObject.inspectorsByAddress, nextSnapshot);
-
+      const headerTaskByAddress = {
+        ...state.headerTaskByAddress,
+        [action.taskState.objectAddress]: action.taskState,
+      };
+      const activeOverride = state.sceneMutationState.activeOverrideByObject[action.taskState.objectAddress];
+      const shouldClearActiveOverride = activeOverride != null
+        && action.taskState.status === 'ready'
+        && action.taskState.resourceState.freshness === 'fresh'
+        && action.taskState.header?.object.activeSelf === activeOverride;
       return {
         ...state,
-        sceneWorkspace: nextSceneWorkspace,
-        childrenByParent: nextChildrenByParent,
-        inspectorsByAddress: nextInspectorsByAddress,
-        headerTaskByAddress: {
-          ...state.headerTaskByAddress,
-          [taskState.objectAddress]: taskState,
-        },
+        headerTaskByAddress,
         headerLoadingByAddress: {
           ...state.headerLoadingByAddress,
-          [taskState.objectAddress]: !isTerminalHeaderTaskStatus(taskState.status),
+          [action.taskState.objectAddress]: !isTerminalHeaderTaskStatus(action.taskState.status),
         },
         headerErrorByAddress: {
           ...state.headerErrorByAddress,
-          [taskState.objectAddress]: taskState.errorMessage,
+          [action.taskState.objectAddress]: action.taskState.errorMessage,
         },
+        sceneMutationState: shouldClearActiveOverride
+          ? {
+              ...state.sceneMutationState,
+              activeOverrideByObject: Object.fromEntries(
+                Object.entries(state.sceneMutationState.activeOverrideByObject)
+                  .filter(([objectAddress]) => objectAddress !== action.taskState.objectAddress),
+              ),
+            }
+          : state.sceneMutationState,
+        sceneEntities: rebuildSceneEntities({
+          sceneWorkspace: state.sceneWorkspace,
+          childTaskByParent: state.childTaskByParent,
+          headerTaskByAddress,
+        }),
       };
     }
-    case 'applyComponentsTaskState': {
-      const { taskState } = action;
-      const currentInspector = state.inspectorsByAddress[taskState.objectAddress] ?? null;
-      const nextSnapshotBase = currentInspector
-        ? (sameComponentOrder(currentInspector.components, taskState.components)
-          ? currentInspector
-          : {
-              ...currentInspector,
-              components: taskState.components,
-            })
-        : buildInspectorSnapshot(
-            state.headerTaskByAddress[taskState.objectAddress],
-            state.childrenByParent[taskState.objectAddress] ?? [],
-            taskState.components,
-          );
-      const nextSnapshot = nextSnapshotBase
-        ? syncInspectorComponentCount(nextSnapshotBase, taskState.totalCount)
-        : null;
-
+    case 'applyComponentsTaskState':
       return {
         ...state,
-        inspectorsByAddress: nextSnapshot
-          ? mergeInspectorCaches(state.inspectorsByAddress, nextSnapshot)
-          : state.inspectorsByAddress,
         componentsTaskByAddress: {
           ...state.componentsTaskByAddress,
-          [taskState.objectAddress]: taskState,
+          [action.taskState.objectAddress]: action.taskState,
         },
         componentsLoadingByAddress: {
           ...state.componentsLoadingByAddress,
-          [taskState.objectAddress]: !isTerminalComponentsTaskStatus(taskState.status),
+          [action.taskState.objectAddress]: !isTerminalComponentsTaskStatus(action.taskState.status),
         },
         componentsErrorByAddress: {
           ...state.componentsErrorByAddress,
-          [taskState.objectAddress]: taskState.errorMessage,
+          [action.taskState.objectAddress]: action.taskState.errorMessage,
         },
       };
-    }
-    case 'bumpParentChildCount': {
-      if (!state.sceneWorkspace.snapshot) {
-        return state;
-      }
-
-      let touched = false;
-      const scenes = state.sceneWorkspace.snapshot.scenes.map((scene) => {
-        const roots = adjustNodeChildCountInList(scene.roots, action.objectAddress, action.delta);
-        if (roots !== scene.roots) {
-          touched = true;
-          return { ...scene, roots };
-        }
-        return scene;
-      });
-
-      return {
-        ...state,
-        sceneWorkspace: touched
-          ? {
-              ...state.sceneWorkspace,
-              snapshot: {
-                ...state.sceneWorkspace.snapshot,
-                scenes,
-              },
-            }
-          : state.sceneWorkspace,
-        childrenByParent: adjustChildrenCounts(state.childrenByParent, action.objectAddress, action.delta),
-        inspectorsByAddress: adjustInspectorCounts(state.inspectorsByAddress, action.objectAddress, action.delta),
-      };
-    }
     default:
       return state;
   }
@@ -604,19 +473,18 @@ function sceneWorkspaceStoreReducer(
 
 export function useSceneWorkspaceStore() {
   const [state, dispatch] = useReducer(
-    sceneWorkspaceStoreReducer, 
-    EMPTY_SCENE_WORKSPACE_STORE_STATE, 
-    initSceneWorkspaceStoreState
+    sceneWorkspaceStoreReducer,
+    EMPTY_SCENE_WORKSPACE_STORE_STATE,
+    initSceneWorkspaceStoreState,
   );
   const {
     sceneWorkspace,
     selectedObjectAddress,
     sceneHierarchySearchQuery,
-    childrenByParent,
+    sceneEntities,
     childTaskByParent,
     loadingChildrenByParent,
     childErrorByParent,
-    inspectorsByAddress,
     headerTaskByAddress,
     headerLoadingByAddress,
     headerErrorByAddress,
@@ -624,6 +492,10 @@ export function useSceneWorkspaceStore() {
     componentsLoadingByAddress,
     componentsErrorByAddress,
     sceneMutationState,
+    scenePickerWindows,
+    scenePickerWindowsLoading,
+    scenePickerWindowsError,
+    sceneMousePickerState,
     sceneTabs,
     activeSceneTabIndex,
   } = state;
@@ -646,8 +518,18 @@ export function useSceneWorkspaceStore() {
     componentsTaskByAddressRef.current = componentsTaskByAddress;
   }, [componentsTaskByAddress]);
 
+  const childrenByParent = useMemo(() => buildSceneChildrenByParent(sceneEntities), [sceneEntities]);
+  const inspectorsByAddress = useMemo(() => buildSceneInspectors({
+    childrenByParent,
+    headerTaskByAddress,
+    componentsTaskByAddress,
+  }), [childrenByParent, componentsTaskByAddress, headerTaskByAddress]);
+
   const deferredSceneHierarchySearchQuery = useDeferredValue(sceneHierarchySearchQuery.trim().toLowerCase());
-  const loadedSceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
+  const loadedSceneGraph = useMemo(
+    () => buildLoadedSceneGraph(sceneWorkspace, childrenByParent, headerTaskByAddress),
+    [childrenByParent, headerTaskByAddress, sceneWorkspace],
+  );
   const sceneHierarchySearch = useMemo(() => {
     return createLoadedSceneSearchProjection(loadedSceneGraph, deferredSceneHierarchySearchQuery);
   }, [deferredSceneHierarchySearchQuery, loadedSceneGraph]);
@@ -664,10 +546,6 @@ export function useSceneWorkspaceStore() {
     dispatch({ type: 'setSceneHierarchySearchQuery', updater });
   }, []);
 
-  const setChildrenByParent = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneNodeSummary[]>>) => {
-    dispatch({ type: 'setChildrenByParent', updater });
-  }, []);
-
   const setChildTaskByParent = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneObjectChildrenTaskState>>) => {
     dispatch({ type: 'setChildTaskByParent', updater });
   }, []);
@@ -678,10 +556,6 @@ export function useSceneWorkspaceStore() {
 
   const setChildErrorByParent = useCallback((updater: SceneStateUpdater<Record<string, string | null>>) => {
     dispatch({ type: 'setChildErrorByParent', updater });
-  }, []);
-
-  const setInspectorsByAddress = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneObjectInspectorSnapshot>>) => {
-    dispatch({ type: 'setInspectorsByAddress', updater });
   }, []);
 
   const setHeaderTaskByAddress = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneObjectHeaderTaskState>>) => {
@@ -712,6 +586,22 @@ export function useSceneWorkspaceStore() {
     dispatch({ type: 'setSceneMutationState', updater });
   }, []);
 
+  const setScenePickerWindows = useCallback((updater: SceneStateUpdater<ProcessWindowCandidate[]>) => {
+    dispatch({ type: 'setScenePickerWindows', updater });
+  }, []);
+
+  const setScenePickerWindowsLoading = useCallback((updater: SceneStateUpdater<boolean>) => {
+    dispatch({ type: 'setScenePickerWindowsLoading', updater });
+  }, []);
+
+  const setScenePickerWindowsError = useCallback((updater: SceneStateUpdater<string | null>) => {
+    dispatch({ type: 'setScenePickerWindowsError', updater });
+  }, []);
+
+  const setSceneMousePickerState = useCallback((updater: SceneStateUpdater<RuntimeSceneMousePickerSnapshot>) => {
+    dispatch({ type: 'setSceneMousePickerState', updater });
+  }, []);
+
   const setSceneTabs = useCallback((updater: SceneStateUpdater<SceneInspectorTab[]>) => {
     dispatch({ type: 'setSceneTabs', updater });
   }, []);
@@ -722,18 +612,6 @@ export function useSceneWorkspaceStore() {
 
   const resetSceneState = useCallback(() => {
     dispatch({ type: 'reset' });
-  }, []);
-
-  const applySummaryPatch = useCallback((summary: RuntimeSceneNodeSummary) => {
-    dispatch({ type: 'applySummaryPatch', summary });
-  }, []);
-
-  const applySummaryBatch = useCallback((summaries: RuntimeSceneNodeSummary[]) => {
-    if (summaries.length === 0) {
-      return;
-    }
-
-    dispatch({ type: 'applySummaryBatch', summaries });
   }, []);
 
   const applySceneChildrenTaskState = useCallback((taskState: RuntimeSceneObjectChildrenTaskState) => {
@@ -754,30 +632,31 @@ export function useSceneWorkspaceStore() {
     });
   }, []);
 
-  const bumpParentChildCount = useCallback((objectAddress: string, delta: number) => {
-    dispatch({ type: 'bumpParentChildCount', objectAddress, delta });
-  }, []);
-
   const sceneInspector = useMemo(() => {
     if (!selectedObjectAddress) {
       return null;
     }
 
-    const cachedInspector = inspectorsByAddress[selectedObjectAddress] ?? null;
-    if (cachedInspector) {
-      return syncInspectorComponentCount(cachedInspector, componentsTaskByAddress[selectedObjectAddress]?.totalCount);
+    const inspector = inspectorsByAddress[selectedObjectAddress] ?? null;
+    if (!inspector) {
+      return null;
     }
 
-    const nextSnapshot = buildInspectorSnapshot(
-      headerTaskByAddress[selectedObjectAddress],
-      childrenByParent[selectedObjectAddress] ?? [],
-      componentsTaskByAddress[selectedObjectAddress]?.components ?? [],
-    );
+    const activeIntent = sceneMutationState.activeIntentByObject[selectedObjectAddress];
+    const activeOverride = sceneMutationState.activeOverrideByObject[selectedObjectAddress];
+    const desiredActiveSelf = activeIntent?.desiredActiveSelf ?? activeOverride;
+    if (desiredActiveSelf == null || inspector.object.activeSelf === desiredActiveSelf) {
+      return inspector;
+    }
 
-    return nextSnapshot
-      ? syncInspectorComponentCount(nextSnapshot, componentsTaskByAddress[selectedObjectAddress]?.totalCount)
-      : null;
-  }, [childrenByParent, componentsTaskByAddress, headerTaskByAddress, inspectorsByAddress, selectedObjectAddress]);
+    return {
+      ...inspector,
+      object: {
+        ...inspector.object,
+        activeSelf: desiredActiveSelf,
+      },
+    };
+  }, [inspectorsByAddress, sceneMutationState.activeIntentByObject, sceneMutationState.activeOverrideByObject, selectedObjectAddress]);
 
   const sceneInspectorHeaderTaskState = useMemo(() => {
     return selectedObjectAddress ? headerTaskByAddress[selectedObjectAddress] ?? null : null;
@@ -786,6 +665,7 @@ export function useSceneWorkspaceStore() {
   const sceneInspectorComponentsTaskState = useMemo(() => {
     return selectedObjectAddress ? componentsTaskByAddress[selectedObjectAddress] ?? null : null;
   }, [componentsTaskByAddress, selectedObjectAddress]);
+
   const sceneInspectorComponentsPanel = useMemo(() => {
     return buildSceneInspectorComponentsPanelState(
       selectedObjectAddress,
@@ -813,8 +693,23 @@ export function useSceneWorkspaceStore() {
   const sceneInspectorComponentsLoading = selectedObjectAddress ? componentsLoadingByAddress[selectedObjectAddress] ?? false : false;
 
   const sceneRootsByHandle = useMemo(() => {
-    return Object.fromEntries((sceneWorkspace.snapshot?.scenes ?? []).map((scene) => [scene.sceneHandle, scene.roots]));
-  }, [sceneWorkspace.snapshot]);
+    const rootsBySceneHandle = new Map<number, RuntimeSceneNodeSummary[]>();
+
+    loadedSceneGraph.records.forEach((record) => {
+      if (record.depth !== 0) {
+        return;
+      }
+
+      const current = rootsBySceneHandle.get(record.sceneHandle) ?? [];
+      if (current.some((node) => node.objectAddress === record.node.objectAddress)) {
+        return;
+      }
+
+      rootsBySceneHandle.set(record.sceneHandle, [...current, record.node]);
+    });
+
+    return Object.fromEntries(rootsBySceneHandle.entries());
+  }, [loadedSceneGraph]);
 
   return {
     sceneWorkspace,
@@ -826,7 +721,6 @@ export function useSceneWorkspaceStore() {
     loadedSceneGraph,
     sceneHierarchySearch,
     childrenByParent,
-    setChildrenByParent,
     childTaskByParent,
     setChildTaskByParent,
     loadingChildrenByParent,
@@ -834,7 +728,6 @@ export function useSceneWorkspaceStore() {
     childErrorByParent,
     setChildErrorByParent,
     inspectorsByAddress,
-    setInspectorsByAddress,
     headerTaskByAddress,
     setHeaderTaskByAddress,
     headerLoadingByAddress,
@@ -849,6 +742,14 @@ export function useSceneWorkspaceStore() {
     setComponentsErrorByAddress,
     sceneMutationState,
     setSceneMutationState,
+    scenePickerWindows,
+    setScenePickerWindows,
+    scenePickerWindowsLoading,
+    setScenePickerWindowsLoading,
+    scenePickerWindowsError,
+    setScenePickerWindowsError,
+    sceneMousePickerState,
+    setSceneMousePickerState,
     sceneTabs,
     setSceneTabs,
     activeSceneTabIndex,
@@ -859,12 +760,9 @@ export function useSceneWorkspaceStore() {
     componentsTaskByAddressRef,
     sceneMutationTaskCounterRef,
     resetSceneState,
-    applySummaryPatch,
-    applySummaryBatch,
     applySceneChildrenTaskState,
     applyHeaderTaskState,
     applyComponentsTaskState,
-    bumpParentChildCount,
     sceneInspector,
     sceneInspectorHeaderTaskState,
     sceneInspectorComponentsTaskState,
@@ -875,6 +773,5 @@ export function useSceneWorkspaceStore() {
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneRootsByHandle,
-    patchInspectorTransform,
   };
 }

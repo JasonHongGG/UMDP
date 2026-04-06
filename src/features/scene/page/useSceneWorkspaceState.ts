@@ -105,15 +105,12 @@ export function useSceneWorkspaceState({
     setSceneHierarchySearchQuery,
     sceneHierarchySearch,
     childrenByParent,
-    setChildrenByParent,
     childTaskByParent,
     setChildTaskByParent,
     loadingChildrenByParent,
     setLoadingChildrenByParent,
     childErrorByParent,
     setChildErrorByParent,
-    inspectorsByAddress,
-    setInspectorsByAddress,
     headerTaskByAddress,
     setHeaderTaskByAddress,
     setHeaderLoadingByAddress,
@@ -124,17 +121,23 @@ export function useSceneWorkspaceState({
     setComponentsErrorByAddress,
     sceneMutationState,
     setSceneMutationState,
+    scenePickerWindows,
+    setScenePickerWindows,
+    scenePickerWindowsLoading,
+    setScenePickerWindowsLoading,
+    scenePickerWindowsError,
+    setScenePickerWindowsError,
+    sceneMousePickerState,
+    setSceneMousePickerState,
     processKeyRef,
     childTaskByParentRef,
     headerTaskByAddressRef,
     componentsTaskByAddressRef,
     sceneMutationTaskCounterRef,
     resetSceneState,
-    applySummaryPatch,
     applySceneChildrenTaskState,
     applyHeaderTaskState,
     applyComponentsTaskState,
-    bumpParentChildCount,
     sceneInspector,
     sceneInspectorHeaderTaskState,
     sceneInspectorComponentsTaskState,
@@ -151,6 +154,7 @@ export function useSceneWorkspaceState({
     setActiveSceneTabIndex,
   } = store;
   const {
+    loadSceneObjectHeader,
     loadSceneObjectResources,
     ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation,
@@ -200,10 +204,7 @@ export function useSceneWorkspaceState({
     setSelectedObjectAddress,
     refreshSceneWorkspace,
     loadSceneObjectResources,
-    setSceneWorkspace,
-    setChildrenByParent,
     setChildTaskByParent,
-    setInspectorsByAddress,
     setHeaderTaskByAddress,
     setHeaderErrorByAddress,
     setHeaderLoadingByAddress,
@@ -212,9 +213,11 @@ export function useSceneWorkspaceState({
     setComponentsLoadingByAddress,
     setSceneMutationState,
     sceneMutationTaskCounterRef,
-    applySummaryPatch,
-    bumpParentChildCount,
   });
+  const selectedHeaderTaskState = selectedObjectAddress
+    ? headerTaskByAddress[selectedObjectAddress] ?? null
+    : null;
+  const revealedSelectedHierarchyKeyRef = React.useRef<string | null>(null);
 
   const openTabForSceneObject = useCallback((entry: SceneInspectorTab) => {
     setSceneTabs((previous) => {
@@ -231,6 +234,27 @@ export function useSceneWorkspaceState({
     });
   }, [setActiveSceneTabIndex, setSceneTabs, setSelectedObjectAddress]);
 
+  const revealSceneHierarchyPath = useCallback((hierarchyPath: RuntimeSceneMouseTargetHit['hierarchyPath']) => {
+    const ancestorAddresses = Array.from(new Set(
+      hierarchyPath
+        .map((entry) => entry.objectAddress)
+        .filter((objectAddress): objectAddress is string => objectAddress.length > 0),
+    ));
+
+    if (ancestorAddresses.length <= 1) {
+      return Promise.resolve();
+    }
+
+    return Promise.all(
+      ancestorAddresses
+        .slice(0, -1)
+        .flatMap((objectAddress) => [
+          loadSceneObjectHeader(objectAddress),
+          ensureSceneObjectChildrenLoaded(objectAddress),
+        ]),
+    ).then(() => undefined);
+  }, [ensureSceneObjectChildrenLoaded, loadSceneObjectHeader]);
+
   const openSceneMousePickHit = useCallback((hit: RuntimeSceneMouseTargetHit) => {
     openTabForSceneObject({
       objectAddress: hit.objectAddress,
@@ -238,7 +262,39 @@ export function useSceneWorkspaceState({
       sceneName: hit.sceneName ?? undefined,
       sceneKind: hit.sceneKind ?? undefined,
     });
-  }, [openTabForSceneObject]);
+    revealSceneHierarchyPath(hit.hierarchyPath).catch(() => undefined);
+  }, [openTabForSceneObject, revealSceneHierarchyPath]);
+
+  React.useEffect(() => {
+    revealedSelectedHierarchyKeyRef.current = null;
+  }, [selectedObjectAddress]);
+
+  React.useEffect(() => {
+    if (!active || !selectedObjectAddress) {
+      return;
+    }
+
+    loadSceneObjectHeader(selectedObjectAddress).catch(() => undefined);
+  }, [active, loadSceneObjectHeader, selectedObjectAddress]);
+
+  React.useEffect(() => {
+    if (!active || !selectedObjectAddress) {
+      return;
+    }
+
+    const header = selectedHeaderTaskState?.header;
+    if (!header) {
+      return;
+    }
+
+    const revealKey = `${selectedObjectAddress}:${selectedHeaderTaskState.resourceRevision}:${header.hierarchyPath.map((entry) => entry.objectAddress).join('>')}`;
+    if (revealedSelectedHierarchyKeyRef.current === revealKey) {
+      return;
+    }
+
+    revealedSelectedHierarchyKeyRef.current = revealKey;
+    revealSceneHierarchyPath(header.hierarchyPath).catch(() => undefined);
+  }, [active, revealSceneHierarchyPath, selectedHeaderTaskState, selectedObjectAddress]);
 
   const handleCloseTab = useCallback((index: number, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -275,10 +331,6 @@ export function useSceneWorkspaceState({
   }, [setSelectedObjectAddress]);
 
   const {
-    scenePickerWindows,
-    scenePickerWindowsLoading,
-    scenePickerWindowsError,
-    sceneMousePickerState,
     refreshScenePickerWindows,
     setSceneMousePickerTarget,
     startSceneMousePicker,
@@ -287,7 +339,14 @@ export function useSceneWorkspaceState({
     repository,
     workspaceLifecycle,
     active,
-    onPickHit: openSceneMousePickHit,
+    scenePickerWindows,
+    setScenePickerWindows,
+    scenePickerWindowsLoading,
+    setScenePickerWindowsLoading,
+    scenePickerWindowsError,
+    setScenePickerWindowsError,
+    sceneMousePickerState,
+    setSceneMousePickerState,
   });
 
   const sceneTasks = useMemo(() => {

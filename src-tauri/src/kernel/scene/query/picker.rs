@@ -181,7 +181,7 @@ impl<'a> SceneQueryKernel<'a> {
             scene_handle,
             scene_name,
             scene_kind,
-            hierarchy_path: Vec::new(),
+            hierarchy_path: self.build_hierarchy_path(game_object_address)?,
             distance,
             screen_position,
             client_position,

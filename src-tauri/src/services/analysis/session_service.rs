@@ -44,18 +44,14 @@ pub fn attach_to_process(
 
     let preserve_metadata = state
         .workspace()
-        .analysis()
+        .lifecycle()
         .process_session()
         .as_ref()
         .is_some_and(|existing| same_metadata_source(existing, &session))
-        && state.workspace().analysis().metadata_snapshot().is_some();
+        && state.workspace().lifecycle().metadata_snapshot().is_some();
 
-    state
-        .workspace()
-        .analysis()
-        .set_process_session(session.clone());
     if !preserve_metadata {
-        state.workspace().analysis().clear_metadata();
+        state.workspace().lifecycle().clear_metadata();
     }
 
     Ok(session)

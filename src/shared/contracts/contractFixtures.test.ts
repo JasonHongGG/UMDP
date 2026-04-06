@@ -45,13 +45,17 @@ describe('shared contract fixtures', () => {
 
     expect(fixture.workspace.resourceState.resourceKind).toBe('catalog');
     expect(fixture.workspace.resourceState.freshness).toBe('fresh');
+    expect(fixture.workspace.resourceState.snapshotKind).toBe('fresh');
     expect(fixture.workspace.mutationEpoch).toBe(3);
     expect(fixture.childrenTask.resourceState.resourceKind).toBe('children');
     expect(fixture.childrenTask.resourceState.freshness).toBe('refreshing');
     expect(fixture.childrenTask.resourceState.isRetainingSnapshot).toBe(true);
+    expect(fixture.childrenTask.resourceState.snapshotKind).toBe('retained');
     expect(fixture.headerTask.resourceState.resourceKind).toBe('scene-object-header');
     expect(fixture.headerTask.resourceState.freshness).toBe('fresh');
+    expect(fixture.headerTask.resourceState.snapshotKind).toBe('fresh');
     expect(fixture.componentsTask.resourceState.resourceKind).toBe('scene-object-components');
     expect(fixture.componentsTask.resourceState.lastSuccessfulAt).toBe('2026-04-04T09:59:55.000Z');
+    expect(fixture.componentsTask.resourceState.snapshotKind).toBe('retained');
   });
 });

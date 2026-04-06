@@ -4,6 +4,7 @@ import React, { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { SceneInspectorView } from './SceneInspectorView';
+import { buildLoadedSceneGraph } from '../loadedSceneNodes';
 import { createSceneDescriptor, createSceneInspectorSnapshot, createSceneNodeSummary, createSceneWorkspaceState } from '../testUtils';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -84,17 +85,21 @@ describe('SceneInspectorView', () => {
       },
     });
 
-    mockUseSceneWorkspace.mockReturnValue({
-      sceneWorkspace: createSceneWorkspaceState({
-        snapshot: {
-          generatedAt: '2026-03-30T00:00:00.000Z',
-          scenes: [createSceneDescriptor({ roots: [gameplayRoot, uiRoot] })],
-          buildSettingsScenes: [],
-        },
-      }),
-      childrenByParent: {
-        '0xui-root': [uiLayer],
+    const sceneWorkspace = createSceneWorkspaceState({
+      snapshot: {
+        generatedAt: '2026-03-30T00:00:00.000Z',
+        scenes: [createSceneDescriptor({ roots: [gameplayRoot, uiRoot] })],
+        buildSettingsScenes: [],
       },
+    });
+    const childrenByParent = {
+      '0xui-root': [uiLayer],
+    };
+
+    mockUseSceneWorkspace.mockReturnValue({
+      sceneWorkspace,
+      loadedSceneGraph: buildLoadedSceneGraph(sceneWorkspace, childrenByParent),
+      childrenByParent,
     });
 
     mockUseSceneInspectorState.mockReturnValue({

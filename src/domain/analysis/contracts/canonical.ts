@@ -221,6 +221,8 @@ export type SceneRefreshStatus = 'idle' | 'refreshing' | 'ready' | 'error';
 
 export type SceneResourceFreshness = 'empty' | 'fresh' | 'refreshing' | 'stale' | 'error';
 
+export type RuntimeSceneSnapshotKind = 'empty' | 'retained' | 'fresh';
+
 export type RuntimeSceneResourceKind = 'catalog' | 'children' | 'scene-object-header' | 'scene-object-components';
 
 export interface RuntimeSceneResourceState {
@@ -230,6 +232,7 @@ export interface RuntimeSceneResourceState {
   freshness: SceneResourceFreshness;
   lastSuccessfulAt: string | null;
   isRetainingSnapshot: boolean;
+  snapshotKind: RuntimeSceneSnapshotKind;
   errorMessage: string | null;
 }
 
@@ -485,8 +488,7 @@ export interface RuntimeSceneMutationResult {
 export type RuntimeSceneMousePickerStatus =
   | 'idle'
   | 'armed'
-  | 'tracking-candidate'
-  | 'committed'
+  | 'observing'
   | 'cancelled'
   | 'error';
 
@@ -514,9 +516,8 @@ export interface RuntimeSceneMousePickerSnapshot {
   cursorScreenPosition: RuntimeScreenPoint | null;
   cursorClientPosition: RuntimeScreenPoint | null;
   cursorInsideClient: boolean;
-  currentCandidate: RuntimeSceneMouseTargetHit | null;
-  committedPick: RuntimeSceneMouseTargetHit | null;
-  recentPicks: RuntimeSceneMouseTargetHit[];
+  hoverHit: RuntimeSceneMouseTargetHit | null;
+  recentHits: RuntimeSceneMouseTargetHit[];
   lastUpdatedAt: string | null;
   errorMessage: string | null;
 }

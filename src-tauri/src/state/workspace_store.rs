@@ -1,4 +1,4 @@
-use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
+use crate::domain::analysis_models::{AnalysisSnapshot, ProcessSession, RuntimeFlavor};
 use crate::domain::workspace::{
     RuntimeCapability, RuntimeSceneObjectComponentsCapabilityState, RuntimeSessionState,
     RuntimeSessionStatus, WorkspaceLifecycleState, WorkspaceLifecycleStatus,
@@ -13,6 +13,7 @@ fn bump_resource_revision(lifecycle: &mut WorkspaceLifecycleState) {
 #[derive(Default)]
 pub struct WorkspaceState {
     lifecycle: Mutex<WorkspaceLifecycleState>,
+    metadata_snapshot: Mutex<Option<AnalysisSnapshot>>,
     scene_mutation_channel: Mutex<()>,
 }
 
@@ -28,6 +29,22 @@ impl WorkspaceState {
             bump_resource_revision(&mut lifecycle);
         }
         lifecycle.clone()
+    }
+
+    pub fn process_session(&self) -> Option<ProcessSession> {
+        self.lifecycle.lock().process_session.clone()
+    }
+
+    pub fn metadata_snapshot(&self) -> Option<AnalysisSnapshot> {
+        self.metadata_snapshot.lock().clone()
+    }
+
+    pub fn set_metadata_snapshot(&self, snapshot: AnalysisSnapshot) {
+        *self.metadata_snapshot.lock() = Some(snapshot);
+    }
+
+    pub fn clear_metadata(&self) {
+        self.metadata_snapshot.lock().take();
     }
 
     pub fn set_attaching(&self) {

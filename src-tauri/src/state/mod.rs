@@ -1,9 +1,7 @@
-pub mod analysis_store;
 pub mod runtime_kernel_store;
 pub mod scene_store;
 pub mod workspace_store;
 
-pub use analysis_store::AnalysisState;
 pub use runtime_kernel_store::RuntimeKernelState;
 pub use scene_store::{
     SceneChildrenState, SceneMousePickerState, SceneObjectComponentsState,
@@ -13,15 +11,10 @@ pub use workspace_store::WorkspaceState;
 
 #[derive(Default)]
 pub struct WorkspaceSessionState {
-    analysis: AnalysisState,
     lifecycle: WorkspaceState,
 }
 
 impl WorkspaceSessionState {
-    pub fn analysis(&self) -> &AnalysisState {
-        &self.analysis
-    }
-
     pub fn lifecycle(&self) -> &WorkspaceState {
         &self.lifecycle
     }
@@ -425,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn scene_mouse_picker_successful_pick_commits_and_stops_worker() {
+    fn scene_mouse_picker_observation_refreshes_recent_hits_without_stopping_worker() {
         let picker = SceneMousePickerState::default();
         picker.set_target_window(Some("session-1".to_string()), Some(sample_window()));
 
@@ -444,26 +437,28 @@ mod tests {
             "Click once to open Player in the Scene inspector.".to_string(),
         );
 
-        let committed = picker
-            .commit_pick(
+        let observed = picker
+            .apply_observation(
                 worker_id,
                 Some("session-1"),
+                sample_window(),
+                RuntimeScreenPoint { x: 512, y: 320 },
+                Some(RuntimeScreenPoint { x: 500, y: 290 }),
                 Some(sample_hit("0x10", "Player", "hover-ts")),
-                "Locked Player. Loading Scene object header.".to_string(),
+                "Observing Player. Recent refreshes automatically. Press Escape to stop.".to_string(),
             )
-            .expect("expected committed picker snapshot");
+            .expect("expected observed picker snapshot");
 
-        assert!(!committed.is_running);
-        assert_eq!(committed.status, RuntimeSceneMousePickerStatus::Committed);
-        assert_eq!(committed.committed_pick.as_ref().map(|hit| hit.object_address.as_str()), Some("0x10"));
-        assert_ne!(committed.committed_pick.as_ref().map(|hit| hit.observed_at.as_str()), Some("hover-ts"));
-        assert_eq!(committed.recent_picks.len(), 1);
-        assert!(committed.current_candidate.is_some());
-        assert!(picker.finish_worker(worker_id, Some("session-1")).is_none());
+        assert!(observed.is_running);
+        assert_eq!(observed.status, RuntimeSceneMousePickerStatus::Observing);
+        assert_eq!(observed.hover_hit.as_ref().map(|hit| hit.object_address.as_str()), Some("0x10"));
+        assert_eq!(observed.recent_hits.len(), 1);
+        assert_eq!(observed.recent_hits[0].object_address, "0x10");
+        assert!(picker.finish_worker(worker_id, Some("session-1")).is_some());
     }
 
     #[test]
-    fn scene_mouse_picker_missed_click_stops_worker_without_committing_new_pick() {
+    fn scene_mouse_picker_recent_hits_deduplicate_and_cap_at_five() {
         let picker = SceneMousePickerState::default();
         picker.set_target_window(Some("session-1".to_string()), Some(sample_window()));
 
@@ -471,47 +466,39 @@ mod tests {
             .start(Some("session-1".to_string()))
             .expect("expected picker to start");
         let worker_id = started.worker_id.expect("expected worker id");
-        picker
-            .commit_pick(
+        for index in 0..6 {
+            let object_address = format!("0x{index}");
+            let object_name = format!("Object{index}");
+            picker.apply_observation(
                 worker_id,
                 Some("session-1"),
-                Some(sample_hit("0x10", "Player", "hover-ts")),
-                "Locked Player. Loading Scene object header.".to_string(),
-            )
-            .expect("expected first pick to commit");
+                sample_window(),
+                RuntimeScreenPoint { x: 600 + index, y: 360 },
+                Some(RuntimeScreenPoint { x: 580 + index, y: 330 }),
+                Some(sample_hit(&object_address, &object_name, "hover-ts")),
+                format!("Observing {object_name}. Recent refreshes automatically. Press Escape to stop."),
+            );
+        }
 
-        let restarted = picker
-            .start(Some("session-1".to_string()))
-            .expect("expected picker to restart");
-        let restarted_worker_id = restarted.worker_id.expect("expected restarted worker id");
-        picker.apply_observation(
-            restarted_worker_id,
-            Some("session-1"),
-            sample_window(),
-            RuntimeScreenPoint { x: 600, y: 360 },
-            Some(RuntimeScreenPoint { x: 580, y: 330 }),
-            None,
-            "No collider-backed world object is under the cursor.".to_string(),
-        );
-
-        let missed = picker
-            .commit_pick(
-                restarted_worker_id,
+        let deduplicated = picker
+            .apply_observation(
+                worker_id,
                 Some("session-1"),
-                None,
-                "Click missed. Scene picker stopped without locking an object.".to_string(),
+                sample_window(),
+                RuntimeScreenPoint { x: 700, y: 420 },
+                Some(RuntimeScreenPoint { x: 680, y: 390 }),
+                Some({
+                    let mut hit = sample_hit("0x2", "Object2", "hover-refresh");
+                    hit.transform_address = Some("0x2-alt-transform".to_string());
+                    hit
+                }),
+                "Observing Object2. Recent refreshes automatically. Press Escape to stop.".to_string(),
             )
-            .expect("expected miss snapshot");
+            .expect("expected refreshed recent picker snapshot");
 
-        assert!(!missed.is_running);
-        assert_eq!(missed.status, RuntimeSceneMousePickerStatus::Cancelled);
-        assert_eq!(missed.committed_pick.as_ref().map(|hit| hit.object_address.as_str()), Some("0x10"));
-        assert_eq!(missed.recent_picks.len(), 1);
-        assert_eq!(
-            missed.status_detail.as_deref(),
-            Some("Click missed. Scene picker stopped without locking an object.")
-        );
-        assert!(picker.finish_worker(restarted_worker_id, Some("session-1")).is_none());
+        assert_eq!(deduplicated.recent_hits.len(), 5);
+        assert_eq!(deduplicated.recent_hits[0].object_address, "0x2");
+        assert_eq!(deduplicated.recent_hits.iter().filter(|hit| hit.object_address == "0x2").count(), 1);
     }
 
     #[test]
@@ -526,11 +513,14 @@ mod tests {
 
         picker.stop(Some("session-1"));
 
-        let stale = picker.commit_pick(
+        let stale = picker.apply_observation(
             worker_id,
             Some("session-1"),
+            sample_window(),
+            RuntimeScreenPoint { x: 600, y: 360 },
+            Some(RuntimeScreenPoint { x: 580, y: 330 }),
             Some(sample_hit("0x99", "Stale", "hover-ts")),
-            "Opened Stale in the Scene inspector.".to_string(),
+            "Observing Stale. Recent refreshes automatically. Press Escape to stop.".to_string(),
         );
 
         assert!(stale.is_none());

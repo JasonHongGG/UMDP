@@ -3,7 +3,11 @@
 import React, { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import type { RuntimeSceneMousePickerSnapshot, RuntimeSceneMutationResult } from '@/domain/analysis/contracts';
+import type {
+  RuntimeSceneMousePickerSnapshot,
+  RuntimeSceneMutationResult,
+  RuntimeSceneObjectHeaderTaskState,
+} from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
@@ -13,6 +17,7 @@ import { createSceneDescriptor, createSceneNodeSummary, createSceneResourceState
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let workspaceStateUpdatedHandler: ((state: ReturnType<typeof createSceneWorkspaceState>) => void | Promise<void>) | null = null;
+let headerTaskUpdatedHandler: ((state: RuntimeSceneObjectHeaderTaskState) => void | Promise<void>) | null = null;
 let mousePickerStateUpdatedHandler: ((state: RuntimeSceneMousePickerSnapshot) => void | Promise<void>) | null = null;
 
 vi.mock('@/infrastructure/tauri/TauriSceneEvents', () => ({
@@ -23,7 +28,12 @@ vi.mock('@/infrastructure/tauri/TauriSceneEvents', () => ({
     };
   }),
   onSceneObjectChildrenTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
-  onSceneObjectHeaderTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
+  onSceneObjectHeaderTaskUpdated: vi.fn(async (handler: (state: RuntimeSceneObjectHeaderTaskState) => void | Promise<void>) => {
+    headerTaskUpdatedHandler = handler;
+    return () => {
+      headerTaskUpdatedHandler = null;
+    };
+  }),
   onSceneObjectComponentsTaskUpdated: vi.fn().mockResolvedValue(() => undefined),
   onSceneMousePickerStateUpdated: vi.fn(async (handler: (state: RuntimeSceneMousePickerSnapshot) => void | Promise<void>) => {
     mousePickerStateUpdatedHandler = handler;
@@ -38,10 +48,14 @@ interface HookSnapshot {
   selectedObjectAddress: ReturnType<typeof useSceneWorkspaceState>['selectedObjectAddress'];
   setSelectedObjectAddress: ReturnType<typeof useSceneWorkspaceState>['setSelectedObjectAddress'];
   setSceneObjectActive: ReturnType<typeof useSceneWorkspaceState>['setSceneObjectActive'];
+  openSceneMousePickHit: ReturnType<typeof useSceneWorkspaceState>['openSceneMousePickHit'];
+  sceneMousePickerState: ReturnType<typeof useSceneWorkspaceState>['sceneMousePickerState'];
   sceneMutationState: ReturnType<typeof useSceneWorkspaceState>['sceneMutationState'];
   sceneTabs: ReturnType<typeof useSceneWorkspaceState>['sceneTabs'];
   activeSceneTabIndex: ReturnType<typeof useSceneWorkspaceState>['activeSceneTabIndex'];
   sceneRootsByHandle: ReturnType<typeof useSceneWorkspaceState>['sceneRootsByHandle'];
+  loadedSceneGraph: ReturnType<typeof useSceneWorkspaceState>['loadedSceneGraph'];
+  sceneInspector: ReturnType<typeof useSceneWorkspaceState>['sceneInspector'];
   childrenByParent: ReturnType<typeof useSceneWorkspaceState>['childrenByParent'];
   childTaskByParent: ReturnType<typeof useSceneWorkspaceState>['childTaskByParent'];
   loadingChildrenByParent: ReturnType<typeof useSceneWorkspaceState>['loadingChildrenByParent'];
@@ -65,9 +79,8 @@ function createMousePickerState(
     cursorScreenPosition: null,
     cursorClientPosition: null,
     cursorInsideClient: false,
-    currentCandidate: null,
-    committedPick: null,
-    recentPicks: [],
+      hoverHit: null,
+      recentHits: [],
     lastUpdatedAt: null,
     errorMessage: null,
     ...overrides,
@@ -95,6 +108,45 @@ function createSceneMutationResult(
     behaviourEnabled: null,
     hierarchyPath: [],
     transform: null,
+    ...overrides,
+  };
+}
+
+function createHeaderTaskState(
+  overrides: Partial<RuntimeSceneObjectHeaderTaskState> = {},
+): RuntimeSceneObjectHeaderTaskState {
+  const object = createSceneNodeSummary({ objectAddress: '0xroot', name: 'GameplayRoot', activeSelf: true });
+
+  return {
+    taskId: 21,
+    resourceRevision: 8,
+    sessionKey: 'session-1',
+    objectAddress: '0xroot',
+    status: 'ready',
+    mutationEpoch: 0,
+    startedAt: '2026-03-30T00:00:00.000Z',
+    updatedAt: '2026-03-30T00:00:01.000Z',
+    header: {
+      generatedAt: '2026-03-30T00:00:01.000Z',
+      sceneHandle: 7,
+      sceneName: 'Gameplay',
+      sceneKind: 'loaded',
+      object,
+      parent: null,
+      hierarchyPath: [{ objectAddress: object.objectAddress, name: object.name }],
+      transform: null,
+    },
+    errorMessage: null,
+    isStale: false,
+    resourceState: createSceneResourceState({
+      resourceKind: 'scene-object-header',
+      resourceRevision: 8,
+      sessionKey: 'session-1',
+      freshness: 'fresh',
+      isRetainingSnapshot: true,
+      snapshotKind: 'fresh',
+      errorMessage: null,
+    }),
     ...overrides,
   };
 }
@@ -232,10 +284,14 @@ function HookHarness({
     selectedObjectAddress: state.selectedObjectAddress,
     setSelectedObjectAddress: state.setSelectedObjectAddress,
     setSceneObjectActive: state.setSceneObjectActive,
+    openSceneMousePickHit: state.openSceneMousePickHit,
+    sceneMousePickerState: state.sceneMousePickerState,
     sceneMutationState: state.sceneMutationState,
     sceneTabs: state.sceneTabs,
     activeSceneTabIndex: state.activeSceneTabIndex,
     sceneRootsByHandle: state.sceneRootsByHandle,
+    loadedSceneGraph: state.loadedSceneGraph,
+    sceneInspector: state.sceneInspector,
     childrenByParent: state.childrenByParent,
     childTaskByParent: state.childTaskByParent,
     loadingChildrenByParent: state.loadingChildrenByParent,
@@ -260,6 +316,7 @@ describe('useSceneWorkspaceState', () => {
   beforeEach(() => {
     latestState = null;
     workspaceStateUpdatedHandler = null;
+    headerTaskUpdatedHandler = null;
     mousePickerStateUpdatedHandler = null;
     sessionStorage.clear();
     container = document.createElement('div');
@@ -421,7 +478,7 @@ describe('useSceneWorkspaceState', () => {
     expect(latestState?.childTaskByParent['0xroot']?.taskId).toBe(11);
   });
 
-  it('opens a scene tab when a fresh mouse picker hit arrives', async () => {
+  it('stores hover and recent picker hits without auto-opening the inspector', async () => {
     const sessionKey = 'session-picker-open';
     const repository = createRepository(sessionKey);
 
@@ -434,9 +491,9 @@ describe('useSceneWorkspaceState', () => {
       await mousePickerStateUpdatedHandler?.(createMousePickerState({
         resourceRevision: 5,
         sessionKey,
-        status: 'idle',
-        statusDetail: 'Opened PickedRoot in the Scene inspector.',
-        committedPick: {
+        status: 'observing',
+        statusDetail: 'Observing PickedRoot. Recent refreshes automatically. Press Escape to stop.',
+        hoverHit: {
           observedAt: '2026-03-30T00:00:01.000Z',
           objectAddress: '0xpick',
           objectName: 'PickedRoot',
@@ -449,15 +506,89 @@ describe('useSceneWorkspaceState', () => {
           screenPosition: { x: 400, y: 300 },
           clientPosition: { x: 200, y: 160 },
         },
+        recentHits: [{
+          observedAt: '2026-03-30T00:00:01.000Z',
+          objectAddress: '0xpick',
+          objectName: 'PickedRoot',
+          transformAddress: '0xpick-transform',
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          hierarchyPath: [],
+          distance: 4.5,
+          screenPosition: { x: 400, y: 300 },
+          clientPosition: { x: 200, y: 160 },
+        }],
       }));
     });
     await flushEffects();
 
-    expect(latestState?.sceneTabs).toHaveLength(1);
-    expect(latestState?.sceneTabs[0]?.objectAddress).toBe('0xpick');
-    expect(latestState?.sceneTabs[0]?.name).toBe('PickedRoot');
-    expect(latestState?.activeSceneTabIndex).toBe(0);
-    expect(latestState?.selectedObjectAddress).toBe('0xpick');
+    expect(latestState?.sceneTabs).toHaveLength(0);
+    expect(latestState?.selectedObjectAddress).toBeNull();
+    expect(latestState?.sceneMousePickerState.hoverHit?.objectAddress).toBe('0xpick');
+    expect(latestState?.sceneMousePickerState.recentHits[0]?.objectAddress).toBe('0xpick');
+  });
+
+  it('deduplicates recent picker hits by object address before rendering picker state', async () => {
+    const sessionKey = 'session-picker-dedupe';
+    const repository = createRepository(sessionKey);
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository, sessionKey }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      await mousePickerStateUpdatedHandler?.(createMousePickerState({
+        resourceRevision: 99,
+        sessionKey,
+        status: 'observing',
+        recentHits: [
+          {
+            observedAt: '2026-03-30T00:00:01.000Z',
+            objectAddress: '0xdup',
+            objectName: 'Duplicated',
+            transformAddress: '0xdup-transform-a',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            hierarchyPath: [],
+            distance: 4.5,
+            screenPosition: { x: 400, y: 300 },
+            clientPosition: { x: 200, y: 160 },
+          },
+          {
+            observedAt: '2026-03-30T00:00:02.000Z',
+            objectAddress: '0xdup',
+            objectName: 'Duplicated',
+            transformAddress: '0xdup-transform-b',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            hierarchyPath: [],
+            distance: 4.4,
+            screenPosition: { x: 410, y: 310 },
+            clientPosition: { x: 210, y: 170 },
+          },
+          {
+            observedAt: '2026-03-30T00:00:03.000Z',
+            objectAddress: '0xother',
+            objectName: 'Other',
+            transformAddress: '0xother-transform',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            hierarchyPath: [],
+            distance: 4.3,
+            screenPosition: { x: 420, y: 320 },
+            clientPosition: { x: 220, y: 180 },
+          },
+        ],
+      }));
+    });
+    await flushEffects();
+
+    expect(latestState?.sceneMousePickerState.recentHits.map((hit) => hit.objectAddress)).toEqual(['0xdup', '0xother']);
   });
 
   it('ignores stale mouse picker events from a previous runtime session', async () => {
@@ -473,7 +604,7 @@ describe('useSceneWorkspaceState', () => {
       await mousePickerStateUpdatedHandler?.(createMousePickerState({
         resourceRevision: 2,
         sessionKey: 'session-stale',
-        committedPick: {
+        hoverHit: {
           observedAt: '2026-03-30T00:00:01.000Z',
           objectAddress: '0xstale-pick',
           objectName: 'StalePick',
@@ -486,12 +617,26 @@ describe('useSceneWorkspaceState', () => {
           screenPosition: { x: 20, y: 40 },
           clientPosition: { x: 10, y: 20 },
         },
+        recentHits: [{
+          observedAt: '2026-03-30T00:00:01.000Z',
+          objectAddress: '0xstale-pick',
+          objectName: 'StalePick',
+          transformAddress: null,
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          hierarchyPath: [],
+          distance: null,
+          screenPosition: { x: 20, y: 40 },
+          clientPosition: { x: 10, y: 20 },
+        }],
       }));
     });
     await flushEffects();
 
     expect(latestState?.sceneTabs).toHaveLength(0);
     expect(latestState?.selectedObjectAddress).toBeNull();
+    expect(latestState?.sceneMousePickerState.hoverHit).toBeNull();
   });
 
   it('keeps components loading local when the session does not support component materialization', async () => {
@@ -565,7 +710,7 @@ describe('useSceneWorkspaceState', () => {
       await mousePickerStateUpdatedHandler?.(createMousePickerState({
         resourceRevision: 6,
         sessionKey,
-        committedPick: {
+        hoverHit: {
           observedAt: '2026-03-30T00:00:01.000Z',
           objectAddress: '0xfresh',
           objectName: 'FreshPick',
@@ -578,6 +723,19 @@ describe('useSceneWorkspaceState', () => {
           screenPosition: { x: 20, y: 40 },
           clientPosition: { x: 10, y: 20 },
         },
+        recentHits: [{
+          observedAt: '2026-03-30T00:00:01.000Z',
+          objectAddress: '0xfresh',
+          objectName: 'FreshPick',
+          transformAddress: null,
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          hierarchyPath: [],
+          distance: null,
+          screenPosition: { x: 20, y: 40 },
+          clientPosition: { x: 10, y: 20 },
+        }],
       }));
     });
     await flushEffects();
@@ -586,7 +744,7 @@ describe('useSceneWorkspaceState', () => {
       await mousePickerStateUpdatedHandler?.(createMousePickerState({
         resourceRevision: 5,
         sessionKey,
-        committedPick: {
+        hoverHit: {
           observedAt: '2026-03-30T00:00:02.000Z',
           objectAddress: '0xolder',
           objectName: 'OlderPick',
@@ -599,13 +757,469 @@ describe('useSceneWorkspaceState', () => {
           screenPosition: { x: 30, y: 60 },
           clientPosition: { x: 15, y: 30 },
         },
+        recentHits: [{
+          observedAt: '2026-03-30T00:00:02.000Z',
+          objectAddress: '0xolder',
+          objectName: 'OlderPick',
+          transformAddress: null,
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          hierarchyPath: [],
+          distance: null,
+          screenPosition: { x: 30, y: 60 },
+          clientPosition: { x: 15, y: 30 },
+        }],
       }));
     });
     await flushEffects();
 
-    expect(latestState?.sceneTabs).toHaveLength(1);
-    expect(latestState?.sceneTabs[0]?.objectAddress).toBe('0xfresh');
-    expect(latestState?.selectedObjectAddress).toBe('0xfresh');
+    expect(latestState?.sceneTabs).toHaveLength(0);
+    expect(latestState?.sceneMousePickerState.hoverHit?.objectAddress).toBe('0xfresh');
+    expect(latestState?.sceneMousePickerState.recentHits[0]?.objectAddress).toBe('0xfresh');
+  });
+
+  it('loads ancestor branches before revealing a manually opened picker hit in the tree', async () => {
+    const repository = createRepository() as SceneGateway & {
+      startSceneObjectChildrenAnalysis: ReturnType<typeof vi.fn>;
+    };
+
+    repository.startSceneObjectChildrenAnalysis = vi.fn().mockResolvedValue(null);
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      latestState?.openSceneMousePickHit({
+          observedAt: '2026-03-30T00:00:03.000Z',
+          objectAddress: '0xleaf',
+          objectName: '30101(Clone)',
+          transformAddress: null,
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          hierarchyPath: [
+            { objectAddress: '0xroot', name: 'GameplayRoot' },
+            { objectAddress: '0xparent', name: 'ObjPoolMgr' },
+            { objectAddress: '0xleaf', name: '30101(Clone)' },
+          ],
+          distance: null,
+          screenPosition: { x: 40, y: 80 },
+          clientPosition: { x: 20, y: 40 },
+      });
+    });
+    await flushEffects();
+
+    expect(latestState?.sceneTabs[0]?.objectAddress).toBe('0xleaf');
+    expect(latestState?.selectedObjectAddress).toBe('0xleaf');
+    expect(repository.startSceneObjectChildrenAnalysis).toHaveBeenCalledWith('0xroot');
+    expect(repository.startSceneObjectChildrenAnalysis).toHaveBeenCalledWith('0xparent');
+    expect(repository.startSceneObjectChildrenAnalysis).toHaveBeenCalledWith('0xleaf');
+  });
+
+  it('hydrates missing hierarchy roots from inspector headers for the selected object', async () => {
+    const repository = createRepository() as SceneGateway & {
+      startSceneObjectHeaderAnalysis: ReturnType<typeof vi.fn>;
+      startSceneObjectChildrenAnalysis: ReturnType<typeof vi.fn>;
+    };
+
+    const gameMgr = createSceneNodeSummary({
+      objectAddress: '0xgameMgr',
+      name: 'GameMgr',
+      hasChildren: true,
+      childCount: 1,
+    });
+    const objPoolMgr = createSceneNodeSummary({
+      objectAddress: '0xpoolMgr',
+      parentObjectAddress: '0xgameMgr',
+      name: 'ObjPoolMgr',
+      hasChildren: true,
+      childCount: 1,
+    });
+    const pooledObject = createSceneNodeSummary({
+      objectAddress: '0xleaf',
+      parentObjectAddress: '0xpoolMgr',
+      name: '30101(Clone)',
+    });
+
+    repository.startSceneObjectHeaderAnalysis = vi.fn().mockImplementation(async (objectAddress: string) => {
+      if (objectAddress === '0xleaf') {
+        return createHeaderTaskState({
+          taskId: 31,
+          resourceRevision: 31,
+          objectAddress,
+          header: {
+            generatedAt: '2026-03-30T00:00:03.000Z',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            object: pooledObject,
+            parent: objPoolMgr,
+            hierarchyPath: [
+              { objectAddress: '0xgameMgr', name: 'GameMgr' },
+              { objectAddress: '0xpoolMgr', name: 'ObjPoolMgr' },
+              { objectAddress: '0xleaf', name: '30101(Clone)' },
+            ],
+            transform: null,
+          },
+        });
+      }
+
+      if (objectAddress === '0xpoolMgr') {
+        return createHeaderTaskState({
+          taskId: 32,
+          resourceRevision: 32,
+          objectAddress,
+          header: {
+            generatedAt: '2026-03-30T00:00:03.100Z',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            object: objPoolMgr,
+            parent: gameMgr,
+            hierarchyPath: [
+              { objectAddress: '0xgameMgr', name: 'GameMgr' },
+              { objectAddress: '0xpoolMgr', name: 'ObjPoolMgr' },
+            ],
+            transform: null,
+          },
+        });
+      }
+
+      if (objectAddress === '0xgameMgr') {
+        return createHeaderTaskState({
+          taskId: 33,
+          resourceRevision: 33,
+          objectAddress,
+          header: {
+            generatedAt: '2026-03-30T00:00:03.200Z',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            object: gameMgr,
+            parent: null,
+            hierarchyPath: [
+              { objectAddress: '0xgameMgr', name: 'GameMgr' },
+            ],
+            transform: null,
+          },
+        });
+      }
+
+      return null;
+    });
+
+    repository.startSceneObjectChildrenAnalysis = vi.fn().mockImplementation(async (objectAddress: string) => {
+      if (objectAddress === '0xleaf') {
+        return {
+          taskId: 41,
+          resourceRevision: 41,
+          sessionKey: 'session-1',
+          parentObjectAddress: objectAddress,
+          status: 'ready',
+          mutationEpoch: 0,
+          startedAt: '2026-03-30T00:00:03.000Z',
+          updatedAt: '2026-03-30T00:00:03.000Z',
+          children: [],
+          totalCount: 0,
+          loadedCount: 0,
+          nextOffset: null,
+          errorMessage: null,
+          isStale: false,
+          resourceState: createSceneResourceState({
+            resourceKind: 'children',
+            resourceRevision: 41,
+            sessionKey: 'session-1',
+            freshness: 'fresh',
+          }),
+        };
+      }
+
+      if (objectAddress === '0xpoolMgr') {
+        return {
+          taskId: 42,
+          resourceRevision: 42,
+          sessionKey: 'session-1',
+          parentObjectAddress: objectAddress,
+          status: 'ready',
+          mutationEpoch: 0,
+          startedAt: '2026-03-30T00:00:03.100Z',
+          updatedAt: '2026-03-30T00:00:03.100Z',
+          children: [pooledObject],
+          totalCount: 1,
+          loadedCount: 1,
+          nextOffset: null,
+          errorMessage: null,
+          isStale: false,
+          resourceState: createSceneResourceState({
+            resourceKind: 'children',
+            resourceRevision: 42,
+            sessionKey: 'session-1',
+            freshness: 'fresh',
+          }),
+        };
+      }
+
+      if (objectAddress === '0xgameMgr') {
+        return {
+          taskId: 43,
+          resourceRevision: 43,
+          sessionKey: 'session-1',
+          parentObjectAddress: objectAddress,
+          status: 'ready',
+          mutationEpoch: 0,
+          startedAt: '2026-03-30T00:00:03.200Z',
+          updatedAt: '2026-03-30T00:00:03.200Z',
+          children: [objPoolMgr],
+          totalCount: 1,
+          loadedCount: 1,
+          nextOffset: null,
+          errorMessage: null,
+          isStale: false,
+          resourceState: createSceneResourceState({
+            resourceKind: 'children',
+            resourceRevision: 43,
+            sessionKey: 'session-1',
+            freshness: 'fresh',
+          }),
+        };
+      }
+
+      return null;
+    });
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      latestState?.setSelectedObjectAddress('0xleaf');
+    });
+    await flushEffects();
+    await flushEffects();
+    await flushEffects();
+
+    expect(repository.startSceneObjectHeaderAnalysis).toHaveBeenCalledWith('0xleaf');
+    expect(repository.startSceneObjectHeaderAnalysis).toHaveBeenCalledWith('0xpoolMgr');
+    expect(repository.startSceneObjectHeaderAnalysis).toHaveBeenCalledWith('0xgameMgr');
+    expect(latestState?.loadedSceneGraph.recordByAddress.get('0xgameMgr')?.depth).toBe(0);
+    expect(latestState?.childrenByParent['0xgameMgr']?.[0]?.objectAddress).toBe('0xpoolMgr');
+    expect(latestState?.childrenByParent['0xpoolMgr']?.[0]?.objectAddress).toBe('0xleaf');
+  });
+
+  it('reveals missing hierarchy roots after the selected object header becomes ready asynchronously', async () => {
+    const repository = createRepository() as SceneGateway & {
+      startSceneObjectHeaderAnalysis: ReturnType<typeof vi.fn>;
+      startSceneObjectChildrenAnalysis: ReturnType<typeof vi.fn>;
+    };
+
+    const gameMgr = createSceneNodeSummary({
+      objectAddress: '0xgameMgr',
+      name: 'GameMgr',
+      hasChildren: true,
+      childCount: 1,
+    });
+    const objPoolMgr = createSceneNodeSummary({
+      objectAddress: '0xpoolMgr',
+      parentObjectAddress: '0xgameMgr',
+      name: 'ObjPoolMgr',
+      hasChildren: true,
+      childCount: 1,
+    });
+    const pooledObject = createSceneNodeSummary({
+      objectAddress: '0xleaf',
+      parentObjectAddress: '0xpoolMgr',
+      name: '30101(Clone)',
+    });
+
+    repository.startSceneObjectHeaderAnalysis = vi.fn().mockImplementation(async (objectAddress: string) => {
+      if (objectAddress === '0xleaf') {
+        return createHeaderTaskState({
+          taskId: 61,
+          resourceRevision: 61,
+          objectAddress,
+          status: 'loading',
+          header: null,
+          resourceState: createSceneResourceState({
+            resourceKind: 'scene-object-header',
+            resourceRevision: 61,
+            sessionKey: 'session-1',
+            freshness: 'refreshing',
+            isRetainingSnapshot: false,
+            snapshotKind: 'empty',
+            errorMessage: null,
+          }),
+        });
+      }
+
+      if (objectAddress === '0xpoolMgr') {
+        return createHeaderTaskState({
+          taskId: 62,
+          resourceRevision: 62,
+          objectAddress,
+          header: {
+            generatedAt: '2026-03-30T00:00:03.100Z',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            object: objPoolMgr,
+            parent: gameMgr,
+            hierarchyPath: [
+              { objectAddress: '0xgameMgr', name: 'GameMgr' },
+              { objectAddress: '0xpoolMgr', name: 'ObjPoolMgr' },
+            ],
+            transform: null,
+          },
+        });
+      }
+
+      if (objectAddress === '0xgameMgr') {
+        return createHeaderTaskState({
+          taskId: 63,
+          resourceRevision: 63,
+          objectAddress,
+          header: {
+            generatedAt: '2026-03-30T00:00:03.200Z',
+            sceneHandle: 7,
+            sceneName: 'Gameplay',
+            sceneKind: 'loaded',
+            object: gameMgr,
+            parent: null,
+            hierarchyPath: [
+              { objectAddress: '0xgameMgr', name: 'GameMgr' },
+            ],
+            transform: null,
+          },
+        });
+      }
+
+      return null;
+    });
+
+    repository.startSceneObjectChildrenAnalysis = vi.fn().mockImplementation(async (objectAddress: string) => {
+      if (objectAddress === '0xleaf') {
+        return {
+          taskId: 71,
+          resourceRevision: 71,
+          sessionKey: 'session-1',
+          parentObjectAddress: objectAddress,
+          status: 'ready',
+          mutationEpoch: 0,
+          startedAt: '2026-03-30T00:00:03.000Z',
+          updatedAt: '2026-03-30T00:00:03.000Z',
+          children: [],
+          totalCount: 0,
+          loadedCount: 0,
+          nextOffset: null,
+          errorMessage: null,
+          isStale: false,
+          resourceState: createSceneResourceState({
+            resourceKind: 'children',
+            resourceRevision: 71,
+            sessionKey: 'session-1',
+            freshness: 'fresh',
+          }),
+        };
+      }
+
+      if (objectAddress === '0xpoolMgr') {
+        return {
+          taskId: 72,
+          resourceRevision: 72,
+          sessionKey: 'session-1',
+          parentObjectAddress: objectAddress,
+          status: 'ready',
+          mutationEpoch: 0,
+          startedAt: '2026-03-30T00:00:03.100Z',
+          updatedAt: '2026-03-30T00:00:03.100Z',
+          children: [pooledObject],
+          totalCount: 1,
+          loadedCount: 1,
+          nextOffset: null,
+          errorMessage: null,
+          isStale: false,
+          resourceState: createSceneResourceState({
+            resourceKind: 'children',
+            resourceRevision: 72,
+            sessionKey: 'session-1',
+            freshness: 'fresh',
+          }),
+        };
+      }
+
+      if (objectAddress === '0xgameMgr') {
+        return {
+          taskId: 73,
+          resourceRevision: 73,
+          sessionKey: 'session-1',
+          parentObjectAddress: objectAddress,
+          status: 'ready',
+          mutationEpoch: 0,
+          startedAt: '2026-03-30T00:00:03.200Z',
+          updatedAt: '2026-03-30T00:00:03.200Z',
+          children: [objPoolMgr],
+          totalCount: 1,
+          loadedCount: 1,
+          nextOffset: null,
+          errorMessage: null,
+          isStale: false,
+          resourceState: createSceneResourceState({
+            resourceKind: 'children',
+            resourceRevision: 73,
+            sessionKey: 'session-1',
+            freshness: 'fresh',
+          }),
+        };
+      }
+
+      return null;
+    });
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      latestState?.setSelectedObjectAddress('0xleaf');
+    });
+    await flushEffects();
+
+    expect(repository.startSceneObjectHeaderAnalysis).toHaveBeenCalledWith('0xleaf');
+    expect(repository.startSceneObjectHeaderAnalysis).not.toHaveBeenCalledWith('0xgameMgr');
+
+    await act(async () => {
+      await headerTaskUpdatedHandler?.(createHeaderTaskState({
+        taskId: 64,
+        resourceRevision: 64,
+        objectAddress: '0xleaf',
+        header: {
+          generatedAt: '2026-03-30T00:00:03.300Z',
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          object: pooledObject,
+          parent: objPoolMgr,
+          hierarchyPath: [
+            { objectAddress: '0xgameMgr', name: 'GameMgr' },
+            { objectAddress: '0xpoolMgr', name: 'ObjPoolMgr' },
+            { objectAddress: '0xleaf', name: '30101(Clone)' },
+          ],
+          transform: null,
+        },
+      }));
+    });
+    await flushEffects();
+    await flushEffects();
+    await flushEffects();
+
+    expect(repository.startSceneObjectHeaderAnalysis).toHaveBeenCalledWith('0xpoolMgr');
+    expect(repository.startSceneObjectHeaderAnalysis).toHaveBeenCalledWith('0xgameMgr');
+    expect(latestState?.loadedSceneGraph.recordByAddress.get('0xgameMgr')?.depth).toBe(0);
+    expect(latestState?.childrenByParent['0xgameMgr']?.[0]?.objectAddress).toBe('0xpoolMgr');
   });
 
   it('serializes active mutations and keeps only the latest queued active intent for an object', async () => {
@@ -673,5 +1287,77 @@ describe('useSceneWorkspaceState', () => {
     await expect(thirdPromise).resolves.toEqual(expect.objectContaining({ activeSelf: false }));
     expect(latestState?.sceneMutationState.pendingOperations['set-active']).toBeUndefined();
     expect(latestState?.sceneMutationState.activeIntentByObject['0xroot']).toBeUndefined();
+  });
+
+  it('keeps canonical active truth when a retained header payload arrives after a set-active mutation ack', async () => {
+    const repository = createRepository() as SceneGateway & {
+      startSceneObjectHeaderAnalysis: ReturnType<typeof vi.fn>;
+      setSceneObjectActive: ReturnType<typeof vi.fn>;
+    };
+
+    repository.startSceneObjectHeaderAnalysis = vi.fn().mockResolvedValue(createHeaderTaskState());
+    repository.setSceneObjectActive = vi.fn().mockResolvedValue(createSceneMutationResult({
+      operation: 'set-active',
+      activeSelf: false,
+      object: createSceneNodeSummary({
+        objectAddress: '0xroot',
+        name: 'GameplayRoot',
+        activeSelf: false,
+      }),
+    }));
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      latestState?.setSelectedObjectAddress('0xroot');
+    });
+    await flushEffects();
+
+    expect(latestState?.sceneInspector?.object.activeSelf).toBe(true);
+
+    await act(async () => {
+      await latestState?.setSceneObjectActive(false);
+    });
+    await flushEffects();
+
+    expect(latestState?.sceneInspector?.object.activeSelf).toBe(false);
+
+    await act(async () => {
+      await headerTaskUpdatedHandler?.(createHeaderTaskState({
+        resourceRevision: 9,
+        mutationEpoch: 1,
+        status: 'loading',
+        updatedAt: '2026-03-30T00:00:02.000Z',
+        header: {
+          generatedAt: '2026-03-30T00:00:02.000Z',
+          sceneHandle: 7,
+          sceneName: 'Gameplay',
+          sceneKind: 'loaded',
+          object: createSceneNodeSummary({
+            objectAddress: '0xroot',
+            name: 'GameplayRoot',
+            activeSelf: true,
+          }),
+          parent: null,
+          hierarchyPath: [{ objectAddress: '0xroot', name: 'GameplayRoot' }],
+          transform: null,
+        },
+        resourceState: createSceneResourceState({
+          resourceKind: 'scene-object-header',
+          resourceRevision: 9,
+          sessionKey: 'session-1',
+          freshness: 'refreshing',
+          isRetainingSnapshot: true,
+          snapshotKind: 'retained',
+          errorMessage: null,
+        }),
+      }));
+    });
+    await flushEffects();
+
+    expect(latestState?.sceneInspector?.object.activeSelf).toBe(false);
   });
 });
