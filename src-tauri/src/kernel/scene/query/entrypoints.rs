@@ -39,9 +39,9 @@ pub fn load_scene_inspector_components_page(
     object_address: &str,
     offset: usize,
     limit: usize,
-) -> Result<RuntimeSceneComponentsPageSnapshot, String> {
-    let mut kernel = SceneQueryKernel::new(runtime_session)?;
-    let object_address = parse_address(object_address)?;
+) -> OperationResult<RuntimeSceneComponentsPageSnapshot> {
+    let mut kernel = SceneQueryKernel::new(runtime_session).map_err(OperationError::from)?;
+    let object_address = parse_address(object_address).map_err(OperationError::from)?;
     kernel.load_scene_inspector_components_page(object_address, offset, limit)
 }
 

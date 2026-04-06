@@ -181,8 +181,7 @@ pub(crate) fn load_scene_inspector_components_page(
         object_address,
         offset,
         limit,
-    )
-    .map_err(OperationError::from)?;
+    )?;
     log_scene_duration(
         "load_scene_inspector_components_page",
         started_at,

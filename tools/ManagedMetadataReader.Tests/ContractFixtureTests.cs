@@ -35,8 +35,8 @@ public class ContractFixtureTests
     {
         var root = LoadFixture("workspace-contract-versions.json");
 
-        Assert.Equal(2, root.GetProperty("tauriCommandVersion").GetInt32());
-        Assert.Equal(3, root.GetProperty("analysisSchemaVersion").GetInt32());
+        Assert.Equal(4, root.GetProperty("tauriCommandVersion").GetInt32());
+        Assert.Equal(5, root.GetProperty("analysisSchemaVersion").GetInt32());
         Assert.Equal(1, root.GetProperty("workflowSchemaVersion").GetInt32());
     }
 }

@@ -170,8 +170,16 @@ impl OperationError {
         Self::new(OperationErrorCode::CapabilityUnavailable, message)
     }
 
+    pub fn scene_component_capability_unavailable(message: impl Into<String>) -> Self {
+        Self::capability_unavailable(message)
+    }
+
     pub fn resource_fault(message: impl Into<String>) -> Self {
         Self::new(OperationErrorCode::RuntimeFault, message)
+    }
+
+    pub fn scene_component_resource_fault(message: impl Into<String>) -> Self {
+        Self::resource_fault(message)
     }
 
     pub fn runtime_fault(message: impl Into<String>) -> Self {

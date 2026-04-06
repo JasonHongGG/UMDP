@@ -11,8 +11,10 @@ use crate::domain::analysis_models::{
     RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectComponentsTaskState,
     RuntimeSceneObjectHeaderTaskState,
 };
-use crate::domain::operation::OperationResult;
+use crate::domain::operation::{OperationError, OperationResult};
+use crate::domain::workspace::RuntimeSceneObjectComponentsCapabilityStatus;
 use crate::kernel::runtime::access::execute_runtime_operation;
+use crate::kernel::runtime::access::ensure_runtime_session_ready;
 use crate::kernel::workspace::access::ensure_attached_session;
 use crate::state::AppState;
 use std::time::Instant;
@@ -169,7 +171,21 @@ pub fn start_scene_object_components_analysis(
 ) -> OperationResult<RuntimeSceneObjectComponentsTaskState> {
     let started_at = Instant::now();
     ensure_attached_session(state).map(|_| ())?;
-    ensure_scene_query_runtime_ready(state)?;
+    let runtime_session = ensure_runtime_session_ready(state)?;
+    if runtime_session.scene_object_components().status
+        != RuntimeSceneObjectComponentsCapabilityStatus::Supported
+    {
+        return Err(OperationError::scene_component_capability_unavailable(
+            runtime_session
+                .scene_object_components()
+                .reason
+                .clone()
+                .unwrap_or_else(|| {
+                    "Scene object component materialization is unavailable for this runtime session."
+                        .to_string()
+                }),
+        ));
+    }
     let session_key = current_scene_session_key(state);
 
     let task_start = state

@@ -11,6 +11,12 @@ export const EMPTY_WORKSPACE_LIFECYCLE: WorkspaceLifecycleState = {
     status: 'idle',
     runtime: 'unknown',
     capabilities: ['metadata'],
+    sceneObjectComponents: {
+      status: 'unknown',
+      strategy: null,
+      reason: null,
+      checkedAt: null,
+    },
     connected: false,
     sessionKey: null,
     lastError: null,

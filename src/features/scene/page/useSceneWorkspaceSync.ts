@@ -140,6 +140,11 @@ interface UseSceneWorkspaceSyncOptions {
   applyComponentsTaskState: (taskState: RuntimeSceneObjectComponentsTaskState) => void;
 }
 
+function getSceneObjectComponentsUnavailableMessage(workspaceLifecycle: WorkspaceLifecycleState) {
+  return workspaceLifecycle.runtimeSession.sceneObjectComponents.reason
+    ?? 'Scene object component materialization is unavailable for this runtime session.';
+}
+
 export function useSceneWorkspaceSync({
   repository,
   workspaceLifecycle,
@@ -163,6 +168,10 @@ export function useSceneWorkspaceSync({
   applyComponentsTaskState,
 }: UseSceneWorkspaceSyncOptions) {
   const currentSceneSessionKey = workspaceLifecycle.runtimeSession.sessionKey ?? null;
+  const sceneObjectComponentsCapabilityStatus = workspaceLifecycle.runtimeSession.sceneObjectComponents.status;
+  const sceneObjectComponentsUnavailableMessage = sceneObjectComponentsCapabilityStatus === 'unsupported'
+    ? getSceneObjectComponentsUnavailableMessage(workspaceLifecycle)
+    : null;
   const currentSceneSessionKeyRef = useRef<string | null>(currentSceneSessionKey);
   const latestSceneWorkspaceVersionRef = useRef({
     resourceRevision: sceneWorkspace.resourceRevision,
@@ -304,6 +313,34 @@ export function useSceneWorkspaceSync({
   }, [applyHeaderTaskState, headerTaskByAddressRef, repository, setHeaderErrorByAddress, setHeaderLoadingByAddress, shouldAcceptHeaderTask]);
 
   const loadSceneObjectComponents = useCallback(async (objectAddress: string, force = false) => {
+    if (sceneObjectComponentsCapabilityStatus === 'unsupported') {
+      setComponentsLoadingByAddress((previous) => {
+        if (!previous[objectAddress]) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [objectAddress]: false,
+        };
+      });
+      setComponentsErrorByAddress((previous) => {
+        if (previous[objectAddress] === sceneObjectComponentsUnavailableMessage) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [objectAddress]: sceneObjectComponentsUnavailableMessage,
+        };
+      });
+      return;
+    }
+
+    if (sceneObjectComponentsCapabilityStatus !== 'supported') {
+      return;
+    }
+
     const currentTask = componentsTaskByAddressRef.current[objectAddress];
     if (currentTask && shouldReuseComponentsTask(
       currentTask,
@@ -342,7 +379,16 @@ export function useSceneWorkspaceSync({
         [objectAddress]: message,
       }));
     }
-  }, [applyComponentsTaskState, componentsTaskByAddressRef, repository, setComponentsErrorByAddress, setComponentsLoadingByAddress, shouldAcceptComponentsTask]);
+  }, [
+    applyComponentsTaskState,
+    componentsTaskByAddressRef,
+    repository,
+    sceneObjectComponentsCapabilityStatus,
+    sceneObjectComponentsUnavailableMessage,
+    setComponentsErrorByAddress,
+    setComponentsLoadingByAddress,
+    shouldAcceptComponentsTask,
+  ]);
 
   const ensureSceneObjectChildrenLoaded = useCallback(async (objectAddress: string, force = false) => {
     const currentTask = childTaskByParentRef.current[objectAddress];

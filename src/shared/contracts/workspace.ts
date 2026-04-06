@@ -17,12 +17,27 @@ export type RuntimeCapability =
   | 'field-read'
   | 'field-write'
   | 'method-invoke'
-  | 'scene-read';
+  | 'scene-catalog-read'
+  | 'scene-object-header-read'
+  | 'scene-object-children-read'
+  | 'scene-object-components-read';
+
+export type RuntimeSceneObjectComponentsCapabilityStatus = 'unknown' | 'supported' | 'unsupported';
+
+export type RuntimeSceneObjectComponentsStrategy = 'indexed-game-object-api' | 'get-components-by-type';
+
+export interface RuntimeSceneObjectComponentsCapabilityState {
+  status: RuntimeSceneObjectComponentsCapabilityStatus;
+  strategy: RuntimeSceneObjectComponentsStrategy | null;
+  reason: string | null;
+  checkedAt: string | null;
+}
 
 export interface RuntimeSessionState {
   status: RuntimeSessionStatus;
   runtime: RuntimeFlavor | 'unknown';
   capabilities: RuntimeCapability[];
+  sceneObjectComponents: RuntimeSceneObjectComponentsCapabilityState;
   connected: boolean;
   sessionKey: string | null;
   lastError: string | null;

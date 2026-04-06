@@ -251,7 +251,7 @@ impl<'a> SceneQueryKernel<'a> {
         object_address: NativeAddress,
         offset: usize,
         limit: usize,
-    ) -> Result<RuntimeSceneComponentsPageSnapshot, String> {
+    ) -> OperationResult<RuntimeSceneComponentsPageSnapshot> {
         let page = self.load_components_for_object(object_address, offset, Some(limit))?;
         Ok(RuntimeSceneComponentsPageSnapshot {
             generated_at: current_timestamp(),

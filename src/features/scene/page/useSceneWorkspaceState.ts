@@ -72,6 +72,7 @@ export interface SceneWorkspaceStateResult {
   activeSceneTask: WorkspaceTaskSnapshot | null;
   sceneTasks: WorkspaceTaskSnapshot[];
   sceneRootsByHandle: Record<number, RuntimeSceneNodeSummary[]>;
+  sceneObjectComponentsCapability: WorkspaceLifecycleState['runtimeSession']['sceneObjectComponents'];
   scenePickerWindows: ProcessWindowCandidate[];
   scenePickerWindowsLoading: boolean;
   scenePickerWindowsError: string | null;
@@ -301,6 +302,8 @@ export function useSceneWorkspaceState({
     return (sceneMutationState.pendingOperations[operation] ?? 0) > 0;
   }, [sceneMutationState.pendingOperations]);
 
+  const sceneObjectComponentsCapability = workspaceLifecycle.runtimeSession.sceneObjectComponents;
+
   return {
     sceneWorkspace,
     refreshSceneWorkspace,
@@ -349,6 +352,7 @@ export function useSceneWorkspaceState({
     activeSceneTask: sceneMutationState.task,
     sceneTasks,
     sceneRootsByHandle,
+    sceneObjectComponentsCapability,
     scenePickerWindows,
     scenePickerWindowsLoading,
     scenePickerWindowsError,

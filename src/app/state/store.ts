@@ -35,6 +35,14 @@ import type {
 import { coerceOperationErrorEnvelope } from '@/shared/contracts';
 import { formatHexAddress } from '@/core/addressFormat';
 
+const ATTACHED_SCENE_RUNTIME_CAPABILITIES: WorkspaceLifecycleState['runtimeSession']['capabilities'] = [
+  'metadata',
+  'execution',
+  'scene-catalog-read',
+  'scene-object-header-read',
+  'scene-object-children-read',
+];
+
 export interface AppServices {
   analysisRepository: AnalysisRepository;
 }
@@ -243,6 +251,7 @@ export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, Thu
         status: 'starting',
         runtime: 'unknown',
         capabilities: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.capabilities,
+        sceneObjectComponents: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
         connected: false,
         sessionKey: null,
         lastError: null,
@@ -267,7 +276,8 @@ export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, Thu
         runtimeSession: {
           status: 'starting',
           runtime: session.runtime,
-          capabilities: ['metadata', 'execution', 'scene-read'],
+          capabilities: ATTACHED_SCENE_RUNTIME_CAPABILITIES,
+          sceneObjectComponents: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
           connected: false,
           sessionKey: makeRuntimeSessionKey(session),
           lastError: null,
@@ -290,6 +300,7 @@ export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, Thu
           status: 'error',
           runtime: 'unknown',
           capabilities: [],
+          sceneObjectComponents: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
           connected: false,
           sessionKey: null,
           lastError: envelope.message,

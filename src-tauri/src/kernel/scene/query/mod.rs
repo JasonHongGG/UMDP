@@ -8,6 +8,10 @@ use crate::domain::analysis_models::{
     RuntimeSceneTransformSnapshot, RuntimeSceneTransformUpdate, RuntimeScreenPoint,
     RuntimeVector3Snapshot,
 };
+use crate::domain::operation::{OperationError, OperationResult};
+use crate::domain::workspace::{
+    RuntimeSceneObjectComponentsCapabilityStatus, RuntimeSceneObjectComponentsStrategy,
+};
 use crate::infrastructure::clock::current_timestamp;
 use crate::infrastructure::native::memory::{RemoteAllocation, RemoteMemory};
 use crate::infrastructure::native::runtime_api::{
@@ -40,6 +44,9 @@ struct ScenePage<T> {
 struct SceneQueryKernel<'a> {
     runtime_api: &'a dyn RuntimeApi,
     memory: RemoteMemory,
+    component_capability_status: RuntimeSceneObjectComponentsCapabilityStatus,
+    component_capability_reason: Option<String>,
+    component_strategy: Option<RuntimeSceneObjectComponentsStrategy>,
     class_cache: HashMap<String, NativeAddress>,
     method_cache: HashMap<String, Option<NativeMethodRecord>>,
     field_cache: HashMap<String, Option<NativeFieldRecord>>,

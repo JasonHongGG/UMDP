@@ -25,7 +25,9 @@ function hasExecutionCapability(workspace: WorkspaceLifecycleState) {
 }
 
 function hasSceneCapability(workspace: WorkspaceLifecycleState) {
-  return workspace.runtimeSession.capabilities.includes('scene-read');
+  return workspace.runtimeSession.capabilities.includes('scene-catalog-read')
+    && workspace.runtimeSession.capabilities.includes('scene-object-header-read')
+    && workspace.runtimeSession.capabilities.includes('scene-object-children-read');
 }
 
 function hasInteractiveRuntime(workspace: WorkspaceLifecycleState) {
@@ -124,7 +126,7 @@ export function getWorkspacePageReadiness(
       tone: 'warning',
       title: page === 'scene' ? 'Scene Capability Missing' : 'Runtime Capability Missing',
       description: page === 'scene'
-        ? 'The attached runtime does not expose scene read capabilities for this workspace.'
+        ? 'The attached runtime does not expose the scene catalog and object inspection capabilities required for this workspace.'
         : 'The attached runtime does not expose workflow execution capabilities for this workspace.',
     };
   }

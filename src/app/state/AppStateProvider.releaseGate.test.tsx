@@ -54,6 +54,14 @@ let history: WorkflowSnapshot[] = [];
 let setWorkspaceTasks: ((sourceKey: string, tasks: WorkspaceTaskSnapshot[]) => void) | null = null;
 let renderCount = 0;
 
+const ATTACHED_SCENE_RUNTIME_CAPABILITIES: WorkspaceLifecycleState['runtimeSession']['capabilities'] = [
+  'metadata',
+  'execution',
+  'scene-catalog-read',
+  'scene-object-header-read',
+  'scene-object-children-read',
+];
+
 function createLifecycle(overrides: Partial<WorkspaceLifecycleState> = {}): WorkspaceLifecycleState {
   return {
     ...EMPTY_WORKSPACE_LIFECYCLE,
@@ -77,9 +85,10 @@ function createAttachedLifecycle(
     runtime: session.runtime,
     hasSnapshot: false,
     runtimeSession: {
+      ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'starting',
       runtime: session.runtime,
-      capabilities: ['metadata', 'execution', 'scene-read'],
+      capabilities: ATTACHED_SCENE_RUNTIME_CAPABILITIES,
       connected: false,
       sessionKey,
       lastError: null,
@@ -101,9 +110,10 @@ function createReadyLifecycle(
     runtime: session.runtime,
     hasSnapshot: true,
     runtimeSession: {
+      ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'ready',
       runtime: session.runtime,
-      capabilities: ['metadata', 'execution', 'scene-read'],
+      capabilities: ATTACHED_SCENE_RUNTIME_CAPABILITIES,
       connected: true,
       sessionKey,
       lastError: null,

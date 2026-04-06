@@ -7,6 +7,9 @@ impl<'a> SceneQueryKernel<'a> {
         Ok(Self {
             runtime_api,
             memory: RemoteMemory::open(runtime_session.pid())?,
+            component_capability_status: runtime_session.scene_object_components().status.clone(),
+            component_capability_reason: runtime_session.scene_object_components().reason.clone(),
+            component_strategy: runtime_session.scene_object_components().strategy.clone(),
             class_cache: HashMap::new(),
             method_cache: HashMap::new(),
             field_cache: HashMap::new(),
@@ -759,6 +762,33 @@ impl<'a> SceneQueryKernel<'a> {
         }
 
         Ok(type_object)
+    }
+
+    fn resolve_unity_type_object(
+        &mut self,
+        class_namespace: &str,
+        class_name: &str,
+    ) -> Result<NativeAddress, String> {
+        let type_name = if class_namespace.is_empty() {
+            class_name.to_string()
+        } else {
+            format!("{class_namespace}.{class_name}")
+        };
+
+        for image_name in ["UnityEngine.CoreModule", "UnityEngine"] {
+            if let Ok(image) = self.resolve_image(image_name) {
+                if self
+                    .runtime_api
+                    .resolve_class(image, class_namespace, class_name)
+                    .is_ok()
+                {
+                    let assembly_name = trim_assembly_name(&self.runtime_api.get_image_name(image)?);
+                    return self.resolve_managed_type_object(&type_name, &assembly_name);
+                }
+            }
+        }
+
+        Err(format!("failed to resolve managed type object: {type_name}"))
     }
 
     fn try_read_hide_flags(

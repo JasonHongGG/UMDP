@@ -13,7 +13,13 @@ describe('workspace contracts', () => {
       runtimeSession: {
         status: 'ready',
         runtime: 'unknown',
-        capabilities: ['metadata', 'preview-query', 'execution'],
+        capabilities: ['metadata', 'preview-query', 'execution', 'scene-catalog-read'],
+        sceneObjectComponents: {
+          status: 'supported',
+          strategy: 'get-components-by-type',
+          reason: null,
+          checkedAt: '2026-04-06T12:00:00.000Z',
+        },
         connected: true,
         sessionKey: 'session-1',
         lastError: null,
@@ -23,6 +29,7 @@ describe('workspace contracts', () => {
 
     expect(state.runtimeSession.connected).toBe(true);
     expect(state.runtimeSession.capabilities).toContain('preview-query');
+    expect(state.runtimeSession.sceneObjectComponents.status).toBe('supported');
     expect(state.runtimeSession.sessionKey).toBe('session-1');
     expect(state.resourceRevision).toBe(3);
   });

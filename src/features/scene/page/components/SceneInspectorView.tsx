@@ -58,6 +58,7 @@ export function SceneInspectorView() {
     sceneInspectorComponentsLoading,
     sceneInspectorError,
     sceneInspectorComponentsError,
+    sceneObjectComponentsCapability,
   } = useSceneInspectorState();
   const {
     createSceneChild,
@@ -182,6 +183,12 @@ export function SceneInspectorView() {
     || isSceneMutationPending('set-behaviour-enabled');
   const createChildPending = isSceneMutationPending('create-child');
   const reparentPending = isSceneMutationPending('reparent');
+  const sceneObjectComponentsUnavailable = sceneObjectComponentsCapability.status === 'unsupported';
+  const sceneObjectComponentsUnavailableMessage = sceneObjectComponentsUnavailable
+    ? sceneObjectComponentsCapability.reason
+      ?? 'Scene object component materialization is unavailable for this runtime session.'
+    : null;
+  const sceneInspectorComponentsMessage = sceneObjectComponentsUnavailableMessage ?? sceneInspectorComponentsError;
 
   const updateTransformAxis = (vectorKey: TransformVectorKey, axis: TransformAxis, nextValue: number, commit: boolean) => {
     const current = transformDraftRef.current;
@@ -407,7 +414,7 @@ export function SceneInspectorView() {
                   </div>
                   <button
                     onClick={() => createSceneComponent(componentTypeName).then(() => setComponentTypeName('')).catch(() => undefined)}
-                    disabled={componentMutationPending || !componentTypeName}
+                    disabled={sceneObjectComponentsUnavailable || componentMutationPending || !componentTypeName}
                     className="shrink-0 px-3 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-xs font-semibold border border-cyan-500/30 disabled:opacity-50 transition-colors"
                   >
                     Add
@@ -420,13 +427,13 @@ export function SceneInspectorView() {
                   </div>
                 )}
 
-                {sceneInspectorComponentsError && (
+                {sceneInspectorComponentsMessage && (
                   <div className="px-1 pb-1">
-                    <ErrorNotice message={sceneInspectorComponentsError} />
+                    <ErrorNotice message={sceneInspectorComponentsMessage} />
                   </div>
                 )}
                 
-                {sceneInspector && sceneInspector.components.length > 0 ? (
+                {!sceneObjectComponentsUnavailable && sceneInspector && sceneInspector.components.length > 0 ? (
                   <div className="flex flex-col gap-1 border-t border-[#141b24] pt-2">
                     {sceneInspector.components.map((component: RuntimeSceneComponentSummary) => (
                       <CompactComponentRow
@@ -438,7 +445,7 @@ export function SceneInspectorView() {
                       />
                     ))}
                   </div>
-                ) : !sceneInspectorComponentsLoading && !sceneInspectorComponentsError ? (
+                ) : !sceneInspectorComponentsLoading && !sceneInspectorComponentsMessage ? (
                   <div className="border-t border-[#141b24] px-2 pt-3">
                     <EmptyNotice message="No materialized components are currently available for this object." />
                   </div>

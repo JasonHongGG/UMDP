@@ -10,6 +10,11 @@ pub fn refresh_runtime_session(
     process_session: &ProcessSession,
 ) -> OperationResult<Arc<RuntimeSession>> {
     let session = Arc::new(RuntimeSession::create(process_session).map_err(OperationError::from)?);
+    state.workspace().lifecycle().apply_runtime_session_profile(
+        session.runtime().clone(),
+        session.capabilities().to_vec(),
+        session.scene_object_components().clone(),
+    );
     state
         .runtime_kernel()
         .session()

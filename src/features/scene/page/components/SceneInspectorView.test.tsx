@@ -114,6 +114,12 @@ describe('SceneInspectorView', () => {
       sceneInspectorComponentsLoading: false,
       sceneInspectorError: null,
       sceneInspectorComponentsError: null,
+      sceneObjectComponentsCapability: {
+        status: 'supported',
+        strategy: 'get-components-by-type',
+        reason: null,
+        checkedAt: '2026-04-06T12:00:00.000Z',
+      },
     });
 
     reparentSceneObject = vi.fn().mockResolvedValue(null);
@@ -276,6 +282,12 @@ describe('SceneInspectorView', () => {
       sceneInspectorComponentsLoading: false,
       sceneInspectorError: null,
       sceneInspectorComponentsError: componentsError,
+      sceneObjectComponentsCapability: {
+        status: 'supported',
+        strategy: 'get-components-by-type',
+        reason: null,
+        checkedAt: '2026-04-06T12:00:00.000Z',
+      },
     });
 
     await act(async () => {

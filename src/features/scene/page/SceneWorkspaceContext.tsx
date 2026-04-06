@@ -92,6 +92,7 @@ export function useSceneInspectorState() {
     sceneInspectorComponentsLoading,
     sceneInspectorError,
     sceneInspectorComponentsError,
+    sceneObjectComponentsCapability,
   } = useSceneWorkspace();
 
   return {
@@ -110,6 +111,7 @@ export function useSceneInspectorState() {
     sceneInspectorComponentsLoading,
     sceneInspectorError,
     sceneInspectorComponentsError,
+    sceneObjectComponentsCapability,
   };
 }
 

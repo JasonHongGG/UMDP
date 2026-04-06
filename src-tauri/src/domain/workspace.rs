@@ -27,7 +27,40 @@ pub enum RuntimeCapability {
     FieldRead,
     FieldWrite,
     MethodInvoke,
-    SceneRead,
+    SceneCatalogRead,
+    SceneObjectHeaderRead,
+    SceneObjectChildrenRead,
+    SceneObjectComponentsRead,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneObjectComponentsCapabilityStatus {
+    Unknown,
+    Supported,
+    Unsupported,
+}
+
+impl Default for RuntimeSceneObjectComponentsCapabilityStatus {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneObjectComponentsStrategy {
+    IndexedGameObjectApi,
+    GetComponentsByType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneObjectComponentsCapabilityState {
+    pub status: RuntimeSceneObjectComponentsCapabilityStatus,
+    pub strategy: Option<RuntimeSceneObjectComponentsStrategy>,
+    pub reason: Option<String>,
+    pub checked_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +69,7 @@ pub struct RuntimeSessionState {
     pub status: RuntimeSessionStatus,
     pub runtime: RuntimeFlavor,
     pub capabilities: Vec<RuntimeCapability>,
+    pub scene_object_components: RuntimeSceneObjectComponentsCapabilityState,
     pub connected: bool,
     pub session_key: Option<String>,
     pub last_error: Option<String>,
@@ -48,6 +82,7 @@ impl Default for RuntimeSessionState {
             status: RuntimeSessionStatus::Idle,
             runtime: RuntimeFlavor::Unknown,
             capabilities: Vec::new(),
+            scene_object_components: RuntimeSceneObjectComponentsCapabilityState::default(),
             connected: false,
             session_key: None,
             last_error: None,
@@ -110,8 +145,8 @@ pub struct SystemContractVersions {
 
 pub fn current_contract_versions() -> SystemContractVersions {
     SystemContractVersions {
-        tauri_command_version: 3,
-        analysis_schema_version: 4,
+        tauri_command_version: 4,
+        analysis_schema_version: 5,
         workflow_schema_version: 1,
     }
 }

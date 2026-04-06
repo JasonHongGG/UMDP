@@ -156,12 +156,42 @@ impl<'a> SceneQueryKernel<'a> {
         game_object_address: NativeAddress,
         offset: usize,
         limit: Option<usize>,
-    ) -> Result<ScenePage<RuntimeSceneComponentSummary>, String> {
+    ) -> OperationResult<ScenePage<RuntimeSceneComponentSummary>> {
+        if self.component_capability_status != RuntimeSceneObjectComponentsCapabilityStatus::Supported {
+            return Err(OperationError::scene_component_capability_unavailable(
+                self.component_capability_reason.clone().unwrap_or_else(|| {
+                    "Scene object component materialization is unavailable for this runtime session."
+                        .to_string()
+                }),
+            ));
+        }
+
+        match self.component_strategy.clone() {
+            Some(RuntimeSceneObjectComponentsStrategy::IndexedGameObjectApi) => {
+                self.load_components_for_object_indexed(game_object_address, offset, limit)
+            }
+            Some(RuntimeSceneObjectComponentsStrategy::GetComponentsByType) => {
+                self.load_components_for_object_by_type(game_object_address, offset, limit)
+            }
+            None => Err(OperationError::scene_component_capability_unavailable(
+                "Scene object component materialization strategy is missing for this runtime session.",
+            )),
+        }
+    }
+
+    fn load_components_for_object_indexed(
+        &mut self,
+        game_object_address: NativeAddress,
+        offset: usize,
+        limit: Option<usize>,
+    ) -> OperationResult<ScenePage<RuntimeSceneComponentSummary>> {
         let game_object_class = self.resolve_unity_class("UnityEngine", "GameObject")?;
         let behaviour_class = self.resolve_unity_class("UnityEngine", "Behaviour")?;
         let Some(get_component_count) = self.try_find_method(game_object_class, "GetComponentCount", 0)?
         else {
-            return Err("Scene object component enumeration is unavailable: GameObject.GetComponentCount is missing.".to_string());
+            return Err(OperationError::scene_component_capability_unavailable(
+                "Scene object component materialization strategy mismatch: GameObject.GetComponentCount is missing.",
+            ));
         };
 
         let query_component = match self.try_find_method(game_object_class, "QueryComponentAtIndex", 1)? {
@@ -169,10 +199,14 @@ impl<'a> SceneQueryKernel<'a> {
             None => self.try_find_method(game_object_class, "GetComponentAtIndex", 1)?,
         };
         let Some(query_component) = query_component else {
-            return Err("Scene object component enumeration is unavailable: neither QueryComponentAtIndex nor GetComponentAtIndex exists.".to_string());
+            return Err(OperationError::scene_component_capability_unavailable(
+                "Scene object component materialization strategy mismatch: QueryComponentAtIndex/GetComponentAtIndex is missing.",
+            ));
         };
 
-        let component_count = self.invoke_int(&get_component_count, Some(game_object_address), &[])?;
+        let component_count = self
+            .invoke_int(&get_component_count, Some(game_object_address), &[])
+            .map_err(OperationError::from)?;
         let total_count = component_count.max(0) as usize;
         let start_index = offset.min(total_count);
         let end_index = match limit {
@@ -185,54 +219,157 @@ impl<'a> SceneQueryKernel<'a> {
             None
         };
 
-        let get_enabled = self.require_method(behaviour_class, "get_enabled", 0)?;
+        let get_enabled = self
+            .require_method(behaviour_class, "get_enabled", 0)
+            .map_err(OperationError::from)?;
         let mut components = Vec::with_capacity(end_index.saturating_sub(start_index));
         for index in start_index..end_index {
-            let component_address = self.invoke_object(
-                &query_component,
-                Some(game_object_address),
-                &[SceneInvokeArgument::Number(index as i32)],
-            )?;
+            let component_address = self
+                .invoke_object(
+                    &query_component,
+                    Some(game_object_address),
+                    &[SceneInvokeArgument::Number(index as i32)],
+                )
+                .map_err(OperationError::from)?;
             if component_address == 0 {
                 continue;
             }
 
-            let component_class = self.runtime_api.get_object_class(component_address)?;
-            let type_name = self.resolve_cached_type_name(component_class)?;
-            let mut is_behaviour = false;
-            let mut current_class = component_class;
-            while current_class != 0 {
-                if current_class == behaviour_class {
-                    is_behaviour = true;
-                    break;
-                }
-                current_class = self.runtime_api.get_parent_class(current_class)?;
-            }
-
-            let behaviour_enabled = if is_behaviour {
-                Some(self.invoke_bool(&get_enabled, Some(component_address), &[])? )
-            } else {
-                None
-            };
-
-            components.push(RuntimeSceneComponentSummary {
-                component_address: format_address(component_address),
-                type_name,
-                is_behaviour,
-                behaviour_enabled,
-            });
+            components.push(self.build_component_summary(
+                component_address,
+                behaviour_class,
+                &get_enabled,
+            )?);
         }
 
         if total_count > 0 && components.is_empty() {
-            return Err(format!(
-                "Scene object component enumeration returned no materialized components for {total_count} reported entries."
-            ));
+            return Err(OperationError::scene_component_resource_fault(format!(
+                "Scene object component materialization returned no materialized components for {total_count} reported entries."
+            )));
         }
 
         Ok(ScenePage {
             items: components,
             total_count,
             next_offset,
+        })
+    }
+
+    fn load_components_for_object_by_type(
+        &mut self,
+        game_object_address: NativeAddress,
+        offset: usize,
+        limit: Option<usize>,
+    ) -> OperationResult<ScenePage<RuntimeSceneComponentSummary>> {
+        let game_object_class = self.resolve_unity_class("UnityEngine", "GameObject")?;
+        let behaviour_class = self.resolve_unity_class("UnityEngine", "Behaviour")?;
+        let get_components = self
+            .try_find_method_by_parameter_types(game_object_class, "GetComponents", &["System.Type"])
+            .map_err(OperationError::from)?
+            .ok_or_else(|| {
+                OperationError::scene_component_capability_unavailable(
+                    "Scene object component materialization strategy mismatch: GameObject.GetComponents(System.Type) is missing.",
+                )
+            })?;
+        let component_type = self
+            .resolve_unity_type_object("UnityEngine", "Component")
+            .map_err(OperationError::from)?;
+        let component_array = self
+            .invoke_object(
+                &get_components,
+                Some(game_object_address),
+                &[SceneInvokeArgument::Address(component_type)],
+            )
+            .map_err(OperationError::from)?;
+        let total_count = if component_array == 0 {
+            0
+        } else {
+            self.runtime_api
+                .get_array_length(component_array)
+                .map_err(OperationError::from)?
+        };
+        let start_index = offset.min(total_count);
+        let end_index = match limit {
+            Some(limit) => total_count.min(start_index + limit),
+            None => total_count,
+        };
+        let next_offset = if end_index < total_count {
+            Some(end_index)
+        } else {
+            None
+        };
+
+        let get_enabled = self
+            .require_method(behaviour_class, "get_enabled", 0)
+            .map_err(OperationError::from)?;
+        let mut components = Vec::with_capacity(end_index.saturating_sub(start_index));
+        for index in start_index..end_index {
+            let component_address = self
+                .runtime_api
+                .get_array_element_address(component_array, index)
+                .map_err(OperationError::from)?;
+            if component_address == 0 {
+                continue;
+            }
+
+            components.push(self.build_component_summary(
+                component_address,
+                behaviour_class,
+                &get_enabled,
+            )?);
+        }
+
+        if total_count > 0 && components.is_empty() {
+            return Err(OperationError::scene_component_resource_fault(format!(
+                "Scene object component materialization returned no materialized components for {total_count} reported entries."
+            )));
+        }
+
+        Ok(ScenePage {
+            items: components,
+            total_count,
+            next_offset,
+        })
+    }
+
+    fn build_component_summary(
+        &mut self,
+        component_address: NativeAddress,
+        behaviour_class: NativeAddress,
+        get_enabled: &NativeMethodRecord,
+    ) -> OperationResult<RuntimeSceneComponentSummary> {
+        let component_class = self
+            .runtime_api
+            .get_object_class(component_address)
+            .map_err(OperationError::from)?;
+        let type_name = self.resolve_cached_type_name(component_class).map_err(OperationError::from)?;
+        let mut is_behaviour = false;
+        let mut current_class = component_class;
+        while current_class != 0 {
+            if current_class == behaviour_class {
+                is_behaviour = true;
+                break;
+            }
+            current_class = self
+                .runtime_api
+                .get_parent_class(current_class)
+                .map_err(OperationError::from)?;
+        }
+
+        let behaviour_enabled = if is_behaviour {
+            Some(
+                self.invoke_bool(get_enabled, Some(component_address), &[])
+                    .map_err(OperationError::from)?,
+            )
+        } else {
+            None
+        };
+
+        Ok(RuntimeSceneComponentSummary {
+            component_address: format_address(component_address),
+            type_name,
+            is_behaviour,
+            behaviour_enabled,
         })
     }
 

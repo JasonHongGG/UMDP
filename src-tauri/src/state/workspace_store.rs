@@ -1,7 +1,7 @@
 use crate::domain::analysis_models::{ProcessSession, RuntimeFlavor};
 use crate::domain::workspace::{
-    RuntimeCapability, RuntimeSessionState, RuntimeSessionStatus, WorkspaceLifecycleState,
-    WorkspaceLifecycleStatus,
+    RuntimeCapability, RuntimeSceneObjectComponentsCapabilityState, RuntimeSessionState,
+    RuntimeSessionStatus, WorkspaceLifecycleState, WorkspaceLifecycleStatus,
 };
 use crate::infrastructure::clock::current_timestamp;
 use parking_lot::Mutex;
@@ -51,7 +51,8 @@ impl WorkspaceState {
         lifecycle.runtime_session = RuntimeSessionState {
             status: RuntimeSessionStatus::Error,
             runtime: RuntimeFlavor::Unknown,
-            capabilities: runtime_capabilities_for(&RuntimeFlavor::Unknown),
+            capabilities: base_runtime_capabilities_for(&RuntimeFlavor::Unknown),
+            scene_object_components: RuntimeSceneObjectComponentsCapabilityState::default(),
             connected: false,
             session_key: None,
             last_error: Some(error_message),
@@ -70,7 +71,8 @@ impl WorkspaceState {
         lifecycle.runtime_session = RuntimeSessionState {
             status: RuntimeSessionStatus::Starting,
             runtime: lifecycle.runtime.clone(),
-            capabilities: runtime_capabilities_for(&lifecycle.runtime),
+            capabilities: base_runtime_capabilities_for(&lifecycle.runtime),
+            scene_object_components: RuntimeSceneObjectComponentsCapabilityState::default(),
             connected: false,
             session_key: lifecycle
                 .process_session
@@ -93,7 +95,6 @@ impl WorkspaceState {
         lifecycle.error_message = None;
         lifecycle.runtime_session.status = RuntimeSessionStatus::Starting;
         lifecycle.runtime_session.runtime = lifecycle.runtime.clone();
-        lifecycle.runtime_session.capabilities = runtime_capabilities_for(&lifecycle.runtime);
         lifecycle.runtime_session.connected = false;
         lifecycle.runtime_session.session_key = lifecycle
             .process_session
@@ -155,6 +156,35 @@ impl WorkspaceState {
         bump_resource_revision(&mut lifecycle);
     }
 
+    pub fn apply_runtime_session_profile(
+        &self,
+        runtime: RuntimeFlavor,
+        capabilities: Vec<RuntimeCapability>,
+        scene_object_components: RuntimeSceneObjectComponentsCapabilityState,
+    ) -> WorkspaceLifecycleState {
+        let mut lifecycle = self.lifecycle.lock();
+        let mut changed = false;
+
+        if lifecycle.runtime_session.runtime != runtime {
+            lifecycle.runtime_session.runtime = runtime;
+            changed = true;
+        }
+        if lifecycle.runtime_session.capabilities != capabilities {
+            lifecycle.runtime_session.capabilities = capabilities;
+            changed = true;
+        }
+        if lifecycle.runtime_session.scene_object_components != scene_object_components {
+            lifecycle.runtime_session.scene_object_components = scene_object_components;
+            changed = true;
+        }
+
+        if changed {
+            bump_resource_revision(&mut lifecycle);
+        }
+
+        lifecycle.clone()
+    }
+
     pub fn record_runtime_heartbeat(&self) -> RuntimeSessionState {
         let mut lifecycle = self.lifecycle.lock();
         sync_runtime_context(&mut lifecycle);
@@ -177,7 +207,6 @@ fn sync_runtime_context(lifecycle: &mut WorkspaceLifecycleState) -> bool {
         .as_ref()
         .map(|session| session.runtime.clone())
         .unwrap_or_else(|| lifecycle.runtime.clone());
-    let capabilities = runtime_capabilities_for(&runtime);
     let session_key = lifecycle
         .process_session
         .as_ref()
@@ -186,10 +215,6 @@ fn sync_runtime_context(lifecycle: &mut WorkspaceLifecycleState) -> bool {
     let mut changed = false;
     if lifecycle.runtime_session.runtime != runtime {
         lifecycle.runtime_session.runtime = runtime;
-        changed = true;
-    }
-    if lifecycle.runtime_session.capabilities != capabilities {
-        lifecycle.runtime_session.capabilities = capabilities;
         changed = true;
     }
     if lifecycle.runtime_session.session_key != session_key {
@@ -207,7 +232,7 @@ fn runtime_session_key_for(process_session: &ProcessSession) -> String {
     )
 }
 
-fn runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {
+fn base_runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {
     match runtime {
         RuntimeFlavor::Mono | RuntimeFlavor::Il2cpp => vec![
             RuntimeCapability::Metadata,
@@ -216,7 +241,9 @@ fn runtime_capabilities_for(runtime: &RuntimeFlavor) -> Vec<RuntimeCapability> {
             RuntimeCapability::FieldRead,
             RuntimeCapability::FieldWrite,
             RuntimeCapability::MethodInvoke,
-            RuntimeCapability::SceneRead,
+            RuntimeCapability::SceneCatalogRead,
+            RuntimeCapability::SceneObjectHeaderRead,
+            RuntimeCapability::SceneObjectChildrenRead,
         ],
         RuntimeFlavor::Unknown => vec![RuntimeCapability::Metadata],
     }

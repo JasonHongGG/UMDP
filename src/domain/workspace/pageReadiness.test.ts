@@ -6,6 +6,14 @@ import {
   describeWorkspaceResetNotice,
 } from '@/domain/workspace/pageReadiness';
 
+const SCENE_PAGE_CAPABILITIES: RuntimeCapability[] = [
+  'metadata',
+  'scene-catalog-read',
+  'scene-object-header-read',
+  'scene-object-children-read',
+  'execution',
+];
+
 describe('workspace page readiness', () => {
   it('gates scene and studio behind session, catalog, and runtime readiness', () => {
     const base = {
@@ -22,7 +30,7 @@ describe('workspace page readiness', () => {
       runtimeSession: {
         ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
         runtime: 'mono' as const,
-        capabilities: ['metadata', 'scene-read', 'execution'] as RuntimeCapability[],
+        capabilities: SCENE_PAGE_CAPABILITIES,
       },
     };
 
@@ -61,6 +69,39 @@ describe('workspace page readiness', () => {
     });
     expect(fullyReady.scene.selectionReady).toBe(true);
     expect(fullyReady.studio.selectionReady).toBe(true);
+  });
+
+  it('keeps scene selection ready when components are unsupported for the session', () => {
+    const readyWithoutComponents = createWorkspacePageReadinessMap({
+      ...EMPTY_WORKSPACE_LIFECYCLE,
+      status: 'ready',
+      hasSnapshot: true,
+      processSession: {
+        pid: 1337,
+        processName: 'Unity.exe',
+        exePath: 'C:/Unity.exe',
+        dataDir: null,
+        managedDir: null,
+        runtime: 'mono' as const,
+      },
+      runtime: 'mono' as const,
+      runtimeSession: {
+        ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+        status: 'ready',
+        runtime: 'mono' as const,
+        connected: true,
+        capabilities: SCENE_PAGE_CAPABILITIES,
+        sceneObjectComponents: {
+          status: 'unsupported',
+          strategy: null,
+          reason: 'Component materialization is unavailable for this runtime session.',
+          checkedAt: '2026-04-06T12:00:00.000Z',
+        },
+      },
+    });
+
+    expect(readyWithoutComponents.scene.selectionReady).toBe(true);
+    expect(readyWithoutComponents.scene.capabilityAvailable).toBe(true);
   });
 
   it('detects session change and runtime error reset notices', () => {

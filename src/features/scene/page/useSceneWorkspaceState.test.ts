@@ -42,6 +42,7 @@ interface HookSnapshot {
   childrenByParent: ReturnType<typeof useSceneWorkspaceState>['childrenByParent'];
   childTaskByParent: ReturnType<typeof useSceneWorkspaceState>['childTaskByParent'];
   loadingChildrenByParent: ReturnType<typeof useSceneWorkspaceState>['loadingChildrenByParent'];
+  sceneInspectorComponentsError: ReturnType<typeof useSceneWorkspaceState>['sceneInspectorComponentsError'];
   ensureSceneObjectChildrenLoaded: ReturnType<typeof useSceneWorkspaceState>['ensureSceneObjectChildrenLoaded'];
   stopSceneObjectChildrenObservation: ReturnType<typeof useSceneWorkspaceState>['stopSceneObjectChildrenObservation'];
 }
@@ -85,6 +86,12 @@ function createLifecycle(
       status: 'ready',
       runtime: 'mono',
       connected: true,
+      capabilities: [
+        'metadata',
+        'scene-catalog-read',
+        'scene-object-header-read',
+        'scene-object-children-read',
+      ],
       sessionKey,
       ...overrides.runtimeSession,
     },
@@ -138,10 +145,18 @@ function createRepository(sessionKey = 'session-1'): SceneGateway {
   } as unknown as SceneGateway;
 }
 
-function HookHarness({ repository, sessionKey = 'session-1' }: { repository: SceneGateway; sessionKey?: string }) {
+function HookHarness({
+  repository,
+  sessionKey = 'session-1',
+  workspaceLifecycle,
+}: {
+  repository: SceneGateway;
+  sessionKey?: string;
+  workspaceLifecycle?: WorkspaceLifecycleState;
+}) {
   const state = useSceneWorkspaceState({
     repository,
-    workspaceLifecycle: createLifecycle({
+    workspaceLifecycle: workspaceLifecycle ?? createLifecycle({
       processSession: {
         pid: 1337,
         processName: 'Unity.exe',
@@ -163,6 +178,7 @@ function HookHarness({ repository, sessionKey = 'session-1' }: { repository: Sce
     childrenByParent: state.childrenByParent,
     childTaskByParent: state.childTaskByParent,
     loadingChildrenByParent: state.loadingChildrenByParent,
+    sceneInspectorComponentsError: state.sceneInspectorComponentsError,
     ensureSceneObjectChildrenLoaded: state.ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation: state.stopSceneObjectChildrenObservation,
   };
@@ -415,6 +431,64 @@ describe('useSceneWorkspaceState', () => {
 
     expect(latestState?.sceneTabs).toHaveLength(0);
     expect(latestState?.selectedObjectAddress).toBeNull();
+  });
+
+  it('keeps components loading local when the session does not support component materialization', async () => {
+    sessionStorage.setItem('mndp_scene_selected_address', '0xroot');
+    sessionStorage.setItem('mndp_scene_tabs', JSON.stringify([
+      {
+        objectAddress: '0xroot',
+        name: 'GameplayRoot',
+        sceneName: 'Gameplay',
+        sceneKind: 'loaded',
+      },
+    ]));
+    sessionStorage.setItem('mndp_scene_tab_index', '0');
+
+    const repository = createRepository() as unknown as SceneGateway & {
+      startSceneObjectHeaderAnalysis: ReturnType<typeof vi.fn>;
+      startSceneObjectChildrenAnalysis: ReturnType<typeof vi.fn>;
+      startSceneObjectComponentsAnalysis: ReturnType<typeof vi.fn>;
+    };
+    const capabilityMessage = 'Component materialization is unavailable for this runtime session.';
+    const workspaceLifecycle = createLifecycle({
+      processSession: {
+        pid: 1337,
+        processName: 'Unity.exe',
+        exePath: 'C:/Unity.exe',
+        dataDir: 'C:/Game_Data',
+        managedDir: 'C:/Game_Data/Managed',
+        runtime: 'mono',
+      },
+      runtimeSession: {
+        ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+        status: 'ready',
+        runtime: 'mono',
+        connected: true,
+        sessionKey: 'session-1',
+        capabilities: [
+          'metadata',
+          'scene-catalog-read',
+          'scene-object-header-read',
+          'scene-object-children-read',
+        ],
+        sceneObjectComponents: {
+          status: 'unsupported',
+          strategy: null,
+          reason: capabilityMessage,
+          checkedAt: '2026-04-06T12:00:00.000Z',
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository, workspaceLifecycle }));
+    });
+    await flushEffects();
+    await flushEffects();
+
+    expect(repository.startSceneObjectComponentsAnalysis).not.toHaveBeenCalled();
+    expect(latestState?.sceneInspectorComponentsError).toBe(capabilityMessage);
   });
 
   it('ignores older mouse picker revisions from the current runtime session', async () => {
