@@ -1,6 +1,7 @@
 import type {
   RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectInspectorTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { WorkspaceTaskSnapshot, WorkspaceTaskStatus } from '@/shared/contracts';
@@ -69,20 +70,36 @@ function toChildrenTask(task: RuntimeSceneObjectChildrenTaskState): WorkspaceTas
   };
 }
 
-function toInspectorTask(task: RuntimeSceneObjectInspectorTaskState): WorkspaceTaskSnapshot {
-  const total = Math.max(task.childrenTotalCount + task.componentsTotalCount, 1);
-  const completed = task.childrenLoadedCount + task.componentsLoadedCount;
-
+function toHeaderTask(task: RuntimeSceneObjectHeaderTaskState): WorkspaceTaskSnapshot {
   return {
-    taskId: `scene-inspector-${task.taskId}`,
+    taskId: `scene-object-header-${task.taskId}`,
     resourceKind: 'scene',
-    operationKey: 'scene.inspector.load',
+    operationKey: 'scene.object-header.load',
     scope: 'selection',
     status: normalizeTaskStatus(task.status),
     progress: {
-      completed,
-      total,
-      message: `Inspecting ${task.objectAddress}`,
+      completed: task.header ? 1 : 0,
+      total: 1,
+      message: `Loading header for ${task.objectAddress}`,
+    },
+    targetId: task.objectAddress,
+    startedAt: task.startedAt,
+    updatedAt: task.updatedAt,
+    errorMessage: task.errorMessage,
+  };
+}
+
+function toComponentsTask(task: RuntimeSceneObjectComponentsTaskState): WorkspaceTaskSnapshot {
+  return {
+    taskId: `scene-object-components-${task.taskId}`,
+    resourceKind: 'scene',
+    operationKey: 'scene.object-components.load',
+    scope: 'selection',
+    status: normalizeTaskStatus(task.status),
+    progress: {
+      completed: task.loadedCount,
+      total: Math.max(task.totalCount, 1),
+      message: `Loading components for ${task.objectAddress}`,
     },
     targetId: task.objectAddress,
     startedAt: task.startedAt,
@@ -94,7 +111,8 @@ function toInspectorTask(task: RuntimeSceneObjectInspectorTaskState): WorkspaceT
 export function collectSceneWorkspaceTasks(args: {
   sceneWorkspace: SceneWorkspaceState;
   childTaskByParent: Record<string, RuntimeSceneObjectChildrenTaskState>;
-  inspectorTaskByAddress: Record<string, RuntimeSceneObjectInspectorTaskState>;
+  headerTaskByAddress: Record<string, RuntimeSceneObjectHeaderTaskState>;
+  componentsTaskByAddress: Record<string, RuntimeSceneObjectComponentsTaskState>;
   mutationTask: WorkspaceTaskSnapshot | null;
 }): WorkspaceTaskSnapshot[] {
   const tasks: WorkspaceTaskSnapshot[] = [];
@@ -106,6 +124,7 @@ export function collectSceneWorkspaceTasks(args: {
     tasks.push(args.mutationTask);
   }
   tasks.push(...Object.values(args.childTaskByParent).map(toChildrenTask));
-  tasks.push(...Object.values(args.inspectorTaskByAddress).map(toInspectorTask));
+  tasks.push(...Object.values(args.headerTaskByAddress).map(toHeaderTask));
+  tasks.push(...Object.values(args.componentsTaskByAddress).map(toComponentsTask));
   return tasks;
 }

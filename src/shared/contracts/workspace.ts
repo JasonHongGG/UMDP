@@ -7,7 +7,6 @@ export type RuntimeSessionStatus =
   | 'starting'
   | 'ready'
   | 'degraded'
-  | 'recovering'
   | 'error';
 
 export type RuntimeCapability =
@@ -37,8 +36,7 @@ export type WorkspaceLifecycleStatus =
   | 'attached-without-snapshot'
   | 'snapshot-loading'
   | 'ready'
-  | 'runtime-error'
-  | 'recovering';
+  | 'runtime-error';
 
 export interface WorkspaceLifecycleState {
   resourceRevision: number;

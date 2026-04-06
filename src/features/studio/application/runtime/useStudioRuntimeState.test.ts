@@ -100,7 +100,7 @@ describe('useStudioRuntimeState', () => {
     resetDiagnosticsStateForTests();
   });
 
-  it('clears runtime snapshots when workspace recovery begins', () => {
+  it('clears runtime snapshots when a runtime error begins', () => {
     executeStudioFlowMock.mockImplementation(({ onNodeStateChange, onNodeSnapshot, onRunStart, onRunComplete }) => {
       onNodeStateChange('node-1', 'success');
       onNodeSnapshot({
@@ -130,7 +130,7 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', connected: false } },
+        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'runtime-error', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'error', connected: false } },
       }));
     });
 
@@ -160,7 +160,7 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'recovering', connected: false } },
+        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'runtime-error', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'error', connected: false } },
       }));
     });
 
@@ -172,13 +172,13 @@ describe('useStudioRuntimeState', () => {
       root.render(createElement(HookHarness, {
         lifecycle: {
           ...EMPTY_WORKSPACE_LIFECYCLE,
-          status: 'recovering',
+          status: 'runtime-error',
           hasSnapshot: true,
           errorMessage: 'runtime session disconnected',
           runtime: 'mono',
           runtimeSession: {
             ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
-            status: 'recovering',
+            status: 'error',
             runtime: 'mono',
             connected: false,
             lastError: 'runtime session disconnected',
@@ -194,7 +194,7 @@ describe('useStudioRuntimeState', () => {
 
     expect(executeStudioFlowMock).not.toHaveBeenCalled();
     expect(latestState?.state.canExecuteFlow).toBe(false);
-    expect(latestState?.state.executionBlockedReason).toBe('Workspace is not ready (recovering).');
+    expect(latestState?.state.executionBlockedReason).toBe('Workspace is not ready (runtime-error).');
     expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
       expect.objectContaining({
         level: 'error',
@@ -203,13 +203,13 @@ describe('useStudioRuntimeState', () => {
         message: 'Studio execution blocked.',
         context: expect.objectContaining({
           reason: 'blocked',
-          message: 'Workspace is not ready (recovering).',
+          message: 'Workspace is not ready (runtime-error).',
           workspace: expect.objectContaining({
-            status: 'recovering',
+            status: 'runtime-error',
             hasSnapshot: true,
             errorMessage: 'runtime session disconnected',
             runtimeSession: expect.objectContaining({
-              status: 'recovering',
+              status: 'error',
               connected: false,
               lastError: 'runtime session disconnected',
               sessionKey: 'session-1',

@@ -2,7 +2,7 @@ use crate::application::scene as scene_application;
 use crate::domain::analysis_models::{
     ProcessWindowCandidate, RuntimeSceneChildrenSnapshot, RuntimeSceneMousePickerSnapshot,
     RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
-    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
+    RuntimeSceneObjectComponentsTaskState, RuntimeSceneObjectHeaderTaskState,
     RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
 use crate::domain::operation::{
@@ -189,16 +189,16 @@ pub fn cancel_scene_object_children_analysis(
 }
 
 #[tauri::command]
-pub fn start_scene_object_inspector_analysis(
+pub fn start_scene_object_header_analysis(
     app: AppHandle,
     state: State<'_, AppState>,
     object_address: String,
-) -> CommandEnvelope<RuntimeSceneObjectInspectorTaskState> {
+) -> CommandEnvelope<RuntimeSceneObjectHeaderTaskState> {
     let started_at = Instant::now();
     let result =
-        scene_application::start_scene_object_inspector_analysis(&app, &state, &object_address);
+        scene_application::start_scene_object_header_analysis(&app, &state, &object_address);
     log_scene_command_result(
-        "start_scene_object_inspector_analysis",
+        "start_scene_object_header_analysis",
         started_at,
         &result,
         vec![field("objectAddress", object_address.clone())],
@@ -209,22 +209,82 @@ pub fn start_scene_object_inspector_analysis(
             ]
         },
     );
-    command_result(result, "scene.start-inspector-analysis")
+    command_result(result, "scene.start-object-header-analysis")
 }
 
 #[tauri::command]
-pub fn get_scene_object_inspector_state(
+pub fn get_scene_object_header_state(
     state: State<'_, AppState>,
-) -> CommandEnvelope<Option<RuntimeSceneObjectInspectorTaskState>> {
-    command_success(scene_application::get_scene_object_inspector_state(&state))
+    object_address: String,
+) -> CommandEnvelope<Option<RuntimeSceneObjectHeaderTaskState>> {
+    command_success(scene_application::get_scene_object_header_state(
+        &state,
+        &object_address,
+    ))
 }
 
 #[tauri::command]
-pub fn cancel_scene_object_inspector_analysis(
+pub fn cancel_scene_object_header_analysis(
     state: State<'_, AppState>,
+    object_address: String,
     task_id: Option<u64>,
-) -> CommandEnvelope<Option<RuntimeSceneObjectInspectorTaskState>> {
-    command_success(scene_application::cancel_scene_object_inspector_analysis(&state, task_id))
+) -> CommandEnvelope<Option<RuntimeSceneObjectHeaderTaskState>> {
+    command_success(scene_application::cancel_scene_object_header_analysis(
+        &state,
+        &object_address,
+        task_id,
+    ))
+}
+
+#[tauri::command]
+pub fn start_scene_object_components_analysis(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    object_address: String,
+) -> CommandEnvelope<RuntimeSceneObjectComponentsTaskState> {
+    let started_at = Instant::now();
+    let result = scene_application::start_scene_object_components_analysis(
+        &app,
+        &state,
+        &object_address,
+    );
+    log_scene_command_result(
+        "start_scene_object_components_analysis",
+        started_at,
+        &result,
+        vec![field("objectAddress", object_address.clone())],
+        |task| {
+            vec![
+                field("taskId", task.task_id),
+                field("status", format!("{:?}", task.status)),
+            ]
+        },
+    );
+    command_result(result, "scene.start-object-components-analysis")
+}
+
+#[tauri::command]
+pub fn get_scene_object_components_state(
+    state: State<'_, AppState>,
+    object_address: String,
+) -> CommandEnvelope<Option<RuntimeSceneObjectComponentsTaskState>> {
+    command_success(scene_application::get_scene_object_components_state(
+        &state,
+        &object_address,
+    ))
+}
+
+#[tauri::command]
+pub fn cancel_scene_object_components_analysis(
+    state: State<'_, AppState>,
+    object_address: String,
+    task_id: Option<u64>,
+) -> CommandEnvelope<Option<RuntimeSceneObjectComponentsTaskState>> {
+    command_success(scene_application::cancel_scene_object_components_analysis(
+        &state,
+        &object_address,
+        task_id,
+    ))
 }
 
 #[tauri::command]
@@ -252,39 +312,6 @@ pub async fn get_scene_object_children(
     {
         Ok(result) => result,
         Err(error) => background_task_failure("scene.get-children", error),
-    })
-}
-
-#[tauri::command]
-pub async fn get_scene_object_inspector(
-    app: AppHandle,
-    _state: State<'_, AppState>,
-    object_address: String,
-) -> AsyncCommandResult<RuntimeSceneObjectInspectorSnapshot> {
-    let app_handle = app.clone();
-    Ok(match tauri::async_runtime::spawn_blocking(move || {
-        let started_at = Instant::now();
-        let state = app_handle.state::<AppState>();
-        let result =
-            scene_application::get_scene_object_inspector(&app_handle, &state, &object_address);
-        log_scene_command_result(
-            "get_scene_object_inspector",
-            started_at,
-            &result,
-            vec![field("objectAddress", object_address.clone())],
-            |snapshot| {
-                vec![
-                    field("children", snapshot.children.len()),
-                    field("components", snapshot.components.len()),
-                ]
-            },
-        );
-        command_result(result, "scene.get-inspector")
-    })
-    .await
-    {
-        Ok(result) => result,
-        Err(error) => background_task_failure("scene.get-inspector", error),
     })
 }
 

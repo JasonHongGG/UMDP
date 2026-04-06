@@ -63,16 +63,16 @@ function createReadyLifecycle(): WorkspaceLifecycleState {
   };
 }
 
-function createRecoveringLifecycle(): WorkspaceLifecycleState {
+function createRuntimeDroppedLifecycle(): WorkspaceLifecycleState {
   return {
     ...EMPTY_WORKSPACE_LIFECYCLE,
-    status: 'recovering',
+    status: 'runtime-error',
     hasSnapshot: true,
     runtime: 'mono',
     errorMessage: 'runtime session disconnected',
     runtimeSession: {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
-      status: 'recovering',
+      status: 'error',
       runtime: 'mono',
       connected: false,
       lastError: 'runtime session disconnected',
@@ -156,7 +156,7 @@ describe('StudioProviders release gates', () => {
     resetDiagnosticsStateForTests();
   });
 
-  it('reports execution reset feedback when the workspace drops into recovery mid-run', async () => {
+  it('reports execution reset feedback when the workspace drops into a runtime error mid-run', async () => {
     const cleanupSpy = vi.fn();
     executeStudioFlowMock.mockReturnValue(cleanupSpy);
 
@@ -192,7 +192,7 @@ describe('StudioProviders release gates', () => {
     await act(async () => {
       root.render(createElement(StudioProviders, {
         runtimeData: RUNTIME_DATA,
-        workspaceLifecycle: createRecoveringLifecycle(),
+        workspaceLifecycle: createRuntimeDroppedLifecycle(),
         children: createElement(TestConsumer),
       }));
     });
@@ -201,17 +201,17 @@ describe('StudioProviders release gates', () => {
     expect(cleanupSpy).toHaveBeenCalledWith('workspace-reset');
     expect(latestState).toMatchObject({
       canExecuteFlow: false,
-      executionBlockedReason: 'Workspace is not ready (recovering).',
+      executionBlockedReason: 'Workspace is not ready (runtime-error).',
     });
     expect(latestState?.documentFeedback).toMatchObject({
       tone: 'warning',
       title: 'Studio Runtime Locked',
-      description: 'Workspace is not ready (recovering).',
+      description: 'Workspace is not ready (runtime-error).',
     });
     expect(latestState?.runtimeFeedback).toMatchObject({
       tone: 'warning',
       title: 'Execution Reset',
-      description: 'Workspace is not ready (recovering).',
+      description: 'Workspace is not ready (runtime-error).',
     });
   });
 

@@ -85,11 +85,13 @@ export function useSceneInspectorState() {
     handleCloseTab,
     setActiveSceneTabIndex,
     sceneInspector,
-    sceneInspectorTaskState,
+    sceneInspectorHeaderTaskState,
+    sceneInspectorComponentsTaskState,
     sceneInspectorLoading,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneInspectorError,
+    sceneInspectorComponentsError,
   } = useSceneWorkspace();
 
   return {
@@ -101,11 +103,13 @@ export function useSceneInspectorState() {
     handleCloseTab,
     setActiveSceneTabIndex,
     sceneInspector,
-    sceneInspectorTaskState,
+    sceneInspectorHeaderTaskState,
+    sceneInspectorComponentsTaskState,
     sceneInspectorLoading,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneInspectorError,
+    sceneInspectorComponentsError,
   };
 }
 

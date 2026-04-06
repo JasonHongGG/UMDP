@@ -169,7 +169,7 @@ export function useStudioRuntimeState(
     setNodeStates({});
     setNodeSnapshots({});
     reportDocumentFeedback({
-      tone: workspaceLifecycle.status === 'recovering' || workspaceLifecycle.status === 'runtime-error' ? 'warning' : 'info',
+      tone: workspaceLifecycle.status === 'runtime-error' ? 'warning' : 'info',
       title: 'Studio Runtime Locked',
       description: workspaceExecutionReadiness.blockedReason ?? 'Studio runtime execution is currently unavailable.',
     });

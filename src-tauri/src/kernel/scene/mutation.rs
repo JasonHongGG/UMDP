@@ -282,7 +282,11 @@ fn invalidate_scene_inspector_after_mutation(
     let session_key = current_scene_session_key(state);
     state
         .scene()
-        .inspector()
+        .header()
+        .invalidate_related(&impacted, session_key.as_deref());
+    state
+        .scene()
+        .components()
         .invalidate_related(&impacted, session_key.as_deref());
 }
 

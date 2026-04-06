@@ -14,7 +14,7 @@ export interface WorkspacePageReadiness {
 }
 
 export interface WorkspaceResetNotice {
-  kind: 'session-changed' | 'detached' | 'recovering' | 'runtime-error' | 'snapshot-loading';
+  kind: 'session-changed' | 'detached' | 'runtime-error' | 'snapshot-loading';
   tone: WorkspaceSignalTone;
   title: string;
   message: string;
@@ -137,7 +137,7 @@ export function getWorkspacePageReadiness(
       catalogReady: true,
       capabilityAvailable: true,
       selectionReady: false,
-      tone: workspace.status === 'recovering' || workspace.status === 'runtime-error' ? 'error' : 'loading',
+      tone: workspace.status === 'runtime-error' ? 'error' : 'loading',
       title: page === 'scene' ? 'Scene Runtime Locked' : 'Studio Runtime Locked',
       description: workspace.runtimeSession.lastError
         ?? workspace.errorMessage
@@ -190,15 +190,6 @@ export function describeWorkspaceResetNotice(
       tone: 'warning',
       title: 'Workspace Cleared',
       message: 'The current Unity session was detached. Resource state has been cleared.',
-    };
-  }
-
-  if (workspace.status === 'recovering') {
-    return {
-      kind: 'recovering',
-      tone: 'error',
-      title: 'Runtime Recovering',
-      message: workspace.runtimeSession.lastError ?? workspace.errorMessage ?? 'Runtime state is recovering for the attached Unity session.',
     };
   }
 

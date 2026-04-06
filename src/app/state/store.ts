@@ -78,6 +78,8 @@ const SERIALIZABLE_CHECK_IGNORED_PATHS = [
   'analysis.runtimeInstanceFieldSnapshots',
 ] as const;
 
+const SERIALIZABLE_CHECK_WARN_AFTER_MS = 1000;
+
 function makeRuntimeSessionKey(processSession: ProcessSession) {
   const runtime = processSession.runtime === 'unknown'
     ? 'Unknown'
@@ -107,9 +109,7 @@ function shouldClearRuntimeState(lifecycle: WorkspaceLifecycleState) {
   return !lifecycle.processSession
     || !lifecycle.hasSnapshot
     || lifecycle.status === 'runtime-error'
-    || lifecycle.status === 'recovering'
     || !lifecycle.runtimeSession.connected
-    || lifecycle.runtimeSession.status === 'recovering'
     || lifecycle.runtimeSession.status === 'error';
 }
 
@@ -531,6 +531,7 @@ export function createAppStore(services: AppServices) {
       serializableCheck: {
         ignoredPaths: [...SERIALIZABLE_CHECK_IGNORED_PATHS],
         ignoredActions: serializableCheckIgnoredActions,
+        warnAfter: SERIALIZABLE_CHECK_WARN_AFTER_MS,
       },
     }),
   });

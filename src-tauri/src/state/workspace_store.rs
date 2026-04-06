@@ -147,17 +147,9 @@ impl WorkspaceState {
     pub fn set_runtime_error(&self, error_message: impl Into<String>) {
         let mut lifecycle = self.lifecycle.lock();
         let error_message = error_message.into();
-        lifecycle.status = if lifecycle.process_session.is_some() {
-            WorkspaceLifecycleStatus::Recovering
-        } else {
-            WorkspaceLifecycleStatus::RuntimeError
-        };
+        lifecycle.status = WorkspaceLifecycleStatus::RuntimeError;
         lifecycle.error_message = Some(error_message.clone());
-        lifecycle.runtime_session.status = if lifecycle.process_session.is_some() {
-            RuntimeSessionStatus::Recovering
-        } else {
-            RuntimeSessionStatus::Error
-        };
+        lifecycle.runtime_session.status = RuntimeSessionStatus::Error;
         lifecycle.runtime_session.connected = false;
         lifecycle.runtime_session.last_error = Some(error_message);
         bump_resource_revision(&mut lifecycle);

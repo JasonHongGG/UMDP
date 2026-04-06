@@ -51,11 +51,13 @@ export function SceneInspectorView() {
     handleCloseTab,
     setActiveSceneTabIndex,
     sceneInspector,
-    sceneInspectorTaskState,
+    sceneInspectorHeaderTaskState,
+    sceneInspectorComponentsTaskState,
     sceneInspectorLoading,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneInspectorError,
+    sceneInspectorComponentsError,
   } = useSceneInspectorState();
   const {
     createSceneChild,
@@ -417,18 +419,30 @@ export function SceneInspectorView() {
                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/50" /> Fetching components...
                   </div>
                 )}
+
+                {sceneInspectorComponentsError && (
+                  <div className="px-1 pb-1">
+                    <ErrorNotice message={sceneInspectorComponentsError} />
+                  </div>
+                )}
                 
-                <div className="flex flex-col gap-1 border-t border-[#141b24] pt-2">
-                  {sceneInspector?.components.map((component: RuntimeSceneComponentSummary) => (
-                    <CompactComponentRow
-                      key={component.componentAddress}
-                      component={component}
-                      disabled={componentMutationPending}
-                      onToggleBehaviour={(enabled) => setSceneBehaviourEnabled(component.componentAddress, enabled).catch(() => undefined)}
-                      onDelete={() => deleteSceneComponent(component.componentAddress).catch(() => undefined)}
-                    />
-                  ))}
-                </div>
+                {sceneInspector && sceneInspector.components.length > 0 ? (
+                  <div className="flex flex-col gap-1 border-t border-[#141b24] pt-2">
+                    {sceneInspector.components.map((component: RuntimeSceneComponentSummary) => (
+                      <CompactComponentRow
+                        key={component.componentAddress}
+                        component={component}
+                        disabled={componentMutationPending}
+                        onToggleBehaviour={(enabled) => setSceneBehaviourEnabled(component.componentAddress, enabled).catch(() => undefined)}
+                        onDelete={() => deleteSceneComponent(component.componentAddress).catch(() => undefined)}
+                      />
+                    ))}
+                  </div>
+                ) : !sceneInspectorComponentsLoading && !sceneInspectorComponentsError ? (
+                  <div className="border-t border-[#141b24] px-2 pt-3">
+                    <EmptyNotice message="No materialized components are currently available for this object." />
+                  </div>
+                ) : null}
               </div>
             </PropertyAccordion>
 

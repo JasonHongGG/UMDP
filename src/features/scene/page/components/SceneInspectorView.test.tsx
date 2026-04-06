@@ -107,11 +107,13 @@ describe('SceneInspectorView', () => {
           { objectAddress: player.objectAddress, name: player.name },
         ],
       }),
-      sceneInspectorTaskState: null,
+      sceneInspectorHeaderTaskState: null,
+      sceneInspectorComponentsTaskState: null,
       sceneInspectorLoading: false,
       sceneInspectorChildrenLoading: false,
       sceneInspectorComponentsLoading: false,
       sceneInspectorError: null,
+      sceneInspectorComponentsError: null,
     });
 
     reparentSceneObject = vi.fn().mockResolvedValue(null);
@@ -256,6 +258,34 @@ describe('SceneInspectorView', () => {
     expect(setSceneObjectTransform).toHaveBeenCalledWith(expect.objectContaining({
       localPosition: expect.objectContaining({ x: 1.3 }),
     }));
+  });
+
+  it('renders a components error locally without promoting it to the top-level inspector error area', async () => {
+    const componentsError = 'Scene object component enumeration is unavailable: GameObject.GetComponentCount is missing.';
+    mockUseSceneInspectorState.mockReturnValue({
+      setSelectedObjectAddress: vi.fn(),
+      sceneTabs: [],
+      activeSceneTabIndex: -1,
+      handleCloseTab: vi.fn(),
+      setActiveSceneTabIndex: vi.fn(),
+      sceneInspector: createSceneInspectorSnapshot(),
+      sceneInspectorHeaderTaskState: null,
+      sceneInspectorComponentsTaskState: null,
+      sceneInspectorLoading: false,
+      sceneInspectorChildrenLoading: false,
+      sceneInspectorComponentsLoading: false,
+      sceneInspectorError: null,
+      sceneInspectorComponentsError: componentsError,
+    });
+
+    await act(async () => {
+      root.render(createElement(SceneInspectorView));
+    });
+    await flushEffects();
+
+    const occurrences = (container.textContent?.split(componentsError).length ?? 1) - 1;
+    expect(container.textContent).toContain(componentsError);
+    expect(occurrences).toBe(1);
   });
 
   it('only blocks the matching control when a local mutation is pending', async () => {

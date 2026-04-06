@@ -41,7 +41,8 @@ mod tests {
     struct SceneResourceContractFixture {
         workspace: SceneWorkspaceFixture,
         children_task: SceneTaskFixture,
-        inspector_task: SceneInspectorTaskFixture,
+        header_task: SceneHeaderTaskFixture,
+        components_task: SceneComponentsTaskFixture,
     }
 
     #[derive(Debug, Deserialize)]
@@ -66,7 +67,17 @@ mod tests {
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
-    struct SceneInspectorTaskFixture {
+    struct SceneHeaderTaskFixture {
+        task_id: u64,
+        resource_revision: u64,
+        session_key: Option<String>,
+        status: String,
+        resource_state: SceneResourceStateFixture,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SceneComponentsTaskFixture {
         task_id: u64,
         resource_revision: u64,
         session_key: Option<String>,
@@ -112,8 +123,8 @@ mod tests {
         ))
         .expect("workspace versions fixture should deserialize");
 
-        assert_eq!(fixture.tauri_command_version, 2);
-        assert_eq!(fixture.analysis_schema_version, 3);
+        assert_eq!(fixture.tauri_command_version, 3);
+        assert_eq!(fixture.analysis_schema_version, 4);
         assert_eq!(fixture.workflow_schema_version, 1);
     }
 
@@ -139,13 +150,21 @@ mod tests {
         assert_eq!(fixture.children_task.resource_state.resource_kind, "children");
         assert_eq!(fixture.children_task.resource_state.freshness, "refreshing");
         assert_eq!(fixture.children_task.resource_state.session_key.as_deref(), Some("session-1"));
-        assert_eq!(fixture.inspector_task.task_id, 12);
-        assert_eq!(fixture.inspector_task.resource_revision, 10);
-        assert_eq!(fixture.inspector_task.session_key.as_deref(), Some("session-1"));
-        assert_eq!(fixture.inspector_task.status, "components-loading");
-        assert_eq!(fixture.inspector_task.resource_state.resource_kind, "inspector");
-        assert_eq!(fixture.inspector_task.resource_state.freshness, "refreshing");
-        assert!(fixture.inspector_task.resource_state.last_successful_at.is_some());
-        assert!(fixture.inspector_task.resource_state.error_message.is_none());
+        assert_eq!(fixture.header_task.task_id, 12);
+        assert_eq!(fixture.header_task.resource_revision, 10);
+        assert_eq!(fixture.header_task.session_key.as_deref(), Some("session-1"));
+        assert_eq!(fixture.header_task.status, "ready");
+        assert_eq!(fixture.header_task.resource_state.resource_kind, "scene-object-header");
+        assert_eq!(fixture.header_task.resource_state.freshness, "fresh");
+        assert!(fixture.header_task.resource_state.last_successful_at.is_some());
+        assert!(fixture.header_task.resource_state.error_message.is_none());
+        assert_eq!(fixture.components_task.task_id, 13);
+        assert_eq!(fixture.components_task.resource_revision, 11);
+        assert_eq!(fixture.components_task.session_key.as_deref(), Some("session-1"));
+        assert_eq!(fixture.components_task.status, "loading");
+        assert_eq!(fixture.components_task.resource_state.resource_kind, "scene-object-components");
+        assert_eq!(fixture.components_task.resource_state.freshness, "refreshing");
+        assert!(fixture.components_task.resource_state.last_successful_at.is_some());
+        assert!(fixture.components_task.resource_state.error_message.is_none());
     }
 }

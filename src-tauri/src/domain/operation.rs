@@ -170,6 +170,10 @@ impl OperationError {
         Self::new(OperationErrorCode::CapabilityUnavailable, message)
     }
 
+    pub fn resource_fault(message: impl Into<String>) -> Self {
+        Self::new(OperationErrorCode::RuntimeFault, message)
+    }
+
     pub fn runtime_fault(message: impl Into<String>) -> Self {
         Self::new(OperationErrorCode::RuntimeFault, message)
             .with_effect(OperationFailureEffect::RuntimeSessionDropped)
@@ -253,6 +257,19 @@ impl OperationError {
             return Self::runtime_api_unavailable();
         }
 
+        if lower.starts_with("scene object component enumeration is unavailable") {
+            return Self::capability_unavailable(message);
+        }
+
+        if lower.starts_with("scene object component enumeration returned no materialized components")
+            || lower.starts_with("scene object component load was incomplete")
+            || (lower.starts_with("scene object reported ")
+                && lower.contains("components")
+                && lower.contains("materialized"))
+        {
+            return Self::resource_fault(message);
+        }
+
         Self::runtime_fault(message)
     }
 }
@@ -280,6 +297,40 @@ impl From<&str> for OperationError {
 impl From<OperationError> for String {
     fn from(value: OperationError) -> Self {
         value.message
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OperationError, OperationErrorCode, OperationFailureEffect};
+
+    #[test]
+    fn scene_component_capability_failures_stay_local() {
+        let error = OperationError::from(
+            "Scene object component enumeration is unavailable: GameObject.GetComponentCount is missing."
+                .to_string(),
+        );
+
+        assert_eq!(error.code, OperationErrorCode::CapabilityUnavailable);
+        assert_eq!(error.effect, OperationFailureEffect::None);
+    }
+
+    #[test]
+    fn scene_component_materialization_failures_do_not_drop_runtime_session() {
+        let error = OperationError::from(
+            "Scene object component load was incomplete: loaded 1 of 3 components.".to_string(),
+        );
+
+        assert_eq!(error.code, OperationErrorCode::RuntimeFault);
+        assert_eq!(error.effect, OperationFailureEffect::None);
+    }
+
+    #[test]
+    fn unknown_runtime_faults_still_drop_runtime_session() {
+        let error = OperationError::from("Background runtime bridge crashed unexpectedly.".to_string());
+
+        assert_eq!(error.code, OperationErrorCode::RuntimeFault);
+        assert_eq!(error.effect, OperationFailureEffect::RuntimeSessionDropped);
     }
 }
 

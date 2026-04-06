@@ -8,7 +8,6 @@ pub enum RuntimeSessionStatus {
     Starting,
     Ready,
     Degraded,
-    Recovering,
     Error,
 }
 
@@ -67,7 +66,6 @@ pub enum WorkspaceLifecycleStatus {
     SnapshotLoading,
     Ready,
     RuntimeError,
-    Recovering,
 }
 
 impl Default for WorkspaceLifecycleStatus {
@@ -112,8 +110,8 @@ pub struct SystemContractVersions {
 
 pub fn current_contract_versions() -> SystemContractVersions {
     SystemContractVersions {
-        tauri_command_version: 2,
-        analysis_schema_version: 3,
+        tauri_command_version: 3,
+        analysis_schema_version: 4,
         workflow_schema_version: 1,
     }
 }

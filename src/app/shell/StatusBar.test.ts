@@ -38,10 +38,10 @@ describe('StatusBar', () => {
     container.remove();
   });
 
-  it('renders runtime flavor and recovering session text from workspace lifecycle', async () => {
+  it('renders runtime flavor and runtime error text from workspace lifecycle', async () => {
     const workspace = {
       ...EMPTY_WORKSPACE_LIFECYCLE,
-      status: 'recovering' as const,
+      status: 'runtime-error' as const,
       runtime: 'il2cpp' as const,
       processSession: {
         pid: 1337,
@@ -53,7 +53,7 @@ describe('StatusBar', () => {
       },
       runtimeSession: {
         ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
-        status: 'recovering' as const,
+        status: 'error' as const,
         runtime: 'il2cpp' as const,
         connected: false,
         lastError: 'runtime session disconnected',
@@ -66,9 +66,9 @@ describe('StatusBar', () => {
       }));
     });
 
-    expect(container.textContent).toContain('Recovering');
+    expect(container.textContent).toContain('Runtime Error');
     expect(container.textContent).toContain('il2cpp Runtime');
-    expect(container.textContent).toContain('Runtime Recovering');
+    expect(container.textContent).toContain('Runtime Error');
     expect(container.textContent).toContain('runtime session disconnected');
   });
 
@@ -93,7 +93,7 @@ describe('StatusBar', () => {
     ];
     const workspace = {
       ...EMPTY_WORKSPACE_LIFECYCLE,
-      status: 'recovering' as const,
+      status: 'runtime-error' as const,
       runtime: 'il2cpp' as const,
       processSession: {
         pid: 1337,
@@ -105,7 +105,7 @@ describe('StatusBar', () => {
       },
       runtimeSession: {
         ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
-        status: 'recovering' as const,
+        status: 'error' as const,
         runtime: 'il2cpp' as const,
         connected: false,
         lastError: 'runtime session disconnected',

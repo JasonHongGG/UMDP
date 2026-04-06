@@ -177,30 +177,6 @@ impl<'a> SceneQueryKernel<'a> {
         })
     }
 
-    fn load_scene_inspector(
-        &mut self,
-        object_address: NativeAddress,
-    ) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
-        let header = self.load_scene_inspector_header(object_address)?;
-        let children = self
-            .load_children_for_object(object_address, NodeSummaryFlavor::InspectorChild, 0, None)?
-            .items;
-        let components = self.load_components_for_object(object_address, 0, None)?.items;
-
-        Ok(RuntimeSceneObjectInspectorSnapshot {
-            generated_at: header.generated_at,
-            scene_handle: header.scene_handle,
-            scene_name: header.scene_name,
-            scene_kind: header.scene_kind,
-            object: header.object,
-            parent: header.parent,
-            hierarchy_path: header.hierarchy_path,
-            children,
-            components,
-            transform: header.transform,
-        })
-    }
-
     fn load_scene_inspector_header(
         &mut self,
         object_address: NativeAddress,
@@ -267,28 +243,6 @@ impl<'a> SceneQueryKernel<'a> {
             parent,
             hierarchy_path,
             transform,
-        })
-    }
-
-    fn load_scene_inspector_children_page(
-        &mut self,
-        object_address: NativeAddress,
-        offset: usize,
-        limit: usize,
-    ) -> Result<RuntimeSceneChildrenPageSnapshot, String> {
-        let page = self.load_children_for_object(
-            object_address,
-            NodeSummaryFlavor::InspectorChild,
-            offset,
-            Some(limit),
-        )?;
-        Ok(RuntimeSceneChildrenPageSnapshot {
-            generated_at: current_timestamp(),
-            parent_object_address: format_address(object_address),
-            offset,
-            total_count: page.total_count,
-            next_offset: page.next_offset,
-            children: page.items,
         })
     }
 

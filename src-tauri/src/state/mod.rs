@@ -5,7 +5,10 @@ pub mod workspace_store;
 
 pub use analysis_store::AnalysisState;
 pub use runtime_kernel_store::RuntimeKernelState;
-pub use scene_store::{SceneChildrenState, SceneInspectorState, SceneMousePickerState, SceneState};
+pub use scene_store::{
+    SceneChildrenState, SceneMousePickerState, SceneObjectComponentsState,
+    SceneObjectHeaderState, SceneState,
+};
 pub use workspace_store::WorkspaceState;
 
 #[derive(Default)]
@@ -39,7 +42,8 @@ impl RuntimeKernelModuleState {
 pub struct SceneModuleState {
     workspace: SceneState,
     children: SceneChildrenState,
-    inspector: SceneInspectorState,
+    header: SceneObjectHeaderState,
+    components: SceneObjectComponentsState,
     picker: SceneMousePickerState,
 }
 
@@ -52,8 +56,12 @@ impl SceneModuleState {
         &self.children
     }
 
-    pub fn inspector(&self) -> &SceneInspectorState {
-        &self.inspector
+    pub fn header(&self) -> &SceneObjectHeaderState {
+        &self.header
+    }
+
+    pub fn components(&self) -> &SceneObjectComponentsState {
+        &self.components
     }
 
     pub fn picker(&self) -> &SceneMousePickerState {
@@ -90,9 +98,12 @@ impl AppState {
 mod tests {
     use super::*;
     use crate::domain::analysis_models::{
-        ProcessSession, RuntimeFlavor, RuntimeSceneChildrenTaskStatus,
-        RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus, RuntimeSceneKind,
-        RuntimeSceneNodeSummary, RuntimeSceneObjectInspectorHeaderSnapshot, SceneRefreshStatus,
+        ProcessSession, ProcessWindowCandidate, RuntimeFlavor, RuntimeSceneChildrenTaskStatus,
+        RuntimeSceneComponentSummary, RuntimeSceneKind,
+        RuntimeSceneMousePickerStatus, RuntimeSceneMouseTargetHit, RuntimeSceneNodeSummary,
+        RuntimeSceneObjectComponentsTaskStatus, RuntimeSceneObjectHeaderTaskStatus,
+        RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeScreenPoint, RuntimeScreenRect,
+        SceneRefreshStatus,
     };
     use crate::domain::workspace::{RuntimeSessionStatus, WorkspaceLifecycleStatus};
 
@@ -138,19 +149,60 @@ mod tests {
         }
     }
 
+    fn sample_window() -> ProcessWindowCandidate {
+        ProcessWindowCandidate {
+            pid: 777,
+            window_handle: "0x100".to_string(),
+            title: "Game".to_string(),
+            class_name: "UnityWndClass".to_string(),
+            window_rect: RuntimeScreenRect {
+                left: 0,
+                top: 0,
+                right: 1280,
+                bottom: 720,
+                width: 1280,
+                height: 720,
+            },
+            client_rect: RuntimeScreenRect {
+                left: 8,
+                top: 30,
+                right: 1272,
+                bottom: 710,
+                width: 1264,
+                height: 680,
+            },
+            is_visible: true,
+            is_minimized: false,
+            is_foreground: true,
+        }
+    }
+
+    fn sample_hit(object_address: &str, object_name: &str, observed_at: &str) -> RuntimeSceneMouseTargetHit {
+        RuntimeSceneMouseTargetHit {
+            observed_at: observed_at.to_string(),
+            object_address: object_address.to_string(),
+            object_name: object_name.to_string(),
+            transform_address: Some(format!("{object_address}-transform")),
+            scene_handle: Some(1),
+            scene_name: Some("SampleScene".to_string()),
+            scene_kind: Some(RuntimeSceneKind::Loaded),
+            hierarchy_path: vec![],
+            distance: Some(3.5),
+            screen_position: RuntimeScreenPoint { x: 512, y: 320 },
+            client_position: RuntimeScreenPoint { x: 500, y: 290 },
+        }
+    }
+
     #[test]
-    fn workspace_marks_recovering_after_runtime_error_when_attached() {
+    fn workspace_marks_runtime_error_after_runtime_drop_when_attached() {
         let workspace = WorkspaceState::default();
         workspace.set_attached_without_snapshot(sample_session());
         workspace.set_runtime_error("runtime session dropped");
 
         let current = workspace.current();
         assert_eq!(current.resource_revision, 2);
-        assert_eq!(current.status, WorkspaceLifecycleStatus::Recovering);
-        assert_eq!(
-            current.runtime_session.status,
-            RuntimeSessionStatus::Recovering
-        );
+        assert_eq!(current.status, WorkspaceLifecycleStatus::RuntimeError);
+        assert_eq!(current.runtime_session.status, RuntimeSessionStatus::Error);
         assert!(!current.runtime_session.connected);
         assert_eq!(
             current.runtime_session.last_error.as_deref(),
@@ -172,28 +224,51 @@ mod tests {
     }
 
     #[test]
-    fn scene_inspector_caches_completed_results() {
-        let inspector = SceneInspectorState::default();
-        let started = inspector.start_task("0x10".to_string(), Some("session-1".to_string()));
+    fn scene_object_header_caches_completed_results() {
+        let header_state = SceneObjectHeaderState::default();
+        let started = header_state.start_task("0x10".to_string(), Some("session-1".to_string()));
         assert!(!started.use_cached);
         assert_eq!(started.state.resource_revision, 1);
 
-        inspector.apply_header(
+        header_state.apply_header(
+            "0x10",
             started.state.task_id,
             started.state.mutation_epoch,
             Some("session-1"),
             sample_header("0x10"),
         );
-        inspector.apply_children(
-            started.state.task_id,
-            started.state.mutation_epoch,
-            Some("session-1"),
-            0,
-            vec![sample_node("0x11")],
-            1,
-            None,
-        );
-        inspector.apply_components(
+        let cached = header_state.start_task("0x10".to_string(), Some("session-1".to_string()));
+        assert!(cached.use_cached);
+        assert!(cached.state.resource_revision > started.state.resource_revision);
+        assert_eq!(cached.state.status, RuntimeSceneObjectHeaderTaskStatus::Ready);
+        assert!(cached.state.header.is_some());
+        assert_eq!(cached.state.session_key.as_deref(), Some("session-1"));
+    }
+
+    #[test]
+    fn scene_object_header_invalidation_marks_current_task_stale() {
+        let header_state = SceneObjectHeaderState::default();
+        let started = header_state.start_task("0x10".to_string(), Some("session-1".to_string()));
+
+        header_state.invalidate_related(&["0x10".to_string()], Some("session-1"));
+
+        let current = header_state
+            .current("0x10", Some("session-1"))
+            .expect("expected current header task");
+        assert_eq!(current.task_id, started.state.task_id);
+        assert!(current.is_stale);
+        assert_eq!(current.status, RuntimeSceneObjectHeaderTaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn scene_object_components_cache_completed_results() {
+        let components_state = SceneObjectComponentsState::default();
+        let started = components_state.start_task("0x10".to_string(), Some("session-1".to_string()));
+        assert!(started.should_spawn);
+        assert_eq!(started.state.resource_revision, 1);
+
+        components_state.apply_components(
+            "0x10",
             started.state.task_id,
             started.state.mutation_epoch,
             Some("session-1"),
@@ -207,34 +282,35 @@ mod tests {
             1,
             None,
         );
-        inspector.complete(
+        components_state.complete(
+            "0x10",
             started.state.task_id,
             started.state.mutation_epoch,
             Some("session-1"),
         );
 
-        let cached = inspector.start_task("0x10".to_string(), Some("session-1".to_string()));
-        assert!(cached.use_cached);
+        let cached = components_state.start_task("0x10".to_string(), Some("session-1".to_string()));
+        assert!(!cached.should_spawn);
         assert!(cached.state.resource_revision > started.state.resource_revision);
-        assert_eq!(cached.state.status, RuntimeSceneInspectorTaskStatus::Ready);
-        assert_eq!(cached.state.children_loaded_count, 1);
-        assert_eq!(cached.state.components_loaded_count, 1);
+        assert_eq!(cached.state.status, RuntimeSceneObjectComponentsTaskStatus::Ready);
+        assert_eq!(cached.state.loaded_count, 1);
+        assert_eq!(cached.state.total_count, 1);
         assert_eq!(cached.state.session_key.as_deref(), Some("session-1"));
     }
 
     #[test]
-    fn scene_inspector_invalidation_marks_current_task_stale() {
-        let inspector = SceneInspectorState::default();
-        let started = inspector.start_task("0x10".to_string(), Some("session-1".to_string()));
+    fn scene_object_components_invalidation_marks_current_task_stale() {
+        let components_state = SceneObjectComponentsState::default();
+        let started = components_state.start_task("0x10".to_string(), Some("session-1".to_string()));
 
-        inspector.invalidate_related(&["0x10".to_string()], Some("session-1"));
+        components_state.invalidate_related(&["0x10".to_string()], Some("session-1"));
 
-        let current = inspector
-            .current(Some("session-1"))
-            .expect("expected current inspector task");
+        let current = components_state
+            .current("0x10", Some("session-1"))
+            .expect("expected current components task");
         assert_eq!(current.task_id, started.state.task_id);
         assert!(current.is_stale);
-        assert_eq!(current.status, RuntimeSceneInspectorTaskStatus::Cancelled);
+        assert_eq!(current.status, RuntimeSceneObjectComponentsTaskStatus::Cancelled);
     }
 
     #[test]
@@ -346,5 +422,117 @@ mod tests {
 
         let errored = workspace.set_error(Some("session-1"), "refresh failed");
         assert_eq!(errored.resource_revision, 3);
+    }
+
+    #[test]
+    fn scene_mouse_picker_successful_pick_commits_and_stops_worker() {
+        let picker = SceneMousePickerState::default();
+        picker.set_target_window(Some("session-1".to_string()), Some(sample_window()));
+
+        let started = picker
+            .start(Some("session-1".to_string()))
+            .expect("expected picker to start");
+        let worker_id = started.worker_id.expect("expected worker id");
+
+        picker.apply_observation(
+            worker_id,
+            Some("session-1"),
+            sample_window(),
+            RuntimeScreenPoint { x: 512, y: 320 },
+            Some(RuntimeScreenPoint { x: 500, y: 290 }),
+            Some(sample_hit("0x10", "Player", "hover-ts")),
+            "Click once to open Player in the Scene inspector.".to_string(),
+        );
+
+        let committed = picker
+            .commit_pick(
+                worker_id,
+                Some("session-1"),
+                Some(sample_hit("0x10", "Player", "hover-ts")),
+                "Locked Player. Loading Scene object header.".to_string(),
+            )
+            .expect("expected committed picker snapshot");
+
+        assert!(!committed.is_running);
+        assert_eq!(committed.status, RuntimeSceneMousePickerStatus::Committed);
+        assert_eq!(committed.committed_pick.as_ref().map(|hit| hit.object_address.as_str()), Some("0x10"));
+        assert_ne!(committed.committed_pick.as_ref().map(|hit| hit.observed_at.as_str()), Some("hover-ts"));
+        assert_eq!(committed.recent_picks.len(), 1);
+        assert!(committed.current_candidate.is_some());
+        assert!(picker.finish_worker(worker_id, Some("session-1")).is_none());
+    }
+
+    #[test]
+    fn scene_mouse_picker_missed_click_stops_worker_without_committing_new_pick() {
+        let picker = SceneMousePickerState::default();
+        picker.set_target_window(Some("session-1".to_string()), Some(sample_window()));
+
+        let started = picker
+            .start(Some("session-1".to_string()))
+            .expect("expected picker to start");
+        let worker_id = started.worker_id.expect("expected worker id");
+        picker
+            .commit_pick(
+                worker_id,
+                Some("session-1"),
+                Some(sample_hit("0x10", "Player", "hover-ts")),
+                "Locked Player. Loading Scene object header.".to_string(),
+            )
+            .expect("expected first pick to commit");
+
+        let restarted = picker
+            .start(Some("session-1".to_string()))
+            .expect("expected picker to restart");
+        let restarted_worker_id = restarted.worker_id.expect("expected restarted worker id");
+        picker.apply_observation(
+            restarted_worker_id,
+            Some("session-1"),
+            sample_window(),
+            RuntimeScreenPoint { x: 600, y: 360 },
+            Some(RuntimeScreenPoint { x: 580, y: 330 }),
+            None,
+            "No collider-backed world object is under the cursor.".to_string(),
+        );
+
+        let missed = picker
+            .commit_pick(
+                restarted_worker_id,
+                Some("session-1"),
+                None,
+                "Click missed. Scene picker stopped without locking an object.".to_string(),
+            )
+            .expect("expected miss snapshot");
+
+        assert!(!missed.is_running);
+        assert_eq!(missed.status, RuntimeSceneMousePickerStatus::Cancelled);
+        assert_eq!(missed.committed_pick.as_ref().map(|hit| hit.object_address.as_str()), Some("0x10"));
+        assert_eq!(missed.recent_picks.len(), 1);
+        assert_eq!(
+            missed.status_detail.as_deref(),
+            Some("Click missed. Scene picker stopped without locking an object.")
+        );
+        assert!(picker.finish_worker(restarted_worker_id, Some("session-1")).is_none());
+    }
+
+    #[test]
+    fn scene_mouse_picker_rejects_stale_worker_updates_after_stop() {
+        let picker = SceneMousePickerState::default();
+        picker.set_target_window(Some("session-1".to_string()), Some(sample_window()));
+
+        let started = picker
+            .start(Some("session-1".to_string()))
+            .expect("expected picker to start");
+        let worker_id = started.worker_id.expect("expected worker id");
+
+        picker.stop(Some("session-1"));
+
+        let stale = picker.commit_pick(
+            worker_id,
+            Some("session-1"),
+            Some(sample_hit("0x99", "Stale", "hover-ts")),
+            "Opened Stale in the Scene inspector.".to_string(),
+        );
+
+        assert!(stale.is_none());
     }
 }

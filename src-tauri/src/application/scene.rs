@@ -1,7 +1,7 @@
 use crate::domain::analysis_models::{
     ProcessWindowCandidate, RuntimeSceneChildrenSnapshot, RuntimeSceneMousePickerSnapshot,
     RuntimeSceneMutationResult, RuntimeSceneObjectChildrenTaskState,
-    RuntimeSceneObjectInspectorSnapshot, RuntimeSceneObjectInspectorTaskState,
+    RuntimeSceneObjectComponentsTaskState, RuntimeSceneObjectHeaderTaskState,
     RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
 use crate::domain::operation::OperationResult;
@@ -82,25 +82,50 @@ pub fn cancel_scene_object_children_analysis(
     tasks::cancel_scene_object_children_analysis(state, object_address, task_id)
 }
 
-pub fn start_scene_object_inspector_analysis(
+pub fn start_scene_object_header_analysis(
     app: &AppHandle,
     state: &AppState,
     object_address: &str,
-) -> OperationResult<RuntimeSceneObjectInspectorTaskState> {
-    tasks::start_scene_object_inspector_analysis(app, state, object_address)
+) -> OperationResult<RuntimeSceneObjectHeaderTaskState> {
+    tasks::start_scene_object_header_analysis(app, state, object_address)
 }
 
-pub fn get_scene_object_inspector_state(
+pub fn get_scene_object_header_state(
     state: &AppState,
-) -> Option<RuntimeSceneObjectInspectorTaskState> {
-    tasks::get_scene_object_inspector_state(state)
+    object_address: &str,
+) -> Option<RuntimeSceneObjectHeaderTaskState> {
+    tasks::get_scene_object_header_state(state, object_address)
 }
 
-pub fn cancel_scene_object_inspector_analysis(
+pub fn cancel_scene_object_header_analysis(
     state: &AppState,
+    object_address: &str,
     task_id: Option<u64>,
-) -> Option<RuntimeSceneObjectInspectorTaskState> {
-    tasks::cancel_scene_object_inspector_analysis(state, task_id)
+) -> Option<RuntimeSceneObjectHeaderTaskState> {
+    tasks::cancel_scene_object_header_analysis(state, object_address, task_id)
+}
+
+pub fn start_scene_object_components_analysis(
+    app: &AppHandle,
+    state: &AppState,
+    object_address: &str,
+) -> OperationResult<RuntimeSceneObjectComponentsTaskState> {
+    tasks::start_scene_object_components_analysis(app, state, object_address)
+}
+
+pub fn get_scene_object_components_state(
+    state: &AppState,
+    object_address: &str,
+) -> Option<RuntimeSceneObjectComponentsTaskState> {
+    tasks::get_scene_object_components_state(state, object_address)
+}
+
+pub fn cancel_scene_object_components_analysis(
+    state: &AppState,
+    object_address: &str,
+    task_id: Option<u64>,
+) -> Option<RuntimeSceneObjectComponentsTaskState> {
+    tasks::cancel_scene_object_components_analysis(state, object_address, task_id)
 }
 
 pub fn get_scene_object_children(
@@ -109,14 +134,6 @@ pub fn get_scene_object_children(
     object_address: &str,
 ) -> OperationResult<RuntimeSceneChildrenSnapshot> {
     refresh::get_scene_object_children(app, state, object_address)
-}
-
-pub fn get_scene_object_inspector(
-    app: &AppHandle,
-    state: &AppState,
-    object_address: &str,
-) -> OperationResult<RuntimeSceneObjectInspectorSnapshot> {
-    refresh::get_scene_object_inspector(app, state, object_address)
 }
 
 pub fn create_scene_child(

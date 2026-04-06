@@ -1,10 +1,11 @@
 use crate::domain::analysis_models::{
     ProcessWindowCandidate, RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenTaskStatus,
-    RuntimeSceneComponentSummary, RuntimeSceneInspectorTaskStatus,
-    RuntimeSceneMousePickerSnapshot, RuntimeSceneMousePickerStatus,
-    RuntimeSceneMouseTargetHit, RuntimeSceneNodeSummary,
-    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectInspectorHeaderSnapshot,
-    RuntimeSceneObjectInspectorTaskState, RuntimeSceneResourceKind,
+    RuntimeSceneComponentSummary, RuntimeSceneMousePickerSnapshot,
+    RuntimeSceneMousePickerStatus, RuntimeSceneMouseTargetHit,
+    RuntimeSceneNodeSummary, RuntimeSceneObjectChildrenTaskState,
+    RuntimeSceneObjectComponentsTaskState, RuntimeSceneObjectComponentsTaskStatus,
+    RuntimeSceneObjectHeaderTaskState, RuntimeSceneObjectHeaderTaskStatus,
+    RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneResourceKind,
     RuntimeSceneResourceState, RuntimeScreenPoint, SceneRefreshStatus,
     SceneResourceFreshness, SceneWorkspaceState,
 };
@@ -27,7 +28,12 @@ fn bump_children_revision(store: &mut SceneChildrenStore) -> u64 {
     store.resource_revision
 }
 
-fn bump_inspector_revision(store: &mut SceneInspectorStore) -> u64 {
+fn bump_header_revision(store: &mut SceneObjectHeaderStore) -> u64 {
+    store.resource_revision += 1;
+    store.resource_revision
+}
+
+fn bump_components_revision(store: &mut SceneObjectComponentsStore) -> u64 {
     store.resource_revision += 1;
     store.resource_revision
 }
@@ -110,8 +116,8 @@ fn patch_children_task_resource_state(
     );
 }
 
-fn patch_inspector_task_resource_state(
-    task: &mut RuntimeSceneObjectInspectorTaskState,
+fn patch_header_task_resource_state(
+    task: &mut RuntimeSceneObjectHeaderTaskState,
     freshness: SceneResourceFreshness,
     last_successful_at: Option<String>,
     is_retaining_snapshot: bool,
@@ -120,7 +126,27 @@ fn patch_inspector_task_resource_state(
     let session_key = task.session_key.clone();
     patch_resource_state(
         &mut task.resource_state,
-        RuntimeSceneResourceKind::Inspector,
+        RuntimeSceneResourceKind::SceneObjectHeader,
+        task.resource_revision,
+        session_key.as_deref(),
+        freshness,
+        last_successful_at,
+        is_retaining_snapshot,
+        error_message,
+    );
+}
+
+fn patch_components_task_resource_state(
+    task: &mut RuntimeSceneObjectComponentsTaskState,
+    freshness: SceneResourceFreshness,
+    last_successful_at: Option<String>,
+    is_retaining_snapshot: bool,
+    error_message: Option<String>,
+) {
+    let session_key = task.session_key.clone();
+    patch_resource_state(
+        &mut task.resource_state,
+        RuntimeSceneResourceKind::SceneObjectComponents,
         task.resource_revision,
         session_key.as_deref(),
         freshness,
@@ -134,8 +160,12 @@ fn task_has_retained_children(task: &RuntimeSceneObjectChildrenTaskState) -> boo
     !task.children.is_empty()
 }
 
-fn task_has_retained_inspector(task: &RuntimeSceneObjectInspectorTaskState) -> bool {
-    task.header.is_some() || !task.children.is_empty() || !task.components.is_empty()
+fn task_has_retained_header(task: &RuntimeSceneObjectHeaderTaskState) -> bool {
+    task.header.is_some()
+}
+
+fn task_has_retained_components(task: &RuntimeSceneObjectComponentsTaskState) -> bool {
+    !task.components.is_empty() || task.resource_state.last_successful_at.is_some()
 }
 
 #[derive(Default)]
@@ -291,32 +321,58 @@ pub struct SceneChildrenState {
 }
 
 #[derive(Clone)]
-struct SceneInspectorCacheEntry {
+struct SceneObjectHeaderCacheEntry {
     mutation_epoch: u64,
     header: RuntimeSceneObjectInspectorHeaderSnapshot,
-    children: Vec<RuntimeSceneNodeSummary>,
-    components: Vec<RuntimeSceneComponentSummary>,
     last_successful_at: String,
 }
 
 #[derive(Default)]
-struct SceneInspectorStore {
+struct SceneObjectHeaderStore {
     active_session_key: Option<String>,
-    current: Option<RuntimeSceneObjectInspectorTaskState>,
-    cache: HashMap<String, SceneInspectorCacheEntry>,
+    tasks_by_object: HashMap<String, RuntimeSceneObjectHeaderTaskState>,
+    cache: HashMap<String, SceneObjectHeaderCacheEntry>,
     next_task_id: u64,
     mutation_epoch: u64,
     resource_revision: u64,
 }
 
-pub struct SceneInspectorTaskStart {
-    pub state: RuntimeSceneObjectInspectorTaskState,
+pub struct SceneObjectHeaderTaskStart {
+    pub state: RuntimeSceneObjectHeaderTaskState,
     pub use_cached: bool,
 }
 
 #[derive(Default)]
-pub struct SceneInspectorState {
-    store: Mutex<SceneInspectorStore>,
+pub struct SceneObjectHeaderState {
+    store: Mutex<SceneObjectHeaderStore>,
+}
+
+#[derive(Clone)]
+struct SceneObjectComponentsCacheEntry {
+    mutation_epoch: u64,
+    components: Vec<RuntimeSceneComponentSummary>,
+    total_count: usize,
+    last_successful_at: String,
+}
+
+#[derive(Default)]
+struct SceneObjectComponentsStore {
+    active_session_key: Option<String>,
+    tasks_by_object: HashMap<String, RuntimeSceneObjectComponentsTaskState>,
+    cache: HashMap<String, SceneObjectComponentsCacheEntry>,
+    next_task_id: u64,
+    mutation_epoch: u64,
+    resource_revision: u64,
+}
+
+pub struct SceneObjectComponentsTaskStart {
+    pub state: RuntimeSceneObjectComponentsTaskState,
+    pub should_spawn: bool,
+}
+
+#[derive(Default)]
+pub struct SceneObjectComponentsState {
+    store: Mutex<SceneObjectComponentsStore>,
 }
 
 fn summary_matches_object(summary: &RuntimeSceneNodeSummary, object_address: &str) -> bool {
@@ -348,7 +404,7 @@ fn scene_children_task_impacted(
         })
 }
 
-fn cache_entry_impacted(entry: &SceneInspectorCacheEntry, impacted: &[&str]) -> bool {
+fn header_cache_entry_impacted(entry: &SceneObjectHeaderCacheEntry, impacted: &[&str]) -> bool {
     if impacted
         .iter()
         .any(|address| summary_matches_object(&entry.header.object, address))
@@ -364,11 +420,7 @@ fn cache_entry_impacted(entry: &SceneInspectorCacheEntry, impacted: &[&str]) -> 
         return true;
     }
 
-    entry.children.iter().any(|child| {
-        impacted
-            .iter()
-            .any(|address| summary_matches_object(child, address))
-    })
+    false
 }
 
 fn ensure_children_session(store: &mut SceneChildrenStore, session_key: Option<&str>) {
@@ -382,14 +434,25 @@ fn ensure_children_session(store: &mut SceneChildrenStore, session_key: Option<&
     };
 }
 
-fn ensure_inspector_session(store: &mut SceneInspectorStore, session_key: Option<&str>) {
+fn ensure_header_session(store: &mut SceneObjectHeaderStore, session_key: Option<&str>) {
     if same_session_key(store.active_session_key.as_deref(), session_key) {
         return;
     }
 
-    *store = SceneInspectorStore {
+    *store = SceneObjectHeaderStore {
         active_session_key: session_key.map(str::to_owned),
-        ..SceneInspectorStore::default()
+        ..SceneObjectHeaderStore::default()
+    };
+}
+
+fn ensure_components_session(store: &mut SceneObjectComponentsStore, session_key: Option<&str>) {
+    if same_session_key(store.active_session_key.as_deref(), session_key) {
+        return;
+    }
+
+    *store = SceneObjectComponentsStore {
+        active_session_key: session_key.map(str::to_owned),
+        ..SceneObjectComponentsStore::default()
     };
 }
 
@@ -450,7 +513,7 @@ fn clear_scene_mouse_picker_preview(snapshot: &mut RuntimeSceneMousePickerSnapsh
     snapshot.cursor_screen_position = None;
     snapshot.cursor_client_position = None;
     snapshot.cursor_inside_client = false;
-    snapshot.hover_hit = None;
+    snapshot.current_candidate = None;
 }
 
 fn set_scene_mouse_picker_idle(snapshot: &mut RuntimeSceneMousePickerSnapshot, detail: Option<String>) {
@@ -469,6 +532,17 @@ fn set_scene_mouse_picker_armed(
     snapshot.status = RuntimeSceneMousePickerStatus::Armed;
     snapshot.status_detail = Some(detail.into());
     snapshot.error_message = None;
+}
+
+fn set_scene_mouse_picker_cancelled(
+    snapshot: &mut RuntimeSceneMousePickerSnapshot,
+    detail: impl Into<String>,
+) {
+    snapshot.is_running = false;
+    snapshot.status = RuntimeSceneMousePickerStatus::Cancelled;
+    snapshot.status_detail = Some(detail.into());
+    snapshot.error_message = None;
+    clear_scene_mouse_picker_preview(snapshot);
 }
 
 fn push_recent_scene_mouse_pick(
@@ -859,127 +933,134 @@ impl SceneChildrenState {
     }
 }
 
-impl SceneInspectorState {
+impl SceneObjectHeaderState {
     pub fn current(
         &self,
+        object_address: &str,
         session_key: Option<&str>,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    ) -> Option<RuntimeSceneObjectHeaderTaskState> {
         let store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
             return None;
         }
 
-        store.current.clone()
+        store.tasks_by_object.get(object_address).cloned()
     }
 
     pub fn start_task(
         &self,
         object_address: String,
         session_key: Option<String>,
-    ) -> SceneInspectorTaskStart {
+    ) -> SceneObjectHeaderTaskStart {
         let mut store = self.store.lock();
-        ensure_inspector_session(&mut store, session_key.as_deref());
-        store.next_task_id += 1;
-        let task_id = store.next_task_id;
-        let now = current_timestamp();
+        ensure_header_session(&mut store, session_key.as_deref());
 
-        let mut state = RuntimeSceneObjectInspectorTaskState {
-            task_id,
-            resource_revision: bump_inspector_revision(&mut store),
+        if let Some(current) = store.tasks_by_object.get(&object_address) {
+            if current.mutation_epoch == store.mutation_epoch
+                && !current.is_stale
+                && !matches!(
+                    current.status,
+                    RuntimeSceneObjectHeaderTaskStatus::Error
+                        | RuntimeSceneObjectHeaderTaskStatus::Cancelled
+                )
+            {
+                return SceneObjectHeaderTaskStart {
+                    state: current.clone(),
+                    use_cached: current.status == RuntimeSceneObjectHeaderTaskStatus::Ready,
+                };
+            }
+        }
+
+        let retained_task = store.tasks_by_object.get(&object_address).cloned();
+        let now = current_timestamp();
+        let mut state = RuntimeSceneObjectHeaderTaskState {
             session_key: store.active_session_key.clone(),
             object_address: object_address.clone(),
-            status: RuntimeSceneInspectorTaskStatus::HeaderLoading,
+            status: RuntimeSceneObjectHeaderTaskStatus::Loading,
             mutation_epoch: store.mutation_epoch,
             started_at: now.clone(),
             updated_at: now,
-            ..RuntimeSceneObjectInspectorTaskState::default()
+            ..RuntimeSceneObjectHeaderTaskState::default()
         };
 
-        if let Some(retained) = store.current.as_ref().filter(|task| {
-            task.object_address == object_address && task_has_retained_inspector(task)
-        }) {
+        if let Some(retained) = retained_task.as_ref().filter(|task| task_has_retained_header(task)) {
             state.header = retained.header.clone();
-            state.children = retained.children.clone();
-            state.children_total_count = retained.children_total_count;
-            state.children_loaded_count = retained.children.len();
-            state.components = retained.components.clone();
-            state.components_total_count = retained.components_total_count;
-            state.components_loaded_count = retained.components.len();
             state.resource_state.last_successful_at = retained.resource_state.last_successful_at.clone();
             state.resource_state.is_retaining_snapshot = true;
             state.resource_state.freshness = SceneResourceFreshness::Refreshing;
         }
 
-        let use_cached = if let Some(cached) = store.cache.get(&object_address) {
+        if let Some(cached) = store.cache.get(&object_address).cloned() {
             if cached.mutation_epoch == store.mutation_epoch {
-                state.status = RuntimeSceneInspectorTaskStatus::Ready;
-                state.header = Some(cached.header.clone());
-                state.children = cached.children.clone();
-                state.children_total_count = state.children.len();
-                state.children_loaded_count = state.children.len();
-                state.components = cached.components.clone();
-                state.components_total_count = state.components.len();
-                state.components_loaded_count = state.components.len();
-                patch_inspector_task_resource_state(
+                store.next_task_id += 1;
+                state.task_id = store.next_task_id;
+                state.resource_revision = bump_header_revision(&mut store);
+                state.status = RuntimeSceneObjectHeaderTaskStatus::Ready;
+                state.header = Some(cached.header);
+                patch_header_task_resource_state(
                     &mut state,
                     SceneResourceFreshness::Fresh,
-                    Some(cached.last_successful_at.clone()),
+                    Some(cached.last_successful_at),
                     true,
                     None,
                 );
-                true
-            } else {
-                false
+                store.tasks_by_object.insert(object_address, state.clone());
+                return SceneObjectHeaderTaskStart {
+                    state,
+                    use_cached: true,
+                };
             }
-        } else {
-            false
-        };
-
-        if !use_cached {
-            let is_retaining_snapshot = state.resource_state.is_retaining_snapshot;
-            let last_successful_at = state.resource_state.last_successful_at.clone();
-            let freshness = if is_retaining_snapshot {
-                SceneResourceFreshness::Refreshing
-            } else {
-                SceneResourceFreshness::Empty
-            };
-            patch_inspector_task_resource_state(
-                &mut state,
-                freshness,
-                last_successful_at,
-                is_retaining_snapshot,
-                None,
-            );
         }
 
-        store.current = Some(state.clone());
-        SceneInspectorTaskStart { state, use_cached }
+        store.next_task_id += 1;
+        state.task_id = store.next_task_id;
+        state.resource_revision = bump_header_revision(&mut store);
+        let is_retaining_snapshot = state.resource_state.is_retaining_snapshot;
+        let last_successful_at = state.resource_state.last_successful_at.clone();
+        let freshness = if is_retaining_snapshot {
+            SceneResourceFreshness::Refreshing
+        } else {
+            SceneResourceFreshness::Empty
+        };
+        patch_header_task_resource_state(
+            &mut state,
+            freshness,
+            last_successful_at,
+            is_retaining_snapshot,
+            None,
+        );
+        store.tasks_by_object.insert(object_address, state.clone());
+        SceneObjectHeaderTaskStart {
+            state,
+            use_cached: false,
+        }
     }
 
     pub fn cancel(
         &self,
+        object_address: &str,
         task_id: Option<u64>,
         session_key: Option<&str>,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    ) -> Option<RuntimeSceneObjectHeaderTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
             return None;
         }
         {
-            let current = store.current.as_ref()?;
+            let current = store.tasks_by_object.get(object_address)?;
             if task_id.is_some_and(|value| value != current.task_id) {
                 return Some(current.clone());
             }
         }
 
-        let next_revision = bump_inspector_revision(&mut store);
-        let current = store.current.as_mut()?;
+        let next_revision = bump_header_revision(&mut store);
+        let current = store.tasks_by_object.get_mut(object_address)?;
         current.resource_revision = next_revision;
-        let has_retained = task_has_retained_inspector(current);
+        let has_retained = task_has_retained_header(current);
         current.status = if has_retained {
-            RuntimeSceneInspectorTaskStatus::Ready
+            RuntimeSceneObjectHeaderTaskStatus::Ready
         } else {
-            RuntimeSceneInspectorTaskStatus::Cancelled
+            RuntimeSceneObjectHeaderTaskStatus::Cancelled
         };
         current.is_stale = true;
         current.updated_at = current_timestamp();
@@ -990,7 +1071,7 @@ impl SceneInspectorState {
         };
         let last_successful_at = current.resource_state.last_successful_at.clone();
         let error_message = current.error_message.clone();
-        patch_inspector_task_resource_state(
+        patch_header_task_resource_state(
             current,
             freshness,
             last_successful_at,
@@ -1002,17 +1083,18 @@ impl SceneInspectorState {
 
     pub fn apply_header(
         &self,
+        object_address: &str,
         task_id: u64,
         mutation_epoch: u64,
         session_key: Option<&str>,
         header: RuntimeSceneObjectInspectorHeaderSnapshot,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    ) -> Option<RuntimeSceneObjectHeaderTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
             return None;
         }
         {
-            let current = store.current.as_ref()?;
+            let current = store.tasks_by_object.get(object_address)?;
             if current.task_id != task_id
                 || current.mutation_epoch != mutation_epoch
                 || !same_session_key(current.session_key.as_deref(), session_key)
@@ -1021,205 +1103,53 @@ impl SceneInspectorState {
             }
         }
 
-        let next_revision = bump_inspector_revision(&mut store);
-        let current = store.current.as_mut()?;
-        current.resource_revision = next_revision;
-        current.header = Some(header);
-        current.status = RuntimeSceneInspectorTaskStatus::ChildrenLoading;
-        current.updated_at = current_timestamp();
-        let last_successful_at = current.resource_state.last_successful_at.clone();
-        patch_inspector_task_resource_state(
-            current,
-            SceneResourceFreshness::Refreshing,
-            last_successful_at,
-            true,
-            None,
-        );
-        Some(current.clone())
-    }
-
-    pub fn apply_children(
-        &self,
-        task_id: u64,
-        mutation_epoch: u64,
-        session_key: Option<&str>,
-        offset: usize,
-        children: Vec<RuntimeSceneNodeSummary>,
-        total_count: usize,
-        next_offset: Option<usize>,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
-        let mut store = self.store.lock();
-        if !same_session_key(store.active_session_key.as_deref(), session_key) {
-            return None;
-        }
-        {
-            let current = store.current.as_ref()?;
-            if current.task_id != task_id
-                || current.mutation_epoch != mutation_epoch
-                || !same_session_key(current.session_key.as_deref(), session_key)
-            {
-                return None;
-            }
-        }
-
-        let next_revision = bump_inspector_revision(&mut store);
-        let current = store.current.as_mut()?;
-        current.resource_revision = next_revision;
-        if offset == 0 {
-            current.children = children;
-        } else {
-            current.children.extend(children);
-        }
-        current.children_total_count = total_count;
-        current.children_loaded_count = current.children.len();
-        current.children_next_offset = next_offset;
-        current.status = if next_offset.is_some() {
-            RuntimeSceneInspectorTaskStatus::ChildrenLoading
-        } else {
-            RuntimeSceneInspectorTaskStatus::ComponentsLoading
+        let next_revision = bump_header_revision(&mut store);
+        let ready_state = {
+            let current = store.tasks_by_object.get_mut(object_address)?;
+            current.resource_revision = next_revision;
+            current.header = Some(header.clone());
+            current.status = RuntimeSceneObjectHeaderTaskStatus::Ready;
+            current.updated_at = current_timestamp();
+            patch_header_task_resource_state(
+                current,
+                SceneResourceFreshness::Fresh,
+                Some(current.updated_at.clone()),
+                true,
+                None,
+            );
+            current.clone()
         };
-        current.updated_at = current_timestamp();
-        let last_successful_at = current.resource_state.last_successful_at.clone();
-        patch_inspector_task_resource_state(
-            current,
-            SceneResourceFreshness::Refreshing,
-            last_successful_at,
-            true,
-            None,
+
+        store.cache.insert(
+            object_address.to_string(),
+            SceneObjectHeaderCacheEntry {
+                mutation_epoch,
+                header,
+                last_successful_at: ready_state
+                    .resource_state
+                    .last_successful_at
+                    .clone()
+                    .unwrap_or_else(current_timestamp),
+            },
         );
-        Some(current.clone())
-    }
-
-    pub fn apply_components(
-        &self,
-        task_id: u64,
-        mutation_epoch: u64,
-        session_key: Option<&str>,
-        offset: usize,
-        components: Vec<RuntimeSceneComponentSummary>,
-        total_count: usize,
-        next_offset: Option<usize>,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
-        let mut store = self.store.lock();
-        if !same_session_key(store.active_session_key.as_deref(), session_key) {
-            return None;
-        }
-        {
-            let current = store.current.as_ref()?;
-            if current.task_id != task_id
-                || current.mutation_epoch != mutation_epoch
-                || !same_session_key(current.session_key.as_deref(), session_key)
-            {
-                return None;
-            }
-        }
-
-        let next_revision = bump_inspector_revision(&mut store);
-        let current = store.current.as_mut()?;
-        current.resource_revision = next_revision;
-        if offset == 0 {
-            current.components = components;
-        } else {
-            current.components.extend(components);
-        }
-        current.components_total_count = total_count;
-        current.components_loaded_count = current.components.len();
-        current.components_next_offset = next_offset;
-        current.status = if next_offset.is_some() {
-            RuntimeSceneInspectorTaskStatus::ComponentsLoading
-        } else {
-            RuntimeSceneInspectorTaskStatus::Ready
-        };
-        current.updated_at = current_timestamp();
-        let freshness = if next_offset.is_some() {
-            SceneResourceFreshness::Refreshing
-        } else {
-            SceneResourceFreshness::Fresh
-        };
-        let last_successful_at = current.resource_state.last_successful_at.clone();
-        patch_inspector_task_resource_state(
-            current,
-            freshness,
-            last_successful_at,
-            true,
-            None,
-        );
-        Some(current.clone())
-    }
-
-    pub fn complete(
-        &self,
-        task_id: u64,
-        mutation_epoch: u64,
-        session_key: Option<&str>,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
-        let mut store = self.store.lock();
-        if !same_session_key(store.active_session_key.as_deref(), session_key) {
-            return None;
-        }
-        {
-            let current = store.current.as_ref()?;
-            if current.task_id != task_id
-                || current.mutation_epoch != mutation_epoch
-                || !same_session_key(current.session_key.as_deref(), session_key)
-            {
-                return None;
-            }
-        }
-
-        let next_revision = bump_inspector_revision(&mut store);
-        let current = store.current.as_mut()?;
-        current.resource_revision = next_revision;
-        current.status = RuntimeSceneInspectorTaskStatus::Ready;
-        current.children_next_offset = None;
-        current.components_next_offset = None;
-        current.updated_at = current_timestamp();
-        patch_inspector_task_resource_state(
-            current,
-            SceneResourceFreshness::Fresh,
-            Some(current.updated_at.clone()),
-            true,
-            None,
-        );
-
-        let ready_state = current.clone();
-        let cache_entry = ready_state.header.clone().map(|header| {
-            (
-                ready_state.object_address.clone(),
-                SceneInspectorCacheEntry {
-                    mutation_epoch,
-                    header,
-                    children: ready_state.children.clone(),
-                    components: ready_state.components.clone(),
-                    last_successful_at: ready_state
-                        .resource_state
-                        .last_successful_at
-                        .clone()
-                        .unwrap_or_else(current_timestamp),
-                },
-            )
-        });
-
-        if let Some((object_address, entry)) = cache_entry {
-            store.cache.insert(object_address, entry);
-        }
 
         Some(ready_state)
     }
 
     pub fn fail(
         &self,
+        object_address: &str,
         task_id: u64,
         mutation_epoch: u64,
         session_key: Option<&str>,
         error_message: String,
-    ) -> Option<RuntimeSceneObjectInspectorTaskState> {
+    ) -> Option<RuntimeSceneObjectHeaderTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
             return None;
         }
         {
-            let current = store.current.as_ref()?;
+            let current = store.tasks_by_object.get(object_address)?;
             if current.task_id != task_id
                 || current.mutation_epoch != mutation_epoch
                 || !same_session_key(current.session_key.as_deref(), session_key)
@@ -1228,11 +1158,11 @@ impl SceneInspectorState {
             }
         }
 
-        let next_revision = bump_inspector_revision(&mut store);
-        let current = store.current.as_mut()?;
+        let next_revision = bump_header_revision(&mut store);
+        let current = store.tasks_by_object.get_mut(object_address)?;
         current.resource_revision = next_revision;
-        let has_retained = task_has_retained_inspector(current);
-        current.status = RuntimeSceneInspectorTaskStatus::Error;
+        let has_retained = task_has_retained_header(current);
+        current.status = RuntimeSceneObjectHeaderTaskStatus::Error;
         current.error_message = Some(error_message.clone());
         current.updated_at = current_timestamp();
         let freshness = if has_retained {
@@ -1241,7 +1171,7 @@ impl SceneInspectorState {
             SceneResourceFreshness::Error
         };
         let last_successful_at = current.resource_state.last_successful_at.clone();
-        patch_inspector_task_resource_state(
+        patch_header_task_resource_state(
             current,
             freshness,
             last_successful_at,
@@ -1267,49 +1197,448 @@ impl SceneInspectorState {
                 .collect::<Vec<_>>();
             store.cache.retain(|object_address, entry| {
                 !impacted_refs.contains(&object_address.as_str())
-                    && !cache_entry_impacted(entry, &impacted_refs)
+                    && !header_cache_entry_impacted(entry, &impacted_refs)
             });
         }
 
-        let next_revision = store
-            .current
-            .is_some()
-            .then(|| bump_inspector_revision(&mut store));
-        if let Some(current) = store.current.as_mut() {
-            if let Some(next_revision) = next_revision {
-                current.resource_revision = next_revision;
+        let impacted_refs = impacted_addresses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let has_impacted_task = store.tasks_by_object.values().any(|task| {
+            impacted_addresses.is_empty()
+                || impacted_refs.contains(&task.object_address.as_str())
+                || task.header.as_ref().is_some_and(|header| {
+                    impacted_refs.contains(&header.object.object_address.as_str())
+                        || header.parent.as_ref().is_some_and(|parent| {
+                            impacted_refs.contains(&parent.object_address.as_str())
+                        })
+                })
+        });
+        let next_revision = has_impacted_task.then(|| bump_header_revision(&mut store));
+        for task in store.tasks_by_object.values_mut() {
+            let impacted = impacted_addresses.is_empty()
+                || impacted_refs.contains(&task.object_address.as_str())
+                || task.header.as_ref().is_some_and(|header| {
+                    impacted_refs.contains(&header.object.object_address.as_str())
+                        || header.parent.as_ref().is_some_and(|parent| {
+                            impacted_refs.contains(&parent.object_address.as_str())
+                        })
+                });
+            if impacted {
+                if let Some(next_revision) = next_revision {
+                    task.resource_revision = next_revision;
+                }
+                task.is_stale = true;
+                let has_retained = task_has_retained_header(task);
+                task.status = if has_retained {
+                    RuntimeSceneObjectHeaderTaskStatus::Ready
+                } else {
+                    RuntimeSceneObjectHeaderTaskStatus::Cancelled
+                };
+                task.updated_at = current_timestamp();
+                let freshness = if has_retained {
+                    SceneResourceFreshness::Stale
+                } else {
+                    SceneResourceFreshness::Empty
+                };
+                let last_successful_at = task.resource_state.last_successful_at.clone();
+                let error_message = task.error_message.clone();
+                patch_header_task_resource_state(
+                    task,
+                    freshness,
+                    last_successful_at,
+                    has_retained,
+                    error_message,
+                );
             }
-            current.is_stale = true;
-            let has_retained = task_has_retained_inspector(current);
-            current.status = if has_retained {
-                RuntimeSceneInspectorTaskStatus::Ready
-            } else {
-                RuntimeSceneInspectorTaskStatus::Cancelled
-            };
-            current.updated_at = current_timestamp();
-            let freshness = if has_retained {
-                SceneResourceFreshness::Stale
-            } else {
-                SceneResourceFreshness::Empty
-            };
-            let last_successful_at = current.resource_state.last_successful_at.clone();
-            let error_message = current.error_message.clone();
-            patch_inspector_task_resource_state(
-                current,
-                freshness,
-                last_successful_at,
-                has_retained,
-                error_message,
-            );
         }
     }
 
     pub fn reset(&self) {
-        *self.store.lock() = SceneInspectorStore::default();
+        *self.store.lock() = SceneObjectHeaderStore::default();
+    }
+}
+
+impl SceneObjectComponentsState {
+    pub fn current(
+        &self,
+        object_address: &str,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneObjectComponentsTaskState> {
+        let store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key) {
+            return None;
+        }
+
+        store.tasks_by_object.get(object_address).cloned()
+    }
+
+    pub fn start_task(
+        &self,
+        object_address: String,
+        session_key: Option<String>,
+    ) -> SceneObjectComponentsTaskStart {
+        let mut store = self.store.lock();
+        ensure_components_session(&mut store, session_key.as_deref());
+
+        if let Some(current) = store.tasks_by_object.get(&object_address) {
+            if current.mutation_epoch == store.mutation_epoch
+                && !current.is_stale
+                && !matches!(
+                    current.status,
+                    RuntimeSceneObjectComponentsTaskStatus::Error
+                        | RuntimeSceneObjectComponentsTaskStatus::Cancelled
+                )
+            {
+                return SceneObjectComponentsTaskStart {
+                    state: current.clone(),
+                    should_spawn: false,
+                };
+            }
+        }
+
+        let retained_task = store.tasks_by_object.get(&object_address).cloned();
+        let now = current_timestamp();
+        let mut state = RuntimeSceneObjectComponentsTaskState {
+            session_key: store.active_session_key.clone(),
+            object_address: object_address.clone(),
+            status: RuntimeSceneObjectComponentsTaskStatus::Loading,
+            mutation_epoch: store.mutation_epoch,
+            started_at: now.clone(),
+            updated_at: now,
+            ..RuntimeSceneObjectComponentsTaskState::default()
+        };
+
+        if let Some(retained) = retained_task.as_ref().filter(|task| task_has_retained_components(task)) {
+            state.components = retained.components.clone();
+            state.total_count = retained.total_count.max(retained.components.len());
+            state.loaded_count = retained.components.len();
+            state.resource_state.last_successful_at = retained.resource_state.last_successful_at.clone();
+            state.resource_state.is_retaining_snapshot = true;
+            state.resource_state.freshness = SceneResourceFreshness::Refreshing;
+        }
+
+        if let Some(cached) = store.cache.get(&object_address).cloned() {
+            if cached.mutation_epoch == store.mutation_epoch {
+                store.next_task_id += 1;
+                state.task_id = store.next_task_id;
+                state.resource_revision = bump_components_revision(&mut store);
+                state.status = RuntimeSceneObjectComponentsTaskStatus::Ready;
+                state.components = cached.components;
+                state.total_count = cached.total_count;
+                state.loaded_count = state.components.len();
+                patch_components_task_resource_state(
+                    &mut state,
+                    SceneResourceFreshness::Fresh,
+                    Some(cached.last_successful_at),
+                    true,
+                    None,
+                );
+                store.tasks_by_object.insert(object_address, state.clone());
+                return SceneObjectComponentsTaskStart {
+                    state,
+                    should_spawn: false,
+                };
+            }
+        }
+
+        store.next_task_id += 1;
+        state.task_id = store.next_task_id;
+        state.resource_revision = bump_components_revision(&mut store);
+        let is_retaining_snapshot = state.resource_state.is_retaining_snapshot;
+        let last_successful_at = state.resource_state.last_successful_at.clone();
+        let freshness = if is_retaining_snapshot {
+            SceneResourceFreshness::Refreshing
+        } else {
+            SceneResourceFreshness::Empty
+        };
+        patch_components_task_resource_state(
+            &mut state,
+            freshness,
+            last_successful_at,
+            is_retaining_snapshot,
+            None,
+        );
+        store.tasks_by_object.insert(object_address, state.clone());
+        SceneObjectComponentsTaskStart {
+            state,
+            should_spawn: true,
+        }
+    }
+
+    pub fn cancel(
+        &self,
+        object_address: &str,
+        task_id: Option<u64>,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneObjectComponentsTaskState> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key) {
+            return None;
+        }
+        {
+            let current = store.tasks_by_object.get(object_address)?;
+            if task_id.is_some_and(|value| value != current.task_id) {
+                return Some(current.clone());
+            }
+        }
+
+        let next_revision = bump_components_revision(&mut store);
+        let current = store.tasks_by_object.get_mut(object_address)?;
+        current.resource_revision = next_revision;
+        let has_retained = task_has_retained_components(current);
+        current.status = if has_retained {
+            RuntimeSceneObjectComponentsTaskStatus::Ready
+        } else {
+            RuntimeSceneObjectComponentsTaskStatus::Cancelled
+        };
+        current.is_stale = true;
+        current.updated_at = current_timestamp();
+        let freshness = if has_retained {
+            SceneResourceFreshness::Stale
+        } else {
+            SceneResourceFreshness::Empty
+        };
+        let last_successful_at = current.resource_state.last_successful_at.clone();
+        let error_message = current.error_message.clone();
+        patch_components_task_resource_state(
+            current,
+            freshness,
+            last_successful_at,
+            has_retained,
+            error_message,
+        );
+        Some(current.clone())
+    }
+
+    pub fn apply_components(
+        &self,
+        object_address: &str,
+        task_id: u64,
+        mutation_epoch: u64,
+        session_key: Option<&str>,
+        offset: usize,
+        components: Vec<RuntimeSceneComponentSummary>,
+        total_count: usize,
+        next_offset: Option<usize>,
+    ) -> Option<RuntimeSceneObjectComponentsTaskState> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key) {
+            return None;
+        }
+        {
+            let current = store.tasks_by_object.get(object_address)?;
+            if current.task_id != task_id
+                || current.mutation_epoch != mutation_epoch
+                || !same_session_key(current.session_key.as_deref(), session_key)
+            {
+                return None;
+            }
+        }
+
+        let next_revision = bump_components_revision(&mut store);
+        let current = store.tasks_by_object.get_mut(object_address)?;
+        current.resource_revision = next_revision;
+        if offset == 0 {
+            current.components = components;
+        } else {
+            current.components.extend(components);
+        }
+        current.total_count = total_count;
+        current.loaded_count = current.components.len();
+        current.next_offset = next_offset;
+        current.status = if next_offset.is_some() {
+            RuntimeSceneObjectComponentsTaskStatus::Loading
+        } else {
+            RuntimeSceneObjectComponentsTaskStatus::Ready
+        };
+        current.updated_at = current_timestamp();
+        let freshness = if next_offset.is_some() {
+            SceneResourceFreshness::Refreshing
+        } else {
+            SceneResourceFreshness::Fresh
+        };
+        let has_retained = task_has_retained_components(current);
+        let last_successful_at = current.resource_state.last_successful_at.clone();
+        patch_components_task_resource_state(
+            current,
+            freshness,
+            last_successful_at,
+            has_retained,
+            None,
+        );
+        Some(current.clone())
+    }
+
+    pub fn complete(
+        &self,
+        object_address: &str,
+        task_id: u64,
+        mutation_epoch: u64,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneObjectComponentsTaskState> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key) {
+            return None;
+        }
+        {
+            let current = store.tasks_by_object.get(object_address)?;
+            if current.task_id != task_id
+                || current.mutation_epoch != mutation_epoch
+                || !same_session_key(current.session_key.as_deref(), session_key)
+            {
+                return None;
+            }
+        }
+
+        let next_revision = bump_components_revision(&mut store);
+        let current = store.tasks_by_object.get_mut(object_address)?;
+        current.resource_revision = next_revision;
+        current.status = RuntimeSceneObjectComponentsTaskStatus::Ready;
+        current.next_offset = None;
+        current.updated_at = current_timestamp();
+        let has_retained = task_has_retained_components(current);
+        patch_components_task_resource_state(
+            current,
+            SceneResourceFreshness::Fresh,
+            Some(current.updated_at.clone()),
+            has_retained,
+            None,
+        );
+
+        let ready_state = current.clone();
+        store.cache.insert(
+            object_address.to_string(),
+            SceneObjectComponentsCacheEntry {
+                mutation_epoch,
+                components: ready_state.components.clone(),
+                total_count: ready_state.total_count.max(ready_state.components.len()),
+                last_successful_at: ready_state
+                    .resource_state
+                    .last_successful_at
+                    .clone()
+                    .unwrap_or_else(current_timestamp),
+            },
+        );
+        Some(ready_state)
+    }
+
+    pub fn fail(
+        &self,
+        object_address: &str,
+        task_id: u64,
+        mutation_epoch: u64,
+        session_key: Option<&str>,
+        error_message: String,
+    ) -> Option<RuntimeSceneObjectComponentsTaskState> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key) {
+            return None;
+        }
+        {
+            let current = store.tasks_by_object.get(object_address)?;
+            if current.task_id != task_id
+                || current.mutation_epoch != mutation_epoch
+                || !same_session_key(current.session_key.as_deref(), session_key)
+            {
+                return None;
+            }
+        }
+
+        let next_revision = bump_components_revision(&mut store);
+        let current = store.tasks_by_object.get_mut(object_address)?;
+        current.resource_revision = next_revision;
+        let has_retained = task_has_retained_components(current);
+        current.status = RuntimeSceneObjectComponentsTaskStatus::Error;
+        current.error_message = Some(error_message.clone());
+        current.updated_at = current_timestamp();
+        let freshness = if has_retained {
+            SceneResourceFreshness::Stale
+        } else {
+            SceneResourceFreshness::Error
+        };
+        let last_successful_at = current.resource_state.last_successful_at.clone();
+        patch_components_task_resource_state(
+            current,
+            freshness,
+            last_successful_at,
+            has_retained,
+            Some(error_message),
+        );
+        Some(current.clone())
+    }
+
+    pub fn invalidate_related(&self, impacted_addresses: &[String], session_key: Option<&str>) {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key) {
+            return;
+        }
+        store.mutation_epoch += 1;
+
+        if impacted_addresses.is_empty() {
+            store.cache.clear();
+        } else {
+            let impacted_refs = impacted_addresses
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            store.cache.retain(|object_address, _| !impacted_refs.contains(&object_address.as_str()));
+        }
+
+        let impacted_refs = impacted_addresses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let has_impacted_task = store.tasks_by_object.values().any(|task| {
+            impacted_addresses.is_empty() || impacted_refs.contains(&task.object_address.as_str())
+        });
+        let next_revision = has_impacted_task.then(|| bump_components_revision(&mut store));
+        for task in store.tasks_by_object.values_mut() {
+            if impacted_addresses.is_empty() || impacted_refs.contains(&task.object_address.as_str()) {
+                if let Some(next_revision) = next_revision {
+                    task.resource_revision = next_revision;
+                }
+                task.is_stale = true;
+                let has_retained = task_has_retained_components(task);
+                task.status = if has_retained {
+                    RuntimeSceneObjectComponentsTaskStatus::Ready
+                } else {
+                    RuntimeSceneObjectComponentsTaskStatus::Cancelled
+                };
+                task.updated_at = current_timestamp();
+                let freshness = if has_retained {
+                    SceneResourceFreshness::Stale
+                } else {
+                    SceneResourceFreshness::Empty
+                };
+                let last_successful_at = task.resource_state.last_successful_at.clone();
+                let error_message = task.error_message.clone();
+                patch_components_task_resource_state(
+                    task,
+                    freshness,
+                    last_successful_at,
+                    has_retained,
+                    error_message,
+                );
+            }
+        }
+    }
+
+    pub fn reset(&self) {
+        *self.store.lock() = SceneObjectComponentsStore::default();
     }
 }
 
 impl SceneMousePickerState {
+    pub fn reset(&self) {
+        let mut store = self.store.lock();
+        if let Some(cancel_flag) = store.cancel_flag.take() {
+            cancel_flag.store(true, Ordering::Relaxed);
+        }
+        *store = SceneMousePickerStore::default();
+    }
+
     pub fn current_for(
         &self,
         session_key: Option<&str>,
@@ -1342,7 +1671,6 @@ impl SceneMousePickerState {
             } else {
                 set_scene_mouse_picker_idle(&mut store.snapshot, None);
             }
-            store.snapshot.last_pick = None;
         }
         bump_scene_mouse_picker_revision(&mut store.snapshot);
         store.snapshot.clone()
@@ -1398,7 +1726,7 @@ impl SceneMousePickerState {
             cancel_flag.store(true, Ordering::Relaxed);
         }
         store.active_worker_id = None;
-        set_scene_mouse_picker_idle(&mut store.snapshot, None);
+        set_scene_mouse_picker_cancelled(&mut store.snapshot, "Picker stopped.");
         bump_scene_mouse_picker_revision(&mut store.snapshot);
         store.snapshot.clone()
     }
@@ -1418,6 +1746,21 @@ impl SceneMousePickerState {
         store.snapshot.target_window.clone()
     }
 
+    pub fn current_candidate(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+    ) -> Option<RuntimeSceneMouseTargetHit> {
+        let store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        store.snapshot.current_candidate.clone()
+    }
+
     pub fn apply_observation(
         &self,
         worker_id: u64,
@@ -1425,7 +1768,7 @@ impl SceneMousePickerState {
         target_window: ProcessWindowCandidate,
         cursor_screen_position: RuntimeScreenPoint,
         cursor_client_position: Option<RuntimeScreenPoint>,
-        hover_hit: Option<RuntimeSceneMouseTargetHit>,
+        current_candidate: Option<RuntimeSceneMouseTargetHit>,
         status_detail: String,
     ) -> Option<RuntimeSceneMousePickerSnapshot> {
         let mut store = self.store.lock();
@@ -1440,10 +1783,10 @@ impl SceneMousePickerState {
         store.snapshot.cursor_screen_position = Some(cursor_screen_position);
         store.snapshot.cursor_inside_client = cursor_client_position.is_some();
         store.snapshot.cursor_client_position = cursor_client_position;
-        store.snapshot.hover_hit = hover_hit;
+        store.snapshot.current_candidate = current_candidate;
         store.snapshot.is_running = true;
         store.snapshot.status = if store.snapshot.cursor_inside_client {
-            RuntimeSceneMousePickerStatus::Tracking
+            RuntimeSceneMousePickerStatus::TrackingCandidate
         } else {
             RuntimeSceneMousePickerStatus::Armed
         };
@@ -1453,7 +1796,7 @@ impl SceneMousePickerState {
         Some(store.snapshot.clone())
     }
 
-    pub fn record_pick(
+    pub fn commit_pick(
         &self,
         worker_id: u64,
         session_key: Option<&str>,
@@ -1467,12 +1810,48 @@ impl SceneMousePickerState {
             return None;
         }
 
-        store.snapshot.last_pick = picked_hit.clone();
-        if let Some(hit) = picked_hit {
+        if let Some(mut hit) = picked_hit {
+            hit.observed_at = current_timestamp();
+            store.snapshot.current_candidate = Some(hit.clone());
+            store.snapshot.committed_pick = Some(hit.clone());
             push_recent_scene_mouse_pick(&mut store.snapshot.recent_picks, hit);
+            if let Some(cancel_flag) = store.cancel_flag.take() {
+                cancel_flag.store(true, Ordering::Relaxed);
+            }
+            store.active_worker_id = None;
+            store.snapshot.is_running = false;
+            store.snapshot.status = RuntimeSceneMousePickerStatus::Committed;
+            store.snapshot.status_detail = Some(status_detail);
+            store.snapshot.error_message = None;
+        } else {
+            if let Some(cancel_flag) = store.cancel_flag.take() {
+                cancel_flag.store(true, Ordering::Relaxed);
+            }
+            store.active_worker_id = None;
+            set_scene_mouse_picker_cancelled(&mut store.snapshot, status_detail);
         }
-        store.snapshot.status_detail = Some(status_detail);
-        store.snapshot.error_message = None;
+        bump_scene_mouse_picker_revision(&mut store.snapshot);
+        Some(store.snapshot.clone())
+    }
+
+    pub fn cancel(
+        &self,
+        worker_id: u64,
+        session_key: Option<&str>,
+        status_detail: String,
+    ) -> Option<RuntimeSceneMousePickerSnapshot> {
+        let mut store = self.store.lock();
+        if !same_session_key(store.active_session_key.as_deref(), session_key)
+            || store.active_worker_id != Some(worker_id)
+        {
+            return None;
+        }
+
+        if let Some(cancel_flag) = store.cancel_flag.take() {
+            cancel_flag.store(true, Ordering::Relaxed);
+        }
+        store.active_worker_id = None;
+        set_scene_mouse_picker_cancelled(&mut store.snapshot, status_detail);
         bump_scene_mouse_picker_revision(&mut store.snapshot);
         Some(store.snapshot.clone())
     }

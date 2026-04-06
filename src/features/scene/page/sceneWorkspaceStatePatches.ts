@@ -2,8 +2,9 @@ import type {
   RuntimeSceneComponentSummary,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneObjectInspectorSnapshot,
-  RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneResourceState,
   RuntimeSceneTransformSnapshot,
   SceneWorkspaceState,
@@ -89,7 +90,11 @@ export function isTerminalChildrenTaskStatus(status: RuntimeSceneObjectChildrenT
   return status === 'ready' || status === 'error' || status === 'cancelled';
 }
 
-export function isTerminalInspectorTaskStatus(status: RuntimeSceneObjectInspectorTaskState['status']) {
+export function isTerminalHeaderTaskStatus(status: RuntimeSceneObjectHeaderTaskState['status']) {
+  return status === 'ready' || status === 'error' || status === 'cancelled';
+}
+
+export function isTerminalComponentsTaskStatus(status: RuntimeSceneObjectComponentsTaskState['status']) {
   return status === 'ready' || status === 'error' || status === 'cancelled';
 }
 
@@ -128,22 +133,26 @@ export function sameComponentOrder(left: RuntimeSceneComponentSummary[], right: 
   return left.every((component, index) => component.componentAddress === right[index]?.componentAddress);
 }
 
-export function buildInspectorSnapshot(taskState: RuntimeSceneObjectInspectorTaskState): RuntimeSceneObjectInspectorSnapshot | null {
-  if (!taskState.header) {
+export function buildInspectorSnapshot(
+  headerTaskState: RuntimeSceneObjectHeaderTaskState | null | undefined,
+  children: RuntimeSceneNodeSummary[],
+  components: RuntimeSceneComponentSummary[],
+): RuntimeSceneObjectInspectorSnapshot | null {
+  if (!headerTaskState?.header) {
     return null;
   }
 
   return {
-    generatedAt: taskState.header.generatedAt,
-    sceneHandle: taskState.header.sceneHandle,
-    sceneName: taskState.header.sceneName,
-    sceneKind: taskState.header.sceneKind,
-    object: taskState.header.object,
-    parent: taskState.header.parent,
-    hierarchyPath: taskState.header.hierarchyPath,
-    transform: taskState.header.transform,
-    children: taskState.children,
-    components: taskState.components,
+    generatedAt: headerTaskState.header.generatedAt,
+    sceneHandle: headerTaskState.header.sceneHandle,
+    sceneName: headerTaskState.header.sceneName,
+    sceneKind: headerTaskState.header.sceneKind,
+    object: headerTaskState.header.object,
+    parent: headerTaskState.header.parent,
+    hierarchyPath: headerTaskState.header.hierarchyPath,
+    transform: headerTaskState.header.transform,
+    children,
+    components,
   };
 }
 

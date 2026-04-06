@@ -19,8 +19,8 @@ const EMPTY_SCENE_MOUSE_PICKER_STATE: RuntimeSceneMousePickerSnapshot = {
   cursorScreenPosition: null,
   cursorClientPosition: null,
   cursorInsideClient: false,
-  hoverHit: null,
-  lastPick: null,
+  currentCandidate: null,
+  committedPick: null,
   recentPicks: [],
   lastUpdatedAt: null,
   errorMessage: null,
@@ -68,6 +68,7 @@ export function useSceneMousePickerState({
   const currentSessionKeyRef = useRef<string | null>(currentSessionKey);
   const handledPickKeyRef = useRef<string | null>(null);
   const autoTargetedSessionKeyRef = useRef<string | null>(null);
+  const latestPickerRevisionRef = useRef(0);
 
   useEffect(() => {
     currentSessionKeyRef.current = currentSessionKey;
@@ -76,6 +77,7 @@ export function useSceneMousePickerState({
   useEffect(() => {
     handledPickKeyRef.current = null;
     autoTargetedSessionKeyRef.current = null;
+    latestPickerRevisionRef.current = 0;
     setScenePickerWindows([]);
     setScenePickerWindowsError(null);
     setSceneMousePickerState({
@@ -93,6 +95,11 @@ export function useSceneMousePickerState({
       return;
     }
 
+    if (nextState.resourceRevision < latestPickerRevisionRef.current) {
+      return;
+    }
+
+    latestPickerRevisionRef.current = nextState.resourceRevision;
     setSceneMousePickerState(nextState);
   }, [matchesCurrentSceneSession]);
 
@@ -229,19 +236,19 @@ export function useSceneMousePickerState({
   }, [active, currentSessionKey, sceneMousePickerState.targetWindow, scenePickerWindows, scenePickerWindowsLoading, setSceneMousePickerTarget]);
 
   useEffect(() => {
-    const lastPick = sceneMousePickerState.lastPick;
-    if (!lastPick) {
+    const committedPick = sceneMousePickerState.committedPick;
+    if (!committedPick) {
       return;
     }
 
-    const pickKey = `${lastPick.objectAddress}:${lastPick.observedAt}`;
+    const pickKey = `${committedPick.objectAddress}:${committedPick.observedAt}`;
     if (handledPickKeyRef.current === pickKey) {
       return;
     }
 
     handledPickKeyRef.current = pickKey;
-    onPickHit(lastPick);
-  }, [onPickHit, sceneMousePickerState.lastPick]);
+    onPickHit(committedPick);
+  }, [onPickHit, sceneMousePickerState.committedPick]);
 
   return {
     scenePickerWindows,

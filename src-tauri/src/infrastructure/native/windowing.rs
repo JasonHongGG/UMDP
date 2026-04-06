@@ -3,7 +3,7 @@ use crate::domain::analysis_models::{
 };
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE, VK_LBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetClientRect, GetCursorPos, GetForegroundWindow,
     GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
@@ -74,6 +74,10 @@ pub fn get_cursor_screen_position() -> Result<RuntimeScreenPoint, String> {
 
 pub fn is_left_mouse_button_down() -> bool {
     unsafe { (GetAsyncKeyState(VK_LBUTTON.0.into()) as u16 & 0x8000) != 0 }
+}
+
+pub fn is_escape_key_down() -> bool {
+    unsafe { (GetAsyncKeyState(VK_ESCAPE.0.into()) as u16 & 0x8000) != 0 }
 }
 
 unsafe extern "system" fn enum_window_for_process(hwnd: HWND, lparam: LPARAM) -> BOOL {

@@ -163,8 +163,6 @@ function getWorkspaceLifecycleLabel(state: WorkspaceLifecycleState) {
       return 'Ready';
     case 'runtime-error':
       return 'Runtime Error';
-    case 'recovering':
-      return 'Recovering';
     default:
       return 'Unknown';
   }
@@ -177,7 +175,6 @@ function getWorkspaceLifecycleTone(state: WorkspaceLifecycleState): WorkspaceSig
     case 'snapshot-loading':
     case 'attaching':
     case 'selecting-process':
-    case 'recovering':
       return 'loading';
     case 'runtime-error':
       return 'error';
@@ -195,8 +192,6 @@ function formatRuntimeSessionLabel(workspace: WorkspaceLifecycleState) {
       return 'Runtime Ready';
     case 'starting':
       return 'Runtime Starting';
-    case 'recovering':
-      return 'Runtime Recovering';
     case 'degraded':
       return 'Runtime Degraded';
     case 'error':

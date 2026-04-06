@@ -338,7 +338,8 @@ impl Default for SceneResourceFreshness {
 pub enum RuntimeSceneResourceKind {
     Catalog,
     Children,
-    Inspector,
+    SceneObjectHeader,
+    SceneObjectComponents,
 }
 
 impl Default for RuntimeSceneResourceKind {
@@ -552,18 +553,16 @@ pub struct RuntimeSceneObjectInspectorHeaderSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum RuntimeSceneInspectorTaskStatus {
+pub enum RuntimeSceneObjectHeaderTaskStatus {
     Idle,
     Queued,
-    HeaderLoading,
-    ChildrenLoading,
-    ComponentsLoading,
+    Loading,
     Ready,
     Error,
     Cancelled,
 }
 
-impl Default for RuntimeSceneInspectorTaskStatus {
+impl Default for RuntimeSceneObjectHeaderTaskStatus {
     fn default() -> Self {
         Self::Idle
     }
@@ -571,24 +570,53 @@ impl Default for RuntimeSceneInspectorTaskStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeSceneObjectInspectorTaskState {
+pub struct RuntimeSceneObjectHeaderTaskState {
     pub task_id: u64,
     pub resource_revision: u64,
     pub session_key: Option<String>,
     pub object_address: String,
-    pub status: RuntimeSceneInspectorTaskStatus,
+    pub status: RuntimeSceneObjectHeaderTaskStatus,
     pub mutation_epoch: u64,
     pub started_at: String,
     pub updated_at: String,
     pub header: Option<RuntimeSceneObjectInspectorHeaderSnapshot>,
-    pub children: Vec<RuntimeSceneNodeSummary>,
-    pub children_total_count: usize,
-    pub children_loaded_count: usize,
-    pub children_next_offset: Option<usize>,
+    pub error_message: Option<String>,
+    pub is_stale: bool,
+    pub resource_state: RuntimeSceneResourceState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeSceneObjectComponentsTaskStatus {
+    Idle,
+    Queued,
+    Loading,
+    Ready,
+    Error,
+    Cancelled,
+}
+
+impl Default for RuntimeSceneObjectComponentsTaskStatus {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneObjectComponentsTaskState {
+    pub task_id: u64,
+    pub resource_revision: u64,
+    pub session_key: Option<String>,
+    pub object_address: String,
+    pub status: RuntimeSceneObjectComponentsTaskStatus,
+    pub mutation_epoch: u64,
+    pub started_at: String,
+    pub updated_at: String,
     pub components: Vec<RuntimeSceneComponentSummary>,
-    pub components_total_count: usize,
-    pub components_loaded_count: usize,
-    pub components_next_offset: Option<usize>,
+    pub total_count: usize,
+    pub loaded_count: usize,
+    pub next_offset: Option<usize>,
     pub error_message: Option<String>,
     pub is_stale: bool,
     pub resource_state: RuntimeSceneResourceState,
@@ -596,21 +624,6 @@ pub struct RuntimeSceneObjectInspectorTaskState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeSceneObjectInspectorSnapshot {
-    pub generated_at: String,
-    pub scene_handle: Option<i32>,
-    pub scene_name: Option<String>,
-    pub scene_kind: Option<RuntimeSceneKind>,
-    pub object: RuntimeSceneNodeSummary,
-    pub parent: Option<RuntimeSceneNodeSummary>,
-    pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
-    pub children: Vec<RuntimeSceneNodeSummary>,
-    pub components: Vec<RuntimeSceneComponentSummary>,
-    pub transform: Option<RuntimeSceneTransformSnapshot>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
 pub enum RuntimeSceneMutationOperation {
     CreateChild,
     CreateRoot,
@@ -662,7 +675,9 @@ pub struct RuntimeSceneMutationResult {
 pub enum RuntimeSceneMousePickerStatus {
     Idle,
     Armed,
-    Tracking,
+    TrackingCandidate,
+    Committed,
+    Cancelled,
     Error,
 }
 
@@ -700,8 +715,8 @@ pub struct RuntimeSceneMousePickerSnapshot {
     pub cursor_screen_position: Option<RuntimeScreenPoint>,
     pub cursor_client_position: Option<RuntimeScreenPoint>,
     pub cursor_inside_client: bool,
-    pub hover_hit: Option<RuntimeSceneMouseTargetHit>,
-    pub last_pick: Option<RuntimeSceneMouseTargetHit>,
+    pub current_candidate: Option<RuntimeSceneMouseTargetHit>,
+    pub committed_pick: Option<RuntimeSceneMouseTargetHit>,
     pub recent_picks: Vec<RuntimeSceneMouseTargetHit>,
     pub last_updated_at: Option<String>,
     pub error_message: Option<String>,

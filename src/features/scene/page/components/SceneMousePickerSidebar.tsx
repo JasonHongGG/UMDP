@@ -22,10 +22,14 @@ interface SceneMousePickerSidebarProps {
 
 function statusClasses(status: RuntimeSceneMousePickerSnapshot['status']) {
   switch (status) {
-    case 'tracking':
+    case 'tracking-candidate':
       return 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300';
+    case 'committed':
+      return 'border-cyan-500/30 bg-cyan-500/15 text-cyan-300';
     case 'armed':
       return 'border-amber-500/30 bg-amber-500/15 text-amber-300';
+    case 'cancelled':
+      return 'border-slate-500/30 bg-slate-500/15 text-slate-300';
     case 'error':
       return 'border-rose-500/30 bg-rose-500/15 text-rose-300';
     default:
@@ -42,7 +46,16 @@ function formatPoint(point: RuntimeSceneMousePickerSnapshot['cursorClientPositio
 }
 
 function formatHitPath(hit: RuntimeSceneMouseTargetHit) {
-  return hit.hierarchyPath.map((entry) => entry.name).join(' / ');
+  const hierarchyPath = hit.hierarchyPath.map((entry) => entry.name).filter(Boolean).join(' / ');
+  if (hierarchyPath.length > 0) {
+    return hierarchyPath;
+  }
+
+  if (hit.sceneName) {
+    return `${hit.sceneName} / ${hit.objectName}`;
+  }
+
+  return 'Live hierarchy preview unavailable';
 }
 
 function formatWindowSubline(window: ProcessWindowCandidate) {
@@ -63,8 +76,8 @@ export function SceneMousePickerSidebar({
   openPickedHit,
 }: SceneMousePickerSidebarProps) {
   const selectedWindowHandle = pickerState.targetWindow?.windowHandle ?? null;
-  const hoverHit = pickerState.hoverHit;
-  const lastPick = pickerState.lastPick;
+  const hoverHit = pickerState.currentCandidate;
+  const lastPick = pickerState.committedPick;
 
   return (
     <div className={`flex flex-col bg-[#070a0f]/95 backdrop-blur-xl relative z-20 shrink-0 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] overflow-hidden border-r border-[#1c2838] shadow-[10px_0_30px_rgba(0,0,0,0.5)] ${isOpen ? 'w-[360px]' : 'w-0 border-r-0 shadow-none opacity-0'}`}>
@@ -94,7 +107,10 @@ export function SceneMousePickerSidebar({
         <div className="rounded-xl border border-[#1c2838] bg-[#05080c]/75 p-3 space-y-2">
           <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Live Status</div>
           <div className="text-sm font-semibold text-slate-100 leading-tight">
-            {pickerState.statusDetail ?? 'Select a target window and arm the picker.'}
+            {pickerState.statusDetail ?? 'Choose a target window, arm the picker, hover a collider-backed world object, then click once to open it.'}
+          </div>
+          <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/8 px-3 py-2 text-[11px] leading-relaxed text-cyan-100/80">
+            Live hover is intentionally lightweight. Full inspector details load only after a successful click.
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 font-mono">
             <div className="rounded-lg bg-[#0a0f16]/80 border border-[#1c2838] px-2.5 py-2">
@@ -142,7 +158,7 @@ export function SceneMousePickerSidebar({
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Target Window</div>
-              <div className="text-xs text-slate-400 mt-1">Choose the game window whose client area should receive mouse picking.</div>
+              <div className="text-xs text-slate-400 mt-1">Choose the game window whose client area should receive mouse picking. Keep it visible and use the foreground client area for best results.</div>
             </div>
           </div>
 
@@ -192,6 +208,9 @@ export function SceneMousePickerSidebar({
 
         <section className="rounded-xl border border-[#1c2838] bg-[#05080c]/75 p-3 space-y-3">
           <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-slate-500">Hover Preview</div>
+          <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+            V1 only supports collider-backed world objects that <span className="font-mono text-slate-300">Physics.Raycast</span> can hit.
+          </div>
           {hoverHit ? (
             <div className="space-y-2">
               <button
@@ -208,7 +227,7 @@ export function SceneMousePickerSidebar({
             </div>
           ) : (
             <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-4 text-xs text-slate-500 leading-relaxed">
-              Move the cursor over the selected game window to preview the world object under the pointer.
+              Choose a target window, arm the picker, move the cursor over a collider-backed world object, then click once to open it.
             </div>
           )}
 
@@ -240,7 +259,7 @@ export function SceneMousePickerSidebar({
             </div>
           ) : (
             <div className="rounded-lg border border-[#1c2838] bg-[#0a0f16]/60 px-3 py-4 text-xs text-slate-500 leading-relaxed">
-              Successful picks will stay here so you can reopen them without clicking the game window again.
+              Successful picks stay here for the current runtime session, so you can reopen them without clicking the game window again.
             </div>
           )}
         </section>

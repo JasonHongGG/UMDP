@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { GraphDocumentEnvelope } from '@/domain/studio/contracts';
 import type {
   RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectInspectorTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SystemContractVersions } from './workspace';
@@ -28,8 +29,8 @@ describe('shared contract fixtures', () => {
     const fixture = readFixture<SystemContractVersions>('workspace-contract-versions.json');
 
     expect(fixture).toEqual({
-      tauriCommandVersion: 2,
-      analysisSchemaVersion: 3,
+      tauriCommandVersion: 3,
+      analysisSchemaVersion: 4,
       workflowSchemaVersion: 1,
     });
   });
@@ -38,7 +39,8 @@ describe('shared contract fixtures', () => {
     const fixture = readFixture<{
       workspace: SceneWorkspaceState;
       childrenTask: RuntimeSceneObjectChildrenTaskState;
-      inspectorTask: RuntimeSceneObjectInspectorTaskState;
+      headerTask: RuntimeSceneObjectHeaderTaskState;
+      componentsTask: RuntimeSceneObjectComponentsTaskState;
     }>('scene-resource-contract.json');
 
     expect(fixture.workspace.resourceState.resourceKind).toBe('catalog');
@@ -47,7 +49,9 @@ describe('shared contract fixtures', () => {
     expect(fixture.childrenTask.resourceState.resourceKind).toBe('children');
     expect(fixture.childrenTask.resourceState.freshness).toBe('refreshing');
     expect(fixture.childrenTask.resourceState.isRetainingSnapshot).toBe(true);
-    expect(fixture.inspectorTask.resourceState.resourceKind).toBe('inspector');
-    expect(fixture.inspectorTask.resourceState.lastSuccessfulAt).toBe('2026-04-04T09:59:55.000Z');
+    expect(fixture.headerTask.resourceState.resourceKind).toBe('scene-object-header');
+    expect(fixture.headerTask.resourceState.freshness).toBe('fresh');
+    expect(fixture.componentsTask.resourceState.resourceKind).toBe('scene-object-components');
+    expect(fixture.componentsTask.resourceState.lastSuccessfulAt).toBe('2026-04-04T09:59:55.000Z');
   });
 });

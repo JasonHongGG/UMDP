@@ -23,9 +23,9 @@ describe('workspaceLifecycle shell helpers', () => {
   });
 
   it('maps lifecycle states to stable labels and tones', () => {
-    expect(getWorkspaceLifecycleLabel({ ...EMPTY_WORKSPACE_LIFECYCLE, status: 'recovering' })).toBe('Recovering');
     expect(getWorkspaceLifecycleLabel({ ...EMPTY_WORKSPACE_LIFECYCLE, status: 'runtime-error' })).toBe('Runtime Error');
     expect(getWorkspaceLifecycleTone({ ...EMPTY_WORKSPACE_LIFECYCLE, status: 'ready' })).toBe('ready');
+    expect(getWorkspaceLifecycleTone({ ...EMPTY_WORKSPACE_LIFECYCLE, status: 'runtime-error' })).toBe('error');
     expect(getWorkspaceLifecycleTone({ ...EMPTY_WORKSPACE_LIFECYCLE, status: 'attached-without-snapshot' })).toBe('warning');
   });
 });

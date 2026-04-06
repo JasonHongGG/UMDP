@@ -3,8 +3,9 @@ import type {
   RuntimeSceneMutationOperation,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneObjectInspectorSnapshot,
-  RuntimeSceneObjectInspectorTaskState,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { WorkspaceTaskSnapshot } from '@/shared/contracts';
@@ -14,8 +15,9 @@ import {
   adjustNodeChildCountInList,
   buildInspectorSnapshot,
   EMPTY_SCENE_WORKSPACE_STATE,
+  isTerminalComponentsTaskStatus,
   isTerminalChildrenTaskStatus,
-  isTerminalInspectorTaskStatus,
+  isTerminalHeaderTaskStatus,
   mergeInspectorCaches,
   patchChildrenWithSummaries,
   patchChildrenWithSummary,
@@ -24,6 +26,7 @@ import {
   patchInspectorTransform,
   patchRootsWithSummaries,
   patchRootsWithSummary,
+  sameComponentOrder,
   sameNodeOrder,
 } from './sceneWorkspaceStatePatches';
 import {
@@ -65,9 +68,12 @@ type SceneWorkspaceStoreState = {
   loadingChildrenByParent: Record<string, boolean>;
   childErrorByParent: Record<string, string | null>;
   inspectorsByAddress: Record<string, RuntimeSceneObjectInspectorSnapshot>;
-  inspectorTaskByAddress: Record<string, RuntimeSceneObjectInspectorTaskState>;
-  inspectorLoadingByAddress: Record<string, boolean>;
-  inspectorErrorByAddress: Record<string, string | null>;
+  headerTaskByAddress: Record<string, RuntimeSceneObjectHeaderTaskState>;
+  headerLoadingByAddress: Record<string, boolean>;
+  headerErrorByAddress: Record<string, string | null>;
+  componentsTaskByAddress: Record<string, RuntimeSceneObjectComponentsTaskState>;
+  componentsLoadingByAddress: Record<string, boolean>;
+  componentsErrorByAddress: Record<string, string | null>;
   sceneMutationState: SceneMutationState;
   sceneTabs: SceneInspectorTab[];
   activeSceneTabIndex: number;
@@ -85,14 +91,18 @@ type SceneWorkspaceStoreAction =
   | { type: 'setLoadingChildrenByParent'; updater: SceneStateUpdater<Record<string, boolean>> }
   | { type: 'setChildErrorByParent'; updater: SceneStateUpdater<Record<string, string | null>> }
   | { type: 'setInspectorsByAddress'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectInspectorSnapshot>> }
-  | { type: 'setInspectorTaskByAddress'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectInspectorTaskState>> }
-  | { type: 'setInspectorLoadingByAddress'; updater: SceneStateUpdater<Record<string, boolean>> }
-  | { type: 'setInspectorErrorByAddress'; updater: SceneStateUpdater<Record<string, string | null>> }
+  | { type: 'setHeaderTaskByAddress'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectHeaderTaskState>> }
+  | { type: 'setHeaderLoadingByAddress'; updater: SceneStateUpdater<Record<string, boolean>> }
+  | { type: 'setHeaderErrorByAddress'; updater: SceneStateUpdater<Record<string, string | null>> }
+  | { type: 'setComponentsTaskByAddress'; updater: SceneStateUpdater<Record<string, RuntimeSceneObjectComponentsTaskState>> }
+  | { type: 'setComponentsLoadingByAddress'; updater: SceneStateUpdater<Record<string, boolean>> }
+  | { type: 'setComponentsErrorByAddress'; updater: SceneStateUpdater<Record<string, string | null>> }
   | { type: 'setSceneMutationState'; updater: SceneStateUpdater<SceneMutationState> }
   | { type: 'applySummaryPatch'; summary: RuntimeSceneNodeSummary }
   | { type: 'applySummaryBatch'; summaries: RuntimeSceneNodeSummary[] }
   | { type: 'applySceneChildrenTaskState'; taskState: RuntimeSceneObjectChildrenTaskState }
-  | { type: 'applyInspectorTaskState'; taskState: RuntimeSceneObjectInspectorTaskState }
+  | { type: 'applyHeaderTaskState'; taskState: RuntimeSceneObjectHeaderTaskState }
+  | { type: 'applyComponentsTaskState'; taskState: RuntimeSceneObjectComponentsTaskState }
   | { type: 'bumpParentChildCount'; objectAddress: string; delta: number }
   | { type: 'setSceneTabs'; updater: SceneStateUpdater<SceneInspectorTab[]> }
   | { type: 'setActiveSceneTabIndex'; updater: SceneStateUpdater<number> };
@@ -133,9 +143,12 @@ const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
   loadingChildrenByParent: {},
   childErrorByParent: {},
   inspectorsByAddress: {},
-  inspectorTaskByAddress: {},
-  inspectorLoadingByAddress: {},
-  inspectorErrorByAddress: {},
+  headerTaskByAddress: {},
+  headerLoadingByAddress: {},
+  headerErrorByAddress: {},
+  componentsTaskByAddress: {},
+  componentsLoadingByAddress: {},
+  componentsErrorByAddress: {},
   sceneMutationState: EMPTY_MUTATION_STATE,
   sceneTabs: [],
   activeSceneTabIndex: -1,
@@ -262,23 +275,41 @@ function sceneWorkspaceStoreReducer(
         'inspectorsByAddress',
         resolveSceneStateUpdater(state.inspectorsByAddress, action.updater),
       );
-    case 'setInspectorTaskByAddress':
+    case 'setHeaderTaskByAddress':
       return replaceSceneStoreValue(
         state,
-        'inspectorTaskByAddress',
-        resolveSceneStateUpdater(state.inspectorTaskByAddress, action.updater),
+        'headerTaskByAddress',
+        resolveSceneStateUpdater(state.headerTaskByAddress, action.updater),
       );
-    case 'setInspectorLoadingByAddress':
+    case 'setHeaderLoadingByAddress':
       return replaceSceneStoreValue(
         state,
-        'inspectorLoadingByAddress',
-        resolveSceneStateUpdater(state.inspectorLoadingByAddress, action.updater),
+        'headerLoadingByAddress',
+        resolveSceneStateUpdater(state.headerLoadingByAddress, action.updater),
       );
-    case 'setInspectorErrorByAddress':
+    case 'setHeaderErrorByAddress':
       return replaceSceneStoreValue(
         state,
-        'inspectorErrorByAddress',
-        resolveSceneStateUpdater(state.inspectorErrorByAddress, action.updater),
+        'headerErrorByAddress',
+        resolveSceneStateUpdater(state.headerErrorByAddress, action.updater),
+      );
+    case 'setComponentsTaskByAddress':
+      return replaceSceneStoreValue(
+        state,
+        'componentsTaskByAddress',
+        resolveSceneStateUpdater(state.componentsTaskByAddress, action.updater),
+      );
+    case 'setComponentsLoadingByAddress':
+      return replaceSceneStoreValue(
+        state,
+        'componentsLoadingByAddress',
+        resolveSceneStateUpdater(state.componentsLoadingByAddress, action.updater),
+      );
+    case 'setComponentsErrorByAddress':
+      return replaceSceneStoreValue(
+        state,
+        'componentsErrorByAddress',
+        resolveSceneStateUpdater(state.componentsErrorByAddress, action.updater),
       );
     case 'setSceneMutationState':
       return replaceSceneStoreValue(
@@ -341,6 +372,16 @@ function sceneWorkspaceStoreReducer(
             ...patched.childrenByParent,
             [taskState.parentObjectAddress]: taskState.children,
           };
+      const cachedInspector = patched.inspectorsByAddress[taskState.parentObjectAddress];
+      const nextInspectorsByAddress = cachedInspector == null || sameNodeOrder(cachedInspector.children, taskState.children)
+        ? patched.inspectorsByAddress
+        : {
+            ...patched.inspectorsByAddress,
+            [taskState.parentObjectAddress]: {
+              ...cachedInspector,
+              children: taskState.children,
+            },
+          };
 
       return {
         ...state,
@@ -358,25 +399,33 @@ function sceneWorkspaceStoreReducer(
           ...state.childErrorByParent,
           [taskState.parentObjectAddress]: taskState.errorMessage,
         },
-        inspectorsByAddress: patched.inspectorsByAddress,
+        inspectorsByAddress: nextInspectorsByAddress,
       };
     }
-    case 'applyInspectorTaskState': {
+    case 'applyHeaderTaskState': {
       const { taskState } = action;
-      const nextSnapshot = buildInspectorSnapshot(taskState);
+      const nextSnapshot = buildInspectorSnapshot(
+        taskState,
+        state.childrenByParent[taskState.objectAddress]
+          ?? state.inspectorsByAddress[taskState.objectAddress]?.children
+          ?? [],
+        state.componentsTaskByAddress[taskState.objectAddress]?.components
+          ?? state.inspectorsByAddress[taskState.objectAddress]?.components
+          ?? [],
+      );
       if (!nextSnapshot) {
         return {
           ...state,
-          inspectorTaskByAddress: {
-            ...state.inspectorTaskByAddress,
+          headerTaskByAddress: {
+            ...state.headerTaskByAddress,
             [taskState.objectAddress]: taskState,
           },
-          inspectorLoadingByAddress: {
-            ...state.inspectorLoadingByAddress,
-            [taskState.objectAddress]: !isTerminalInspectorTaskStatus(taskState.status),
+          headerLoadingByAddress: {
+            ...state.headerLoadingByAddress,
+            [taskState.objectAddress]: !isTerminalHeaderTaskStatus(taskState.status),
           },
-          inspectorErrorByAddress: {
-            ...state.inspectorErrorByAddress,
+          headerErrorByAddress: {
+            ...state.headerErrorByAddress,
             [taskState.objectAddress]: taskState.errorMessage,
           },
         };
@@ -408,29 +457,56 @@ function sceneWorkspaceStoreReducer(
       nextChildrenByParent = patchedObject.childrenByParent;
       nextInspectorsByAddress = mergeInspectorCaches(patchedObject.inspectorsByAddress, nextSnapshot);
 
-      const existing = nextChildrenByParent[taskState.objectAddress] ?? [];
-      if (!sameNodeOrder(existing, taskState.children)) {
-        nextChildrenByParent = {
-          ...nextChildrenByParent,
-          [taskState.objectAddress]: taskState.children,
-        };
-      }
-
       return {
         ...state,
         sceneWorkspace: nextSceneWorkspace,
         childrenByParent: nextChildrenByParent,
         inspectorsByAddress: nextInspectorsByAddress,
-        inspectorTaskByAddress: {
-          ...state.inspectorTaskByAddress,
+        headerTaskByAddress: {
+          ...state.headerTaskByAddress,
           [taskState.objectAddress]: taskState,
         },
-        inspectorLoadingByAddress: {
-          ...state.inspectorLoadingByAddress,
-          [taskState.objectAddress]: !isTerminalInspectorTaskStatus(taskState.status),
+        headerLoadingByAddress: {
+          ...state.headerLoadingByAddress,
+          [taskState.objectAddress]: !isTerminalHeaderTaskStatus(taskState.status),
         },
-        inspectorErrorByAddress: {
-          ...state.inspectorErrorByAddress,
+        headerErrorByAddress: {
+          ...state.headerErrorByAddress,
+          [taskState.objectAddress]: taskState.errorMessage,
+        },
+      };
+    }
+    case 'applyComponentsTaskState': {
+      const { taskState } = action;
+      const currentInspector = state.inspectorsByAddress[taskState.objectAddress] ?? null;
+      const nextSnapshot = currentInspector
+        ? (sameComponentOrder(currentInspector.components, taskState.components)
+          ? currentInspector
+          : {
+              ...currentInspector,
+              components: taskState.components,
+            })
+        : buildInspectorSnapshot(
+            state.headerTaskByAddress[taskState.objectAddress],
+            state.childrenByParent[taskState.objectAddress] ?? [],
+            taskState.components,
+          );
+
+      return {
+        ...state,
+        inspectorsByAddress: nextSnapshot
+          ? mergeInspectorCaches(state.inspectorsByAddress, nextSnapshot)
+          : state.inspectorsByAddress,
+        componentsTaskByAddress: {
+          ...state.componentsTaskByAddress,
+          [taskState.objectAddress]: taskState,
+        },
+        componentsLoadingByAddress: {
+          ...state.componentsLoadingByAddress,
+          [taskState.objectAddress]: !isTerminalComponentsTaskStatus(taskState.status),
+        },
+        componentsErrorByAddress: {
+          ...state.componentsErrorByAddress,
           [taskState.objectAddress]: taskState.errorMessage,
         },
       };
@@ -485,50 +561,34 @@ export function useSceneWorkspaceStore() {
     loadingChildrenByParent,
     childErrorByParent,
     inspectorsByAddress,
-    inspectorTaskByAddress,
-    inspectorLoadingByAddress,
-    inspectorErrorByAddress,
+    headerTaskByAddress,
+    headerLoadingByAddress,
+    headerErrorByAddress,
+    componentsTaskByAddress,
+    componentsLoadingByAddress,
+    componentsErrorByAddress,
     sceneMutationState,
     sceneTabs,
     activeSceneTabIndex,
   } = state;
 
   const processKeyRef = useRef<string | null>(null);
-  const childrenByParentRef = useRef(childrenByParent);
   const childTaskByParentRef = useRef(childTaskByParent);
-  const inspectorsByAddressRef = useRef(inspectorsByAddress);
-  const inspectorTaskByAddressRef = useRef(inspectorTaskByAddress);
-  const inspectorLoadingByAddressRef = useRef(inspectorLoadingByAddress);
-  const childPollTokensRef = useRef<Record<string, number>>({});
-  const activeChildTaskIdByParentRef = useRef<Record<string, number | null>>({});
-  const activeInspectorTaskIdRef = useRef<number | null>(null);
-  const inspectorPollTokenRef = useRef(0);
+  const headerTaskByAddressRef = useRef(headerTaskByAddress);
+  const componentsTaskByAddressRef = useRef(componentsTaskByAddress);
   const sceneMutationTaskCounterRef = useRef(0);
-  
-  const selectedObjectAddressRef = useRef(selectedObjectAddress);
-  useEffect(() => {
-    selectedObjectAddressRef.current = selectedObjectAddress;
-  }, [selectedObjectAddress]);
-
-  useEffect(() => {
-    childrenByParentRef.current = childrenByParent;
-  }, [childrenByParent]);
 
   useEffect(() => {
     childTaskByParentRef.current = childTaskByParent;
   }, [childTaskByParent]);
 
   useEffect(() => {
-    inspectorsByAddressRef.current = inspectorsByAddress;
-  }, [inspectorsByAddress]);
+    headerTaskByAddressRef.current = headerTaskByAddress;
+  }, [headerTaskByAddress]);
 
   useEffect(() => {
-    inspectorTaskByAddressRef.current = inspectorTaskByAddress;
-  }, [inspectorTaskByAddress]);
-
-  useEffect(() => {
-    inspectorLoadingByAddressRef.current = inspectorLoadingByAddress;
-  }, [inspectorLoadingByAddress]);
+    componentsTaskByAddressRef.current = componentsTaskByAddress;
+  }, [componentsTaskByAddress]);
 
   const deferredSceneHierarchySearchQuery = useDeferredValue(sceneHierarchySearchQuery.trim().toLowerCase());
   const loadedSceneGraph = useMemo(() => buildLoadedSceneGraph(sceneWorkspace, childrenByParent), [childrenByParent, sceneWorkspace]);
@@ -568,16 +628,28 @@ export function useSceneWorkspaceStore() {
     dispatch({ type: 'setInspectorsByAddress', updater });
   }, []);
 
-  const setInspectorTaskByAddress = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneObjectInspectorTaskState>>) => {
-    dispatch({ type: 'setInspectorTaskByAddress', updater });
+  const setHeaderTaskByAddress = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneObjectHeaderTaskState>>) => {
+    dispatch({ type: 'setHeaderTaskByAddress', updater });
   }, []);
 
-  const setInspectorLoadingByAddress = useCallback((updater: SceneStateUpdater<Record<string, boolean>>) => {
-    dispatch({ type: 'setInspectorLoadingByAddress', updater });
+  const setHeaderLoadingByAddress = useCallback((updater: SceneStateUpdater<Record<string, boolean>>) => {
+    dispatch({ type: 'setHeaderLoadingByAddress', updater });
   }, []);
 
-  const setInspectorErrorByAddress = useCallback((updater: SceneStateUpdater<Record<string, string | null>>) => {
-    dispatch({ type: 'setInspectorErrorByAddress', updater });
+  const setHeaderErrorByAddress = useCallback((updater: SceneStateUpdater<Record<string, string | null>>) => {
+    dispatch({ type: 'setHeaderErrorByAddress', updater });
+  }, []);
+
+  const setComponentsTaskByAddress = useCallback((updater: SceneStateUpdater<Record<string, RuntimeSceneObjectComponentsTaskState>>) => {
+    dispatch({ type: 'setComponentsTaskByAddress', updater });
+  }, []);
+
+  const setComponentsLoadingByAddress = useCallback((updater: SceneStateUpdater<Record<string, boolean>>) => {
+    dispatch({ type: 'setComponentsLoadingByAddress', updater });
+  }, []);
+
+  const setComponentsErrorByAddress = useCallback((updater: SceneStateUpdater<Record<string, string | null>>) => {
+    dispatch({ type: 'setComponentsErrorByAddress', updater });
   }, []);
 
   const setSceneMutationState = useCallback((updater: SceneStateUpdater<SceneMutationState>) => {
@@ -594,10 +666,6 @@ export function useSceneWorkspaceStore() {
 
   const resetSceneState = useCallback(() => {
     dispatch({ type: 'reset' });
-    childPollTokensRef.current = {};
-    activeChildTaskIdByParentRef.current = {};
-    activeInspectorTaskIdRef.current = null;
-    inspectorPollTokenRef.current += 1;
   }, []);
 
   const applySummaryPatch = useCallback((summary: RuntimeSceneNodeSummary) => {
@@ -618,9 +686,15 @@ export function useSceneWorkspaceStore() {
     });
   }, []);
 
-  const applyInspectorTaskState = useCallback((taskState: RuntimeSceneObjectInspectorTaskState) => {
+  const applyHeaderTaskState = useCallback((taskState: RuntimeSceneObjectHeaderTaskState) => {
     startTransition(() => {
-      dispatch({ type: 'applyInspectorTaskState', taskState });
+      dispatch({ type: 'applyHeaderTaskState', taskState });
+    });
+  }, []);
+
+  const applyComponentsTaskState = useCallback((taskState: RuntimeSceneObjectComponentsTaskState) => {
+    startTransition(() => {
+      dispatch({ type: 'applyComponentsTaskState', taskState });
     });
   }, []);
 
@@ -629,22 +703,41 @@ export function useSceneWorkspaceStore() {
   }, []);
 
   const sceneInspector = useMemo(() => {
-    return selectedObjectAddress ? inspectorsByAddress[selectedObjectAddress] ?? null : null;
-  }, [inspectorsByAddress, selectedObjectAddress]);
+    if (!selectedObjectAddress) {
+      return null;
+    }
 
-  const sceneInspectorTaskState = useMemo(() => {
-    return selectedObjectAddress ? inspectorTaskByAddress[selectedObjectAddress] ?? null : null;
-  }, [inspectorTaskByAddress, selectedObjectAddress]);
+    return inspectorsByAddress[selectedObjectAddress]
+      ?? buildInspectorSnapshot(
+        headerTaskByAddress[selectedObjectAddress],
+        childrenByParent[selectedObjectAddress] ?? [],
+        componentsTaskByAddress[selectedObjectAddress]?.components ?? [],
+      );
+  }, [childrenByParent, componentsTaskByAddress, headerTaskByAddress, inspectorsByAddress, selectedObjectAddress]);
 
-  const sceneInspectorLoading = selectedObjectAddress ? inspectorLoadingByAddress[selectedObjectAddress] ?? false : false;
-  const sceneInspectorError = selectedObjectAddress ? inspectorErrorByAddress[selectedObjectAddress] ?? null : null;
-  const sceneInspectorChildrenLoading = sceneInspectorTaskState != null
-    && (sceneInspectorTaskState.status === 'children-loading'
-      || (sceneInspectorTaskState.status === 'components-loading'
-        && sceneInspectorTaskState.childrenLoadedCount < sceneInspectorTaskState.childrenTotalCount));
-  const sceneInspectorComponentsLoading = sceneInspectorTaskState != null
-    && (sceneInspectorTaskState.status === 'components-loading'
-      || (sceneInspectorTaskState.status === 'children-loading' && sceneInspectorTaskState.componentsTotalCount > 0));
+  const sceneInspectorHeaderTaskState = useMemo(() => {
+    return selectedObjectAddress ? headerTaskByAddress[selectedObjectAddress] ?? null : null;
+  }, [headerTaskByAddress, selectedObjectAddress]);
+
+  const sceneInspectorComponentsTaskState = useMemo(() => {
+    return selectedObjectAddress ? componentsTaskByAddress[selectedObjectAddress] ?? null : null;
+  }, [componentsTaskByAddress, selectedObjectAddress]);
+
+  const sceneInspectorLoading = selectedObjectAddress
+    ? (headerLoadingByAddress[selectedObjectAddress] ?? false) && sceneInspector == null
+    : false;
+  const sceneInspectorError = selectedObjectAddress
+    ? headerErrorByAddress[selectedObjectAddress]
+      ?? childErrorByParent[selectedObjectAddress]
+      ?? null
+    : null;
+  const sceneInspectorComponentsError = selectedObjectAddress
+    ? componentsErrorByAddress[selectedObjectAddress]
+      ?? componentsTaskByAddress[selectedObjectAddress]?.errorMessage
+      ?? null
+    : null;
+  const sceneInspectorChildrenLoading = selectedObjectAddress ? loadingChildrenByParent[selectedObjectAddress] ?? false : false;
+  const sceneInspectorComponentsLoading = selectedObjectAddress ? componentsLoadingByAddress[selectedObjectAddress] ?? false : false;
 
   const sceneRootsByHandle = useMemo(() => {
     return Object.fromEntries((sceneWorkspace.snapshot?.scenes ?? []).map((scene) => [scene.sceneHandle, scene.roots]));
@@ -669,12 +762,18 @@ export function useSceneWorkspaceStore() {
     setChildErrorByParent,
     inspectorsByAddress,
     setInspectorsByAddress,
-    inspectorTaskByAddress,
-    setInspectorTaskByAddress,
-    inspectorLoadingByAddress,
-    setInspectorLoadingByAddress,
-    inspectorErrorByAddress,
-    setInspectorErrorByAddress,
+    headerTaskByAddress,
+    setHeaderTaskByAddress,
+    headerLoadingByAddress,
+    setHeaderLoadingByAddress,
+    headerErrorByAddress,
+    setHeaderErrorByAddress,
+    componentsTaskByAddress,
+    setComponentsTaskByAddress,
+    componentsLoadingByAddress,
+    setComponentsLoadingByAddress,
+    componentsErrorByAddress,
+    setComponentsErrorByAddress,
     sceneMutationState,
     setSceneMutationState,
     sceneTabs,
@@ -682,26 +781,23 @@ export function useSceneWorkspaceStore() {
     activeSceneTabIndex,
     setActiveSceneTabIndex,
     processKeyRef,
-    childrenByParentRef,
     childTaskByParentRef,
-    inspectorsByAddressRef,
-    inspectorTaskByAddressRef,
-    inspectorLoadingByAddressRef,
-    childPollTokensRef,
-    activeChildTaskIdByParentRef,
-    activeInspectorTaskIdRef,
-    inspectorPollTokenRef,
+    headerTaskByAddressRef,
+    componentsTaskByAddressRef,
     sceneMutationTaskCounterRef,
     resetSceneState,
     applySummaryPatch,
     applySummaryBatch,
     applySceneChildrenTaskState,
-    applyInspectorTaskState,
+    applyHeaderTaskState,
+    applyComponentsTaskState,
     bumpParentChildCount,
     sceneInspector,
-    sceneInspectorTaskState,
+    sceneInspectorHeaderTaskState,
+    sceneInspectorComponentsTaskState,
     sceneInspectorLoading,
     sceneInspectorError,
+    sceneInspectorComponentsError,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneRootsByHandle,

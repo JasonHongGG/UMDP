@@ -6,7 +6,7 @@ export interface AnalysisSession {
 }
 
 export interface RuntimeSession {
-  status: 'idle' | 'starting' | 'ready' | 'degraded' | 'recovering' | 'error';
+  status: 'idle' | 'starting' | 'ready' | 'degraded' | 'error';
   connected: boolean;
   capabilityKeys: string[];
   lastError: string | null;

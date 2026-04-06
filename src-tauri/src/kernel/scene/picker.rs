@@ -1,5 +1,6 @@
 use super::common::current_scene_session_key;
 use super::events::emit_scene_mouse_picker_state;
+use super::tasks::preload_scene_object_header;
 use crate::domain::analysis_models::{
     ProcessWindowCandidate, RuntimeSceneMousePickerSnapshot, RuntimeSceneMouseTargetHit,
     RuntimeScreenPoint, RuntimeScreenRect,
@@ -16,7 +17,7 @@ use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
-const SCENE_MOUSE_PICKER_POLL_INTERVAL_MS: u64 = 75;
+const SCENE_MOUSE_PICKER_POLL_INTERVAL_MS: u64 = 100;
 
 pub fn list_scene_picker_windows(state: &AppState) -> OperationResult<Vec<ProcessWindowCandidate>> {
     let attached = ensure_attached_session(state)?;
@@ -109,6 +110,7 @@ fn run_scene_mouse_picker_worker(
     cancel_flag: Arc<AtomicBool>,
 ) {
     let mut was_left_button_down = false;
+    let mut was_escape_down = false;
 
     while !cancel_flag.load(Ordering::Relaxed) {
         let Some(target_window) = state
@@ -137,6 +139,20 @@ fn run_scene_mouse_picker_worker(
         let is_left_button_down = windowing::is_left_mouse_button_down();
         let just_pressed = is_left_button_down && !was_left_button_down;
         was_left_button_down = is_left_button_down;
+        let is_escape_down = windowing::is_escape_key_down();
+        let just_pressed_escape = is_escape_down && !was_escape_down;
+        was_escape_down = is_escape_down;
+
+        if just_pressed_escape {
+            if let Some(snapshot) = state.scene().picker().cancel(
+                worker_id,
+                session_key.as_deref(),
+                "Picker cancelled.".to_string(),
+            ) {
+                emit_scene_mouse_picker_state(app, &snapshot);
+            }
+            break;
+        }
 
         if refreshed_window.is_minimized {
             emit_picker_observation(
@@ -158,6 +174,11 @@ fn run_scene_mouse_picker_worker(
             &cursor_screen_position,
             &refreshed_window.client_rect,
         );
+        let cursor_inside_client = cursor_client_position.is_some();
+        let previous_hover_hit = state
+            .scene()
+            .picker()
+            .current_candidate(worker_id, session_key.as_deref());
         let hover_hit = match &cursor_client_position {
             Some(cursor_client_position) => {
                 match pick_scene_mouse_hit(
@@ -177,9 +198,14 @@ fn run_scene_mouse_picker_worker(
         };
 
         let observation_detail = match (&cursor_client_position, &hover_hit) {
-            (Some(_), Some(hit)) => format!("Click to inspect {}.", hit.object_name),
-            (Some(_), None) => "No world object under the cursor.".to_string(),
-            (None, _) => "Move the cursor inside the target window.".to_string(),
+            (Some(_), Some(hit)) => format!(
+                "Left click to lock {}. Press Escape to cancel.",
+                hit.object_name
+            ),
+            (Some(_), None) => {
+                "No collider-backed world object is under the cursor.".to_string()
+            }
+            (None, _) => "Move the cursor inside the target window. Press Escape to cancel.".to_string(),
         };
         emit_picker_observation(
             app,
@@ -194,17 +220,31 @@ fn run_scene_mouse_picker_worker(
         );
 
         if just_pressed {
-            let pick_detail = match &hover_hit {
-                Some(hit) => format!("Opened {} in the Scene inspector.", hit.object_name),
-                None => "Click did not hit a world object.".to_string(),
+            let picked_hit = if cursor_inside_client {
+                hover_hit.clone().or(previous_hover_hit)
+            } else {
+                None
             };
-            if let Some(snapshot) = state.scene().picker().record_pick(
+            let pick_detail = match &picked_hit {
+                Some(hit) => format!("Locked {}. Loading Scene object header.", hit.object_name),
+                None if cursor_inside_client => {
+                    "Click missed. Scene picker stopped without locking an object.".to_string()
+                }
+                None => "Click was outside the target window. Scene picker stopped.".to_string(),
+            };
+            if let Some(snapshot) = state.scene().picker().commit_pick(
                 worker_id,
                 session_key.as_deref(),
-                hover_hit,
+                picked_hit,
                 pick_detail,
             ) {
                 emit_scene_mouse_picker_state(app, &snapshot);
+                if let Some(committed_pick) = snapshot.committed_pick.as_ref() {
+                    preload_scene_object_header(app, state, &committed_pick.object_address);
+                }
+                if !snapshot.is_running {
+                    break;
+                }
             }
         }
 

@@ -113,34 +113,78 @@ impl<'a> SceneQueryKernel<'a> {
             return Ok(None);
         }
 
-        let header = self.load_scene_inspector_header(game_object_address)?;
         let distance = match &get_distance {
             Some(method) => Some(self.invoke_float(method, Some(hit_storage.address), &[])?),
             None => None,
         };
 
-        Ok(Some(RuntimeSceneMouseTargetHit {
-            observed_at: current_timestamp(),
-            object_address: header.object.object_address.clone(),
-            object_name: header.object.name.clone(),
-            transform_address: header
-                .transform
-                .as_ref()
-                .map(|transform| transform.transform_address.clone())
-                .or_else(|| {
-                    if transform_address == 0 {
-                        None
-                    } else {
-                        Some(format_address(transform_address))
-                    }
-                }),
-            scene_handle: header.scene_handle,
-            scene_name: header.scene_name.clone(),
-            scene_kind: header.scene_kind.clone(),
-            hierarchy_path: header.hierarchy_path.clone(),
+        Ok(Some(self.build_scene_mouse_target_hit(
+            game_object_address,
+            transform_address,
             distance,
             screen_position,
             client_position,
-        }))
+        )?))
+    }
+
+    fn build_scene_mouse_target_hit(
+        &mut self,
+        game_object_address: NativeAddress,
+        transform_address: NativeAddress,
+        distance: Option<f32>,
+        screen_position: RuntimeScreenPoint,
+        client_position: RuntimeScreenPoint,
+    ) -> Result<RuntimeSceneMouseTargetHit, String> {
+        let game_object_class = self.resolve_unity_class("UnityEngine", "GameObject")?;
+        let get_scene = self.require_method(game_object_class, "get_scene", 0)?;
+        let object = self.build_node_summary(
+            game_object_address,
+            NodeSummaryFlavor::Catalog,
+            if transform_address == 0 {
+                None
+            } else {
+                Some(transform_address)
+            },
+        )?;
+
+        let scene_object = self.invoke_object(&get_scene, Some(game_object_address), &[])?;
+        let (scene_handle, scene_name) = self.read_scene_identity(scene_object)?;
+        let scene_kind = if scene_handle.is_some() && scene_object != 0 {
+            let scene_class = self.resolve_unity_class("UnityEngine.SceneManagement", "Scene")?;
+            let raw_scene = self.require_unboxed(scene_object, "UnityEngine.SceneManagement.Scene")?;
+            let get_build_index = self.try_find_method(scene_class, "get_buildIndex", 0)?;
+            let get_path = self.try_find_method(scene_class, "get_path", 0)?;
+            let build_index = match &get_build_index {
+                Some(method) => Some(self.invoke_int(method, Some(raw_scene), &[])?),
+                None => None,
+            };
+            let path = match &get_path {
+                Some(method) => self.try_invoke_string(method, Some(raw_scene), &[])?,
+                None => None,
+            };
+            Some(infer_scene_kind(build_index, path, scene_name.clone()))
+        } else {
+            None
+        };
+
+        Ok(RuntimeSceneMouseTargetHit {
+            observed_at: current_timestamp(),
+            object_address: object.object_address,
+            object_name: object.name,
+            transform_address: object.transform_address.or_else(|| {
+                if transform_address == 0 {
+                    None
+                } else {
+                    Some(format_address(transform_address))
+                }
+            }),
+            scene_handle,
+            scene_name,
+            scene_kind,
+            hierarchy_path: Vec::new(),
+            distance,
+            screen_position,
+            client_position,
+        })
     }
 }

@@ -34,8 +34,6 @@ export function getWorkspaceLifecycleLabel(state: WorkspaceLifecycleState) {
       return 'Ready';
     case 'runtime-error':
       return 'Runtime Error';
-    case 'recovering':
-      return 'Recovering';
     default:
       return 'Unknown';
   }
@@ -48,7 +46,6 @@ export function getWorkspaceLifecycleTone(state: WorkspaceLifecycleState) {
     case 'snapshot-loading':
     case 'attaching':
     case 'selecting-process':
-    case 'recovering':
       return 'loading';
     case 'runtime-error':
       return 'error';

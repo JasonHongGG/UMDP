@@ -4,8 +4,9 @@ import type {
   RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneObjectInspectorSnapshot,
-  RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -82,8 +83,26 @@ function markChildrenTaskStale(task: RuntimeSceneObjectChildrenTaskState): Runti
   };
 }
 
-function markInspectorTaskStale(task: RuntimeSceneObjectInspectorTaskState): RuntimeSceneObjectInspectorTaskState {
-  const hasRetainedSnapshot = task.header != null || task.children.length > 0 || task.components.length > 0;
+function markHeaderTaskStale(task: RuntimeSceneObjectHeaderTaskState): RuntimeSceneObjectHeaderTaskState {
+  const hasRetainedSnapshot = task.header != null;
+  const resourceRevision = task.resourceRevision + 1;
+  return {
+    ...task,
+    resourceRevision,
+    status: hasRetainedSnapshot ? 'ready' : 'cancelled',
+    isStale: true,
+    updatedAt: new Date().toISOString(),
+    resourceState: {
+      ...task.resourceState,
+      resourceRevision,
+      freshness: hasRetainedSnapshot ? 'stale' : 'empty',
+      isRetainingSnapshot: hasRetainedSnapshot,
+    },
+  };
+}
+
+function markComponentsTaskStale(task: RuntimeSceneObjectComponentsTaskState): RuntimeSceneObjectComponentsTaskState {
+  const hasRetainedSnapshot = task.components.length > 0 || task.totalCount === 0;
   const resourceRevision = task.resourceRevision + 1;
   return {
     ...task,
@@ -105,14 +124,17 @@ interface UseSceneMutationActionsOptions {
   selectedObjectAddress: string | null;
   setSelectedObjectAddress: (value: string | null) => void;
   refreshSceneWorkspace: () => Promise<void>;
-  loadSceneObjectInspector: (objectAddress: string, force?: boolean) => Promise<void>;
+  loadSceneObjectResources: (objectAddress: string, force?: boolean) => Promise<void>;
   setSceneWorkspace: Dispatch<SetStateAction<SceneWorkspaceState>>;
   setChildrenByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneNodeSummary[]>>>;
   setChildTaskByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectChildrenTaskState>>>;
   setInspectorsByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectInspectorSnapshot>>>;
-  setInspectorTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectInspectorTaskState>>>;
-  setInspectorErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
-  setInspectorLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setHeaderTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectHeaderTaskState>>>;
+  setHeaderErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
+  setHeaderLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setComponentsTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectComponentsTaskState>>>;
+  setComponentsErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
+  setComponentsLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
   setSceneMutationState: Dispatch<SetStateAction<SceneMutationState>>;
   sceneMutationTaskCounterRef: MutableRefObject<number>;
   applySummaryPatch: (summary: RuntimeSceneNodeSummary) => void;
@@ -124,14 +146,17 @@ export function useSceneMutationActions({
   selectedObjectAddress,
   setSelectedObjectAddress,
   refreshSceneWorkspace,
-  loadSceneObjectInspector,
+  loadSceneObjectResources,
   setSceneWorkspace,
   setChildrenByParent,
   setChildTaskByParent,
   setInspectorsByAddress,
-  setInspectorTaskByAddress,
-  setInspectorErrorByAddress,
-  setInspectorLoadingByAddress,
+  setHeaderTaskByAddress,
+  setHeaderErrorByAddress,
+  setHeaderLoadingByAddress,
+  setComponentsTaskByAddress,
+  setComponentsErrorByAddress,
+  setComponentsLoadingByAddress,
   setSceneMutationState,
   sceneMutationTaskCounterRef,
   applySummaryPatch,
@@ -150,13 +175,30 @@ export function useSceneMutationActions({
     ].filter((value): value is string => Boolean(value));
 
     if (impacted.length > 0) {
-      setInspectorTaskByAddress((previous) => {
+      setHeaderTaskByAddress((previous) => {
         let touched = false;
         const next = { ...previous };
         impacted.forEach((address) => {
           const task = next[address];
           if (task) {
-            next[address] = markInspectorTaskStale(task);
+            next[address] = markHeaderTaskStale(task);
+            touched = true;
+          }
+        });
+        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
+          delete next[result.deletedObjectAddress];
+          touched = true;
+        }
+        return touched ? next : previous;
+      });
+
+      setComponentsTaskByAddress((previous) => {
+        let touched = false;
+        const next = { ...previous };
+        impacted.forEach((address) => {
+          const task = next[address];
+          if (task) {
+            next[address] = markComponentsTaskStale(task);
             touched = true;
           }
         });
@@ -225,7 +267,7 @@ export function useSceneMutationActions({
 
         setChildrenByParent((previous) => removeNodeEverywhere(previous, result.deletedObjectAddress));
         setInspectorsByAddress((previous) => removeNodeFromInspectors(previous, result.deletedObjectAddress));
-        setInspectorErrorByAddress((previous) => {
+        setHeaderErrorByAddress((previous) => {
           if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
             return previous;
           }
@@ -234,7 +276,25 @@ export function useSceneMutationActions({
           delete next[result.deletedObjectAddress];
           return next;
         });
-        setInspectorLoadingByAddress((previous) => {
+        setHeaderLoadingByAddress((previous) => {
+          if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
+            return previous;
+          }
+
+          const next = { ...previous };
+          delete next[result.deletedObjectAddress];
+          return next;
+        });
+        setComponentsErrorByAddress((previous) => {
+          if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
+            return previous;
+          }
+
+          const next = { ...previous };
+          delete next[result.deletedObjectAddress];
+          return next;
+        });
+        setComponentsLoadingByAddress((previous) => {
           if (!result.deletedObjectAddress || !Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress)) {
             return previous;
           }
@@ -295,7 +355,7 @@ export function useSceneMutationActions({
     if (result.preferredSelectionAddress !== undefined) {
       setSelectedObjectAddress(result.preferredSelectionAddress);
     }
-  }, [applySummaryPatch, bumpParentChildCount, setChildTaskByParent, setChildrenByParent, setInspectorErrorByAddress, setInspectorLoadingByAddress, setInspectorTaskByAddress, setInspectorsByAddress, setSceneWorkspace, setSelectedObjectAddress]);
+  }, [applySummaryPatch, bumpParentChildCount, setChildTaskByParent, setChildrenByParent, setComponentsErrorByAddress, setComponentsLoadingByAddress, setComponentsTaskByAddress, setHeaderErrorByAddress, setHeaderLoadingByAddress, setHeaderTaskByAddress, setInspectorsByAddress, setSceneWorkspace, setSelectedObjectAddress]);
 
   const runMutation = useCallback(async (
     operation: RuntimeSceneMutationOperation,
@@ -434,9 +494,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('rename', () => repository.renameSceneObject(selectedObjectAddress, name));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectTag = useCallback(async (tag: string) => {
     if (!selectedObjectAddress) {
@@ -444,9 +504,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('set-tag', () => repository.setSceneObjectTag(selectedObjectAddress, tag));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectLayer = useCallback(async (layer: number) => {
     if (!selectedObjectAddress) {
@@ -454,9 +514,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('set-layer', () => repository.setSceneObjectLayer(selectedObjectAddress, layer));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectHideFlags = useCallback(async (hideFlags: string) => {
     if (!selectedObjectAddress) {
@@ -464,9 +524,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('set-hide-flags', () => repository.setSceneObjectHideFlags(selectedObjectAddress, hideFlags));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const reparentSceneObject = useCallback(async (parentObjectAddress?: string | null, parentPath?: string | null) => {
     if (!selectedObjectAddress) {
@@ -483,10 +543,10 @@ export function useSceneMutationActions({
       setSelectedObjectAddress(result.preferredSelectionAddress);
     }
     if (result.preferredSelectionAddress) {
-      loadSceneObjectInspector(result.preferredSelectionAddress, true).catch(() => undefined);
+      loadSceneObjectResources(result.preferredSelectionAddress, true).catch(() => undefined);
     }
     return result;
-  }, [loadSceneObjectInspector, refreshSceneWorkspace, repository, runMutation, selectedObjectAddress, setSelectedObjectAddress]);
+  }, [loadSceneObjectResources, refreshSceneWorkspace, repository, runMutation, selectedObjectAddress, setSelectedObjectAddress]);
 
   const setSceneObjectActive = useCallback(async (activeSelf: boolean) => {
     if (!selectedObjectAddress) {
@@ -494,9 +554,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('set-active', () => repository.setSceneObjectActive(selectedObjectAddress, activeSelf));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const setSceneObjectTransform = useCallback(async (transformUpdate: RuntimeSceneTransformUpdate) => {
     if (!selectedObjectAddress) {
@@ -504,9 +564,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('set-transform', () => repository.setSceneObjectTransform(selectedObjectAddress, transformUpdate));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const setSceneBehaviourEnabled = useCallback(async (componentAddress: string, enabled: boolean) => {
     if (!selectedObjectAddress) {
@@ -514,9 +574,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('set-behaviour-enabled', () => repository.setSceneBehaviourEnabled(componentAddress, enabled));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const createSceneComponent = useCallback(async (componentTypeName: string) => {
     if (!selectedObjectAddress) {
@@ -524,9 +584,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('add-component', () => repository.createSceneComponent(selectedObjectAddress, componentTypeName));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const deleteSceneComponent = useCallback(async (componentAddress: string) => {
     if (!selectedObjectAddress) {
@@ -534,9 +594,9 @@ export function useSceneMutationActions({
     }
 
     const result = await runMutation('remove-component', () => repository.deleteSceneComponent(componentAddress));
-    loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
     return result;
-  }, [loadSceneObjectInspector, repository, runMutation, selectedObjectAddress]);
+  }, [loadSceneObjectResources, repository, runMutation, selectedObjectAddress]);
 
   const loadSceneByBuildIndex = useCallback(async (buildIndex: number) => {
     const result = await runMutation('load-scene', () => repository.loadSceneByBuildIndex(buildIndex));

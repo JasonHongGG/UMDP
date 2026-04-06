@@ -221,7 +221,7 @@ export type SceneRefreshStatus = 'idle' | 'refreshing' | 'ready' | 'error';
 
 export type SceneResourceFreshness = 'empty' | 'fresh' | 'refreshing' | 'stale' | 'error';
 
-export type RuntimeSceneResourceKind = 'catalog' | 'children' | 'inspector';
+export type RuntimeSceneResourceKind = 'catalog' | 'children' | 'scene-object-header' | 'scene-object-components';
 
 export interface RuntimeSceneResourceState {
   resourceKind: RuntimeSceneResourceKind;
@@ -379,34 +379,50 @@ export interface RuntimeSceneObjectInspectorHeaderSnapshot {
   transform: RuntimeSceneTransformSnapshot | null;
 }
 
-export type RuntimeSceneInspectorTaskStatus =
+export type RuntimeSceneObjectHeaderTaskStatus =
   | 'idle'
   | 'queued'
-  | 'header-loading'
-  | 'children-loading'
-  | 'components-loading'
+  | 'loading'
   | 'ready'
   | 'error'
   | 'cancelled';
 
-export interface RuntimeSceneObjectInspectorTaskState {
+export interface RuntimeSceneObjectHeaderTaskState {
   taskId: number;
   resourceRevision: number;
   sessionKey: string | null;
   objectAddress: string;
-  status: RuntimeSceneInspectorTaskStatus;
+  status: RuntimeSceneObjectHeaderTaskStatus;
   mutationEpoch: number;
   startedAt: string;
   updatedAt: string;
   header: RuntimeSceneObjectInspectorHeaderSnapshot | null;
-  children: RuntimeSceneNodeSummary[];
-  childrenTotalCount: number;
-  childrenLoadedCount: number;
-  childrenNextOffset: number | null;
+  errorMessage: string | null;
+  isStale: boolean;
+  resourceState: RuntimeSceneResourceState;
+}
+
+export type RuntimeSceneObjectComponentsTaskStatus =
+  | 'idle'
+  | 'queued'
+  | 'loading'
+  | 'ready'
+  | 'error'
+  | 'cancelled';
+
+export interface RuntimeSceneObjectComponentsTaskState {
+  taskId: number;
+  resourceRevision: number;
+  sessionKey: string | null;
+  objectAddress: string;
+  status: RuntimeSceneObjectComponentsTaskStatus;
+  mutationEpoch: number;
+  startedAt: string;
+  updatedAt: string;
   components: RuntimeSceneComponentSummary[];
-  componentsTotalCount: number;
-  componentsLoadedCount: number;
-  componentsNextOffset: number | null;
+  totalCount: number;
+  loadedCount: number;
+  nextOffset: number | null;
   errorMessage: string | null;
   isStale: boolean;
   resourceState: RuntimeSceneResourceState;
@@ -466,7 +482,13 @@ export interface RuntimeSceneMutationResult {
   transform: RuntimeSceneTransformSnapshot | null;
 }
 
-export type RuntimeSceneMousePickerStatus = 'idle' | 'armed' | 'tracking' | 'error';
+export type RuntimeSceneMousePickerStatus =
+  | 'idle'
+  | 'armed'
+  | 'tracking-candidate'
+  | 'committed'
+  | 'cancelled'
+  | 'error';
 
 export interface RuntimeSceneMouseTargetHit {
   observedAt: string;
@@ -492,8 +514,8 @@ export interface RuntimeSceneMousePickerSnapshot {
   cursorScreenPosition: RuntimeScreenPoint | null;
   cursorClientPosition: RuntimeScreenPoint | null;
   cursorInsideClient: boolean;
-  hoverHit: RuntimeSceneMouseTargetHit | null;
-  lastPick: RuntimeSceneMouseTargetHit | null;
+  currentCandidate: RuntimeSceneMouseTargetHit | null;
+  committedPick: RuntimeSceneMouseTargetHit | null;
   recentPicks: RuntimeSceneMouseTargetHit[];
   lastUpdatedAt: string | null;
   errorMessage: string | null;

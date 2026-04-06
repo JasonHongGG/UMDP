@@ -57,29 +57,74 @@
       "errorMessage": null
     }
   },
-  "inspectorTask": {
+  "headerTask": {
     "taskId": 12,
     "resourceRevision": 10,
     "sessionKey": "session-1",
     "objectAddress": "0x1000",
-    "status": "components-loading",
+    "status": "ready",
     "mutationEpoch": 3,
     "startedAt": "2026-04-04T10:00:01.000Z",
     "updatedAt": "2026-04-04T10:00:03.000Z",
-    "header": null,
-    "children": [],
-    "childrenTotalCount": 0,
-    "childrenLoadedCount": 0,
-    "childrenNextOffset": null,
-    "components": [],
-    "componentsTotalCount": 0,
-    "componentsLoadedCount": 0,
-    "componentsNextOffset": null,
+    "header": {
+      "generatedAt": "2026-04-04T10:00:03.000Z",
+      "sceneHandle": 1,
+      "sceneName": "SampleScene",
+      "sceneKind": "loaded",
+      "object": {
+        "objectAddress": "0x1000",
+        "transformAddress": "0x2000",
+        "parentObjectAddress": null,
+        "name": "Parent",
+        "activeSelf": true,
+        "isStatic": false,
+        "childCount": 1,
+        "hasChildren": true,
+        "componentCount": 2,
+        "layer": 0,
+        "tag": "Untagged",
+        "hideFlags": "None",
+        "path": "SampleScene/Parent"
+      },
+      "parent": null,
+      "hierarchyPath": [
+        {
+          "objectAddress": "0x1000",
+          "name": "Parent"
+        }
+      ],
+      "transform": null
+    },
     "errorMessage": null,
     "isStale": false,
     "resourceState": {
-      "resourceKind": "inspector",
+      "resourceKind": "scene-object-header",
       "resourceRevision": 10,
+      "sessionKey": "session-1",
+      "freshness": "fresh",
+      "lastSuccessfulAt": "2026-04-04T10:00:03.000Z",
+      "isRetainingSnapshot": true,
+      "errorMessage": null
+    }
+  },
+  "componentsTask": {
+    "taskId": 13,
+    "resourceRevision": 11,
+    "sessionKey": "session-1",
+    "objectAddress": "0x1000",
+    "status": "loading",
+    "mutationEpoch": 3,
+    "startedAt": "2026-04-04T10:00:01.000Z",
+    "updatedAt": "2026-04-04T10:00:04.000Z",
+    "components": [],
+    "totalCount": 2,
+    "loadedCount": 0,
+    "nextOffset": 0,
+    "errorMessage": null,
+    "isStale": false,
+    "resourceState": {
+      "resourceKind": "scene-object-components",
+      "resourceRevision": 11,
       "sessionKey": "session-1",
       "freshness": "refreshing",
       "lastSuccessfulAt": "2026-04-04T09:59:55.000Z",

@@ -5,8 +5,8 @@ import type {
   RuntimeSceneMousePickerSnapshot,
   RuntimeSceneMutationResult,
   RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectInspectorSnapshot,
-  RuntimeSceneObjectInspectorTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -53,17 +53,23 @@ export function createTauriSceneGateway(): SceneGateway {
     cancelSceneObjectChildrenAnalysis(objectAddress: string, taskId?: number) {
       return client.invoke<RuntimeSceneObjectChildrenTaskState | null>({ label: 'cancel_scene_object_children_analysis', command: 'cancel_scene_object_children_analysis', args: taskId == null ? { objectAddress } : { objectAddress, taskId } });
     },
-    getSceneObjectInspector(objectAddress: string) {
-      return client.invoke<RuntimeSceneObjectInspectorSnapshot>({ label: 'get_scene_object_inspector', command: 'get_scene_object_inspector', args: { objectAddress } });
+    startSceneObjectHeaderAnalysis(objectAddress: string) {
+      return client.invoke<RuntimeSceneObjectHeaderTaskState | null>({ label: 'start_scene_object_header_analysis', command: 'start_scene_object_header_analysis', args: { objectAddress } });
     },
-    startSceneObjectInspectorAnalysis(objectAddress: string) {
-      return client.invoke<RuntimeSceneObjectInspectorTaskState | null>({ label: 'start_scene_object_inspector_analysis', command: 'start_scene_object_inspector_analysis', args: { objectAddress } });
+    getSceneObjectHeaderState(objectAddress: string) {
+      return client.invoke<RuntimeSceneObjectHeaderTaskState | null>({ label: 'get_scene_object_header_state', command: 'get_scene_object_header_state', args: { objectAddress }, logSuccess: false });
     },
-    getSceneObjectInspectorState() {
-      return client.invoke<RuntimeSceneObjectInspectorTaskState | null>({ label: 'get_scene_object_inspector_state', command: 'get_scene_object_inspector_state', logSuccess: false });
+    cancelSceneObjectHeaderAnalysis(objectAddress: string, taskId?: number) {
+      return client.invoke<RuntimeSceneObjectHeaderTaskState | null>({ label: 'cancel_scene_object_header_analysis', command: 'cancel_scene_object_header_analysis', args: taskId == null ? { objectAddress } : { objectAddress, taskId } });
     },
-    cancelSceneObjectInspectorAnalysis(taskId?: number) {
-      return client.invoke<RuntimeSceneObjectInspectorTaskState | null>({ label: 'cancel_scene_object_inspector_analysis', command: 'cancel_scene_object_inspector_analysis', args: taskId == null ? undefined : { taskId } });
+    startSceneObjectComponentsAnalysis(objectAddress: string) {
+      return client.invoke<RuntimeSceneObjectComponentsTaskState | null>({ label: 'start_scene_object_components_analysis', command: 'start_scene_object_components_analysis', args: { objectAddress } });
+    },
+    getSceneObjectComponentsState(objectAddress: string) {
+      return client.invoke<RuntimeSceneObjectComponentsTaskState | null>({ label: 'get_scene_object_components_state', command: 'get_scene_object_components_state', args: { objectAddress }, logSuccess: false });
+    },
+    cancelSceneObjectComponentsAnalysis(objectAddress: string, taskId?: number) {
+      return client.invoke<RuntimeSceneObjectComponentsTaskState | null>({ label: 'cancel_scene_object_components_analysis', command: 'cancel_scene_object_components_analysis', args: taskId == null ? { objectAddress } : { objectAddress, taskId } });
     },
     createSceneRoot(sceneHandle: number, name: string) {
       return client.invoke<RuntimeSceneMutationResult>({ label: 'create_scene_root', command: 'create_scene_root', args: { sceneHandle, name } });

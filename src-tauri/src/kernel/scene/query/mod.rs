@@ -4,9 +4,9 @@ use crate::domain::analysis_models::{
     RuntimeSceneComponentsPageSnapshot, RuntimeSceneDescriptor, RuntimeSceneHierarchyPathEntry,
     RuntimeSceneKind, RuntimeSceneMouseTargetHit, RuntimeSceneMutationOperation,
     RuntimeSceneMutationResult, RuntimeSceneNodeSummary,
-    RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneObjectInspectorSnapshot,
-    RuntimeSceneSelectionHint, RuntimeSceneTransformSnapshot, RuntimeSceneTransformUpdate,
-    RuntimeScreenPoint, RuntimeVector3Snapshot,
+    RuntimeSceneObjectInspectorHeaderSnapshot, RuntimeSceneSelectionHint,
+    RuntimeSceneTransformSnapshot, RuntimeSceneTransformUpdate, RuntimeScreenPoint,
+    RuntimeVector3Snapshot,
 };
 use crate::infrastructure::clock::current_timestamp;
 use crate::infrastructure::native::memory::{RemoteAllocation, RemoteMemory};
@@ -20,7 +20,6 @@ use std::collections::HashMap;
 enum NodeSummaryFlavor {
     Catalog,
     Inspector,
-    InspectorChild,
 }
 
 enum SceneInvokeArgument {

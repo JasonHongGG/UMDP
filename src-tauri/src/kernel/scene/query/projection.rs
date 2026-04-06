@@ -161,11 +161,7 @@ impl<'a> SceneQueryKernel<'a> {
         let behaviour_class = self.resolve_unity_class("UnityEngine", "Behaviour")?;
         let Some(get_component_count) = self.try_find_method(game_object_class, "GetComponentCount", 0)?
         else {
-            return Ok(ScenePage {
-                items: Vec::new(),
-                total_count: 0,
-                next_offset: None,
-            });
+            return Err("Scene object component enumeration is unavailable: GameObject.GetComponentCount is missing.".to_string());
         };
 
         let query_component = match self.try_find_method(game_object_class, "QueryComponentAtIndex", 1)? {
@@ -173,11 +169,7 @@ impl<'a> SceneQueryKernel<'a> {
             None => self.try_find_method(game_object_class, "GetComponentAtIndex", 1)?,
         };
         let Some(query_component) = query_component else {
-            return Ok(ScenePage {
-                items: Vec::new(),
-                total_count: 0,
-                next_offset: None,
-            });
+            return Err("Scene object component enumeration is unavailable: neither QueryComponentAtIndex nor GetComponentAtIndex exists.".to_string());
         };
 
         let component_count = self.invoke_int(&get_component_count, Some(game_object_address), &[])?;
@@ -229,6 +221,12 @@ impl<'a> SceneQueryKernel<'a> {
                 is_behaviour,
                 behaviour_enabled,
             });
+        }
+
+        if total_count > 0 && components.is_empty() {
+            return Err(format!(
+                "Scene object component enumeration returned no materialized components for {total_count} reported entries."
+            ));
         }
 
         Ok(ScenePage {

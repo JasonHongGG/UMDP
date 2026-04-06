@@ -7,16 +7,18 @@ import type {
   RuntimeSceneMutationResult,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneObjectInspectorSnapshot,
-  RuntimeSceneObjectInspectorTaskState,
   RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
-import type { WorkspaceLifecycleState, WorkspaceTaskScope, WorkspaceTaskSnapshot } from '@/shared/contracts';
+import type { WorkspaceLifecycleState, WorkspaceTaskSnapshot } from '@/shared/contracts';
 import { collectSceneWorkspaceTasks } from './sceneWorkspaceTasks';
 import type { LoadedSceneGraph, LoadedSceneSearchProjection } from './loadedSceneNodes';
-import { EMPTY_MUTATION_STATE, type SceneMutationState, useSceneWorkspaceStore } from './useSceneWorkspaceStore';
+import type { SceneMutationState } from './useSceneWorkspaceStore';
+import { useSceneWorkspaceStore } from './useSceneWorkspaceStore';
 import { useSceneMutationActions } from './useSceneMutationActions';
 import { useSceneMousePickerState } from './useSceneMousePickerState';
 import { useSceneWorkspaceSync } from './useSceneWorkspaceSync';
@@ -43,11 +45,13 @@ export interface SceneWorkspaceStateResult {
   ensureSceneObjectChildrenLoaded: (objectAddress: string, force?: boolean) => Promise<void>;
   stopSceneObjectChildrenObservation: (objectAddress: string) => void;
   sceneInspector: RuntimeSceneObjectInspectorSnapshot | null;
-  sceneInspectorTaskState: RuntimeSceneObjectInspectorTaskState | null;
+  sceneInspectorHeaderTaskState: RuntimeSceneObjectHeaderTaskState | null;
+  sceneInspectorComponentsTaskState: RuntimeSceneObjectComponentsTaskState | null;
   sceneInspectorLoading: boolean;
   sceneInspectorChildrenLoading: boolean;
   sceneInspectorComponentsLoading: boolean;
   sceneInspectorError: string | null;
+  sceneInspectorComponentsError: string | null;
   createSceneRoot: (sceneHandle: number, name: string) => Promise<RuntimeSceneMutationResult | null>;
   createSceneChild: (name: string) => Promise<RuntimeSceneMutationResult | null>;
   duplicateSceneObject: () => Promise<RuntimeSceneMutationResult | null>;
@@ -108,31 +112,33 @@ export function useSceneWorkspaceState({
     setChildErrorByParent,
     inspectorsByAddress,
     setInspectorsByAddress,
-    inspectorTaskByAddress,
-    setInspectorTaskByAddress,
-    inspectorLoadingByAddress,
-    setInspectorLoadingByAddress,
-    inspectorErrorByAddress,
-    setInspectorErrorByAddress,
+    headerTaskByAddress,
+    setHeaderTaskByAddress,
+    setHeaderLoadingByAddress,
+    setHeaderErrorByAddress,
+    componentsTaskByAddress,
+    setComponentsTaskByAddress,
+    setComponentsLoadingByAddress,
+    setComponentsErrorByAddress,
     sceneMutationState,
     setSceneMutationState,
     processKeyRef,
     childTaskByParentRef,
-    inspectorTaskByAddressRef,
-    childPollTokensRef,
-    activeChildTaskIdByParentRef,
-    activeInspectorTaskIdRef,
-    inspectorPollTokenRef,
+    headerTaskByAddressRef,
+    componentsTaskByAddressRef,
     sceneMutationTaskCounterRef,
     resetSceneState,
     applySummaryPatch,
     applySceneChildrenTaskState,
-    applyInspectorTaskState,
+    applyHeaderTaskState,
+    applyComponentsTaskState,
     bumpParentChildCount,
     sceneInspector,
-    sceneInspectorTaskState,
+    sceneInspectorHeaderTaskState,
+    sceneInspectorComponentsTaskState,
     sceneInspectorLoading,
     sceneInspectorError,
+    sceneInspectorComponentsError,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneRootsByHandle,
@@ -142,7 +148,7 @@ export function useSceneWorkspaceState({
     setActiveSceneTabIndex,
   } = store;
   const {
-    loadSceneObjectInspector,
+    loadSceneObjectResources,
     ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation,
     refreshSceneWorkspace,
@@ -155,14 +161,18 @@ export function useSceneWorkspaceState({
     setSceneWorkspace,
     setLoadingChildrenByParent,
     setChildErrorByParent,
-    setInspectorLoadingByAddress,
-    setInspectorErrorByAddress,
+    setHeaderLoadingByAddress,
+    setHeaderErrorByAddress,
+    setComponentsLoadingByAddress,
+    setComponentsErrorByAddress,
     processKeyRef,
     childTaskByParentRef,
-    inspectorTaskByAddressRef,
+    headerTaskByAddressRef,
+    componentsTaskByAddressRef,
     resetSceneState,
     applySceneChildrenTaskState,
-    applyInspectorTaskState,
+    applyHeaderTaskState,
+    applyComponentsTaskState,
   });
 
   const {
@@ -186,14 +196,17 @@ export function useSceneWorkspaceState({
     selectedObjectAddress,
     setSelectedObjectAddress,
     refreshSceneWorkspace,
-    loadSceneObjectInspector,
+    loadSceneObjectResources,
     setSceneWorkspace,
     setChildrenByParent,
     setChildTaskByParent,
     setInspectorsByAddress,
-    setInspectorTaskByAddress,
-    setInspectorErrorByAddress,
-    setInspectorLoadingByAddress,
+    setHeaderTaskByAddress,
+    setHeaderErrorByAddress,
+    setHeaderLoadingByAddress,
+    setComponentsTaskByAddress,
+    setComponentsErrorByAddress,
+    setComponentsLoadingByAddress,
     setSceneMutationState,
     sceneMutationTaskCounterRef,
     applySummaryPatch,
@@ -278,10 +291,11 @@ export function useSceneWorkspaceState({
     return collectSceneWorkspaceTasks({
       sceneWorkspace,
       childTaskByParent,
-      inspectorTaskByAddress,
+      headerTaskByAddress,
+      componentsTaskByAddress,
       mutationTask: sceneMutationState.task,
     });
-  }, [childTaskByParent, inspectorTaskByAddress, sceneMutationState.task, sceneWorkspace]);
+  }, [childTaskByParent, componentsTaskByAddress, headerTaskByAddress, sceneMutationState.task, sceneWorkspace]);
 
   const isSceneMutationPending = useCallback((operation: RuntimeSceneMutationOperation) => {
     return (sceneMutationState.pendingOperations[operation] ?? 0) > 0;
@@ -308,11 +322,13 @@ export function useSceneWorkspaceState({
     ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation,
     sceneInspector,
-    sceneInspectorTaskState,
+    sceneInspectorHeaderTaskState,
+    sceneInspectorComponentsTaskState,
     sceneInspectorLoading,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
     sceneInspectorError,
+    sceneInspectorComponentsError,
     createSceneRoot,
     createSceneChild,
     duplicateSceneObject,

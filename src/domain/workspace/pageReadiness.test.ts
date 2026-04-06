@@ -63,7 +63,7 @@ describe('workspace page readiness', () => {
     expect(fullyReady.studio.selectionReady).toBe(true);
   });
 
-  it('detects session change and recovering reset notices', () => {
+  it('detects session change and runtime error reset notices', () => {
     const nextReady = {
       ...EMPTY_WORKSPACE_LIFECYCLE,
       status: 'ready' as const,
@@ -89,8 +89,14 @@ describe('workspace page readiness', () => {
     expect(describeWorkspaceResetNotice(nextReady, 'session-1')?.kind).toBe('session-changed');
     expect(describeWorkspaceResetNotice({
       ...nextReady,
-      status: 'recovering',
+      status: 'runtime-error',
       errorMessage: 'runtime session dropped',
-    }, 'session-2')?.kind).toBe('recovering');
+      runtimeSession: {
+        ...nextReady.runtimeSession,
+        status: 'error',
+        connected: false,
+        lastError: 'runtime session dropped',
+      },
+    }, 'session-2')?.kind).toBe('runtime-error');
   });
 });

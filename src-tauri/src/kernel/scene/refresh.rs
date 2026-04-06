@@ -3,7 +3,7 @@ use super::events::emit_scene_workspace_state;
 use crate::domain::analysis_models::{
     RuntimeSceneCatalogSnapshot, RuntimeSceneChildrenPageSnapshot, RuntimeSceneChildrenSnapshot,
     RuntimeSceneComponentsPageSnapshot, RuntimeSceneObjectInspectorHeaderSnapshot,
-    RuntimeSceneObjectInspectorSnapshot, SceneWorkspaceState,
+    SceneWorkspaceState,
 };
 use crate::domain::operation::{OperationError, OperationResult};
 use crate::kernel::runtime::access::{ensure_runtime_session_ready, execute_runtime_operation};
@@ -51,7 +51,8 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> OperationResult
     emit_scene_workspace_state(app, &workspace);
     if current_scene_session_key(state) == session_key {
         state.scene().children().reset();
-        state.scene().inspector().reset();
+        state.scene().header().reset();
+        state.scene().components().reset();
     }
     log_scene_duration(
         "start_scene_refresh",
@@ -77,28 +78,6 @@ pub fn get_scene_object_children(
         &format!(
             "object_address={object_address} child_count={}",
             snapshot.children.len()
-        ),
-    );
-    Ok(snapshot)
-}
-
-pub fn get_scene_object_inspector(
-    _app: &AppHandle,
-    state: &AppState,
-    object_address: &str,
-) -> OperationResult<RuntimeSceneObjectInspectorSnapshot> {
-    let started_at = Instant::now();
-    ensure_attached_session(state).map(|_| ())?;
-    ensure_scene_query_runtime_ready(state)?;
-
-    let snapshot = execute_runtime_operation(state, || load_scene_inspector(state, object_address))?;
-    log_scene_duration(
-        "get_scene_object_inspector",
-        started_at,
-        &format!(
-            "object_address={object_address} children={} components={}",
-            snapshot.children.len(),
-            snapshot.components.len()
         ),
     );
     Ok(snapshot)
@@ -170,29 +149,6 @@ pub(crate) fn load_scene_children_page(
     Ok(snapshot)
 }
 
-pub(crate) fn load_scene_inspector(
-    state: &AppState,
-    object_address: &str,
-) -> OperationResult<RuntimeSceneObjectInspectorSnapshot> {
-    let started_at = Instant::now();
-    let attached = ensure_attached_session(state)?;
-    let runtime_session = require_runtime_session(state)?;
-    let snapshot = native_scene::load_scene_inspector(runtime_session.as_ref(), object_address)
-        .map_err(OperationError::from)?;
-    log_scene_duration(
-        "load_scene_inspector",
-        started_at,
-        &format!(
-            "pid={} object_address={} children={} components={}",
-            attached.pid,
-            object_address,
-            snapshot.children.len(),
-            snapshot.components.len()
-        ),
-    );
-    Ok(snapshot)
-}
-
 pub(crate) fn load_scene_inspector_header(
     state: &AppState,
     object_address: &str,
@@ -207,37 +163,6 @@ pub(crate) fn load_scene_inspector_header(
         "load_scene_inspector_header",
         started_at,
         &format!("pid={} object_address={object_address}", attached.pid),
-    );
-    Ok(snapshot)
-}
-
-pub(crate) fn load_scene_inspector_children_page(
-    state: &AppState,
-    object_address: &str,
-    offset: usize,
-    limit: usize,
-) -> OperationResult<RuntimeSceneChildrenPageSnapshot> {
-    let started_at = Instant::now();
-    let attached = ensure_attached_session(state)?;
-    let runtime_session = require_runtime_session(state)?;
-    let snapshot = native_scene::load_scene_inspector_children_page(
-        runtime_session.as_ref(),
-        object_address,
-        offset,
-        limit,
-    )
-    .map_err(OperationError::from)?;
-    log_scene_duration(
-        "load_scene_inspector_children_page",
-        started_at,
-        &format!(
-            "pid={} object_address={} offset={} loaded={} total={}",
-            attached.pid,
-            object_address,
-            snapshot.offset,
-            snapshot.children.len(),
-            snapshot.total_count
-        ),
     );
     Ok(snapshot)
 }

@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type {
   RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectInspectorTaskState,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
 import {
   onSceneObjectChildrenTaskUpdated,
-  onSceneObjectInspectorTaskUpdated,
+  onSceneObjectComponentsTaskUpdated,
+  onSceneObjectHeaderTaskUpdated,
   onSceneWorkspaceStateUpdated,
 } from '@/infrastructure/tauri/TauriSceneEvents';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import {
+  isTerminalComponentsTaskStatus,
   isTerminalChildrenTaskStatus,
-  isTerminalInspectorTaskStatus,
+  isTerminalHeaderTaskStatus,
   logSceneError,
   logScenePerf,
 } from './sceneWorkspaceStatePatches';
@@ -70,8 +73,8 @@ function shouldReuseChildrenTask(
   return taskState.resourceState.freshness === 'refreshing' || !isTerminalChildrenTaskStatus(taskState.status);
 }
 
-function shouldReuseInspectorTask(
-  taskState: RuntimeSceneObjectInspectorTaskState,
+function shouldReuseHeaderTask(
+  taskState: RuntimeSceneObjectHeaderTaskState,
   latestMutationEpoch: number,
   force: boolean,
 ) {
@@ -89,7 +92,29 @@ function shouldReuseInspectorTask(
     return true;
   }
 
-  return taskState.resourceState.freshness === 'refreshing' || !isTerminalInspectorTaskStatus(taskState.status);
+  return taskState.resourceState.freshness === 'refreshing' || !isTerminalHeaderTaskStatus(taskState.status);
+}
+
+function shouldReuseComponentsTask(
+  taskState: RuntimeSceneObjectComponentsTaskState,
+  latestMutationEpoch: number,
+  force: boolean,
+) {
+  if (force) {
+    return false;
+  }
+
+  if (taskState.mutationEpoch < latestMutationEpoch) {
+    return false;
+  }
+
+  if (taskState.resourceState.freshness === 'fresh'
+    && taskState.status === 'ready'
+    && taskState.loadedCount >= taskState.totalCount) {
+    return true;
+  }
+
+  return taskState.resourceState.freshness === 'refreshing' || !isTerminalComponentsTaskStatus(taskState.status);
 }
 
 interface UseSceneWorkspaceSyncOptions {
@@ -101,14 +126,18 @@ interface UseSceneWorkspaceSyncOptions {
   setSceneWorkspace: Dispatch<SetStateAction<SceneWorkspaceState>>;
   setLoadingChildrenByParent: Dispatch<SetStateAction<Record<string, boolean>>>;
   setChildErrorByParent: Dispatch<SetStateAction<Record<string, string | null>>>;
-  setInspectorLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
-  setInspectorErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
+  setHeaderLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setHeaderErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
+  setComponentsLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setComponentsErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
   processKeyRef: MutableRefObject<string | null>;
   childTaskByParentRef: MutableRefObject<Record<string, RuntimeSceneObjectChildrenTaskState>>;
-  inspectorTaskByAddressRef: MutableRefObject<Record<string, RuntimeSceneObjectInspectorTaskState>>;
+  headerTaskByAddressRef: MutableRefObject<Record<string, RuntimeSceneObjectHeaderTaskState>>;
+  componentsTaskByAddressRef: MutableRefObject<Record<string, RuntimeSceneObjectComponentsTaskState>>;
   resetSceneState: () => void;
   applySceneChildrenTaskState: (taskState: RuntimeSceneObjectChildrenTaskState) => void;
-  applyInspectorTaskState: (taskState: RuntimeSceneObjectInspectorTaskState) => void;
+  applyHeaderTaskState: (taskState: RuntimeSceneObjectHeaderTaskState) => void;
+  applyComponentsTaskState: (taskState: RuntimeSceneObjectComponentsTaskState) => void;
 }
 
 export function useSceneWorkspaceSync({
@@ -120,14 +149,18 @@ export function useSceneWorkspaceSync({
   setSceneWorkspace,
   setLoadingChildrenByParent,
   setChildErrorByParent,
-  setInspectorLoadingByAddress,
-  setInspectorErrorByAddress,
+  setHeaderLoadingByAddress,
+  setHeaderErrorByAddress,
+  setComponentsLoadingByAddress,
+  setComponentsErrorByAddress,
   processKeyRef,
   childTaskByParentRef,
-  inspectorTaskByAddressRef,
+  headerTaskByAddressRef,
+  componentsTaskByAddressRef,
   resetSceneState,
   applySceneChildrenTaskState,
-  applyInspectorTaskState,
+  applyHeaderTaskState,
+  applyComponentsTaskState,
 }: UseSceneWorkspaceSyncOptions) {
   const currentSceneSessionKey = workspaceLifecycle.runtimeSession.sessionKey ?? null;
   const currentSceneSessionKeyRef = useRef<string | null>(currentSceneSessionKey);
@@ -194,7 +227,7 @@ export function useSceneWorkspaceSync({
     return !isOlderSceneTask(currentTask, taskState);
   }, [childTaskByParentRef, matchesCurrentSceneSession]);
 
-  const shouldAcceptInspectorTask = useCallback((taskState: RuntimeSceneObjectInspectorTaskState) => {
+  const shouldAcceptHeaderTask = useCallback((taskState: RuntimeSceneObjectHeaderTaskState) => {
     if (!matchesCurrentSceneSession(taskState.sessionKey)) {
       return false;
     }
@@ -203,17 +236,34 @@ export function useSceneWorkspaceSync({
       return false;
     }
 
-    const currentTask = inspectorTaskByAddressRef.current[taskState.objectAddress];
+    const currentTask = headerTaskByAddressRef.current[taskState.objectAddress];
     if (!currentTask) {
       return true;
     }
 
     return !isOlderSceneTask(currentTask, taskState);
-  }, [inspectorTaskByAddressRef, matchesCurrentSceneSession]);
+  }, [headerTaskByAddressRef, matchesCurrentSceneSession]);
 
-  const loadSceneObjectInspector = useCallback(async (objectAddress: string, force = false) => {
-    const currentTask = inspectorTaskByAddressRef.current[objectAddress];
-    if (currentTask && shouldReuseInspectorTask(
+  const shouldAcceptComponentsTask = useCallback((taskState: RuntimeSceneObjectComponentsTaskState) => {
+    if (!matchesCurrentSceneSession(taskState.sessionKey)) {
+      return false;
+    }
+
+    if (taskState.mutationEpoch < latestSceneWorkspaceVersionRef.current.mutationEpoch) {
+      return false;
+    }
+
+    const currentTask = componentsTaskByAddressRef.current[taskState.objectAddress];
+    if (!currentTask) {
+      return true;
+    }
+
+    return !isOlderSceneTask(currentTask, taskState);
+  }, [componentsTaskByAddressRef, matchesCurrentSceneSession]);
+
+  const loadSceneObjectHeader = useCallback(async (objectAddress: string, force = false) => {
+    const currentTask = headerTaskByAddressRef.current[objectAddress];
+    if (currentTask && shouldReuseHeaderTask(
       currentTask,
       latestSceneWorkspaceVersionRef.current.mutationEpoch,
       force,
@@ -222,40 +272,77 @@ export function useSceneWorkspaceSync({
     }
 
     const startedAt = nowMs();
-    setInspectorLoadingByAddress((previous) => ({
+    setHeaderLoadingByAddress((previous) => ({
       ...previous,
       [objectAddress]: true,
     }));
-    setInspectorErrorByAddress((previous) => ({
+    setHeaderErrorByAddress((previous) => ({
       ...previous,
       [objectAddress]: null,
     }));
 
     try {
-      const taskState = await repository.startSceneObjectInspectorAnalysis(objectAddress);
-      if (!taskState || !shouldAcceptInspectorTask(taskState)) {
+      const taskState = await repository.startSceneObjectHeaderAnalysis(objectAddress);
+      if (!taskState || !shouldAcceptHeaderTask(taskState)) {
         return;
       }
 
-      applyInspectorTaskState(taskState);
+      applyHeaderTaskState(taskState);
 
       if (taskState.header) {
-        logScenePerf(`getSceneObjectInspector:${objectAddress}`, startedAt, {
+        logScenePerf(`getSceneObjectHeader:${objectAddress}`, startedAt, {
           status: taskState.status,
-          childCount: taskState.childrenLoadedCount,
-          childTotal: taskState.childrenTotalCount,
-          componentCount: taskState.componentsLoadedCount,
-          componentTotal: taskState.componentsTotalCount,
         });
       }
     } catch (error) {
-      const message = logSceneError(`getSceneObjectInspector failed for ${objectAddress}`, error);
-      setInspectorErrorByAddress((previous) => ({
+      const message = logSceneError(`getSceneObjectHeader failed for ${objectAddress}`, error);
+      setHeaderErrorByAddress((previous) => ({
         ...previous,
         [objectAddress]: message,
       }));
     }
-  }, [applyInspectorTaskState, inspectorTaskByAddressRef, repository, setInspectorErrorByAddress, setInspectorLoadingByAddress, shouldAcceptInspectorTask]);
+  }, [applyHeaderTaskState, headerTaskByAddressRef, repository, setHeaderErrorByAddress, setHeaderLoadingByAddress, shouldAcceptHeaderTask]);
+
+  const loadSceneObjectComponents = useCallback(async (objectAddress: string, force = false) => {
+    const currentTask = componentsTaskByAddressRef.current[objectAddress];
+    if (currentTask && shouldReuseComponentsTask(
+      currentTask,
+      latestSceneWorkspaceVersionRef.current.mutationEpoch,
+      force,
+    )) {
+      return;
+    }
+
+    const startedAt = nowMs();
+    setComponentsLoadingByAddress((previous) => ({
+      ...previous,
+      [objectAddress]: true,
+    }));
+    setComponentsErrorByAddress((previous) => ({
+      ...previous,
+      [objectAddress]: null,
+    }));
+
+    try {
+      const taskState = await repository.startSceneObjectComponentsAnalysis(objectAddress);
+      if (!taskState || !shouldAcceptComponentsTask(taskState)) {
+        return;
+      }
+
+      applyComponentsTaskState(taskState);
+      logScenePerf(`getSceneObjectComponents:${objectAddress}`, startedAt, {
+        status: taskState.status,
+        loadedCount: taskState.loadedCount,
+        totalCount: taskState.totalCount,
+      });
+    } catch (error) {
+      const message = logSceneError(`getSceneObjectComponents failed for ${objectAddress}`, error);
+      setComponentsErrorByAddress((previous) => ({
+        ...previous,
+        [objectAddress]: message,
+      }));
+    }
+  }, [applyComponentsTaskState, componentsTaskByAddressRef, repository, setComponentsErrorByAddress, setComponentsLoadingByAddress, shouldAcceptComponentsTask]);
 
   const ensureSceneObjectChildrenLoaded = useCallback(async (objectAddress: string, force = false) => {
     const currentTask = childTaskByParentRef.current[objectAddress];
@@ -298,6 +385,14 @@ export function useSceneWorkspaceSync({
       }));
     }
   }, [applySceneChildrenTaskState, childTaskByParentRef, repository, setChildErrorByParent, setLoadingChildrenByParent, shouldAcceptChildrenTask]);
+
+  const loadSceneObjectResources = useCallback(async (objectAddress: string, force = false) => {
+    await Promise.all([
+      loadSceneObjectHeader(objectAddress, force),
+      ensureSceneObjectChildrenLoaded(objectAddress, force),
+      loadSceneObjectComponents(objectAddress, force),
+    ]);
+  }, [ensureSceneObjectChildrenLoaded, loadSceneObjectComponents, loadSceneObjectHeader]);
 
   const stopSceneObjectChildrenObservation = useCallback((_objectAddress: string) => {
     return;
@@ -378,7 +473,8 @@ export function useSceneWorkspaceSync({
     let disposed = false;
     let disposeWorkspace: (() => void) | undefined;
     let disposeChildren: (() => void) | undefined;
-    let disposeInspector: (() => void) | undefined;
+    let disposeHeader: (() => void) | undefined;
+    let disposeComponents: (() => void) | undefined;
 
     onSceneWorkspaceStateUpdated((nextWorkspace) => {
       if (disposed || !shouldAcceptSceneWorkspace(nextWorkspace)) {
@@ -407,27 +503,42 @@ export function useSceneWorkspaceSync({
       disposeChildren = dispose;
     }).catch(() => undefined);
 
-    onSceneObjectInspectorTaskUpdated((taskState) => {
-      if (disposed || !shouldAcceptInspectorTask(taskState)) {
+    onSceneObjectHeaderTaskUpdated((taskState) => {
+      if (disposed || !shouldAcceptHeaderTask(taskState)) {
         return;
       }
 
-      applyInspectorTaskState(taskState);
+      applyHeaderTaskState(taskState);
     }).then((dispose) => {
       if (disposed) {
         dispose();
         return;
       }
-      disposeInspector = dispose;
+      disposeHeader = dispose;
+    }).catch(() => undefined);
+
+    onSceneObjectComponentsTaskUpdated((taskState) => {
+      if (disposed || !shouldAcceptComponentsTask(taskState)) {
+        return;
+      }
+
+      applyComponentsTaskState(taskState);
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      disposeComponents = dispose;
     }).catch(() => undefined);
 
     return () => {
       disposed = true;
       disposeWorkspace?.();
       disposeChildren?.();
-      disposeInspector?.();
+      disposeHeader?.();
+      disposeComponents?.();
     };
-  }, [active, applyInspectorTaskState, applySceneChildrenTaskState, shouldAcceptChildrenTask, shouldAcceptInspectorTask, shouldAcceptSceneWorkspace, updateSceneWorkspace]);
+  }, [active, applyComponentsTaskState, applyHeaderTaskState, applySceneChildrenTaskState, shouldAcceptChildrenTask, shouldAcceptComponentsTask, shouldAcceptHeaderTask, shouldAcceptSceneWorkspace, updateSceneWorkspace]);
 
   useEffect(() => {
     const processKey = workspaceLifecycle.runtimeSession.sessionKey
@@ -463,30 +574,45 @@ export function useSceneWorkspaceSync({
       return;
     }
 
-    loadSceneObjectInspector(selectedObjectAddress).catch(() => undefined);
-  }, [active, loadSceneObjectInspector, selectedObjectAddress]);
+    loadSceneObjectResources(selectedObjectAddress).catch(() => undefined);
+  }, [active, loadSceneObjectResources, selectedObjectAddress]);
 
   useEffect(() => {
     if (!active || !selectedObjectAddress) {
       return;
     }
 
-    const currentTask = inspectorTaskByAddressRef.current[selectedObjectAddress];
-    if (!currentTask) {
+    const currentHeaderTask = headerTaskByAddressRef.current[selectedObjectAddress];
+    const currentComponentsTask = componentsTaskByAddressRef.current[selectedObjectAddress];
+    const currentChildrenTask = childTaskByParentRef.current[selectedObjectAddress];
+    const shouldRefreshHeader = currentHeaderTask == null
+      || currentHeaderTask.mutationEpoch < sceneWorkspace.mutationEpoch
+      || currentHeaderTask.isStale
+      || currentHeaderTask.resourceState.freshness === 'stale'
+      || currentHeaderTask.resourceState.freshness === 'error'
+      || currentHeaderTask.resourceState.freshness === 'empty';
+    const shouldRefreshComponents = currentComponentsTask == null
+      || currentComponentsTask.mutationEpoch < sceneWorkspace.mutationEpoch
+      || currentComponentsTask.isStale
+      || currentComponentsTask.resourceState.freshness === 'stale'
+      || currentComponentsTask.resourceState.freshness === 'error'
+      || currentComponentsTask.resourceState.freshness === 'empty';
+    const shouldRefreshChildren = currentChildrenTask == null
+      || currentChildrenTask.mutationEpoch < sceneWorkspace.mutationEpoch
+      || currentChildrenTask.isStale
+      || currentChildrenTask.resourceState.freshness === 'stale'
+      || currentChildrenTask.resourceState.freshness === 'error'
+      || currentChildrenTask.resourceState.freshness === 'empty';
+
+    if (!shouldRefreshHeader && !shouldRefreshComponents && !shouldRefreshChildren) {
       return;
     }
 
-    if (currentTask.mutationEpoch < sceneWorkspace.mutationEpoch
-      || currentTask.isStale
-      || currentTask.resourceState.freshness === 'stale'
-      || currentTask.resourceState.freshness === 'error'
-      || currentTask.resourceState.freshness === 'empty') {
-      loadSceneObjectInspector(selectedObjectAddress, true).catch(() => undefined);
-    }
-  }, [active, loadSceneObjectInspector, sceneWorkspace.mutationEpoch, selectedObjectAddress, inspectorTaskByAddressRef]);
+    loadSceneObjectResources(selectedObjectAddress, true).catch(() => undefined);
+  }, [active, childTaskByParentRef, componentsTaskByAddressRef, headerTaskByAddressRef, loadSceneObjectResources, sceneWorkspace.mutationEpoch, selectedObjectAddress]);
 
   return {
-    loadSceneObjectInspector,
+    loadSceneObjectResources,
     ensureSceneObjectChildrenLoaded,
     stopSceneObjectChildrenObservation,
     refreshSceneWorkspace,

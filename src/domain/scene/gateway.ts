@@ -4,8 +4,8 @@ import type {
   RuntimeSceneMousePickerSnapshot,
   RuntimeSceneMutationResult,
   RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectInspectorTaskState,
-  RuntimeSceneObjectInspectorSnapshot,
+  RuntimeSceneObjectComponentsTaskState,
+  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneTransformUpdate,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
@@ -28,10 +28,12 @@ export interface SceneGateway {
   startSceneObjectChildrenAnalysis(objectAddress: string): Promise<RuntimeSceneObjectChildrenTaskState | null>;
   getSceneObjectChildrenState(objectAddress: string): Promise<RuntimeSceneObjectChildrenTaskState | null>;
   cancelSceneObjectChildrenAnalysis(objectAddress: string, taskId?: number): Promise<RuntimeSceneObjectChildrenTaskState | null>;
-  getSceneObjectInspector(objectAddress: string): Promise<RuntimeSceneObjectInspectorSnapshot>;
-  startSceneObjectInspectorAnalysis(objectAddress: string): Promise<RuntimeSceneObjectInspectorTaskState | null>;
-  getSceneObjectInspectorState(): Promise<RuntimeSceneObjectInspectorTaskState | null>;
-  cancelSceneObjectInspectorAnalysis(taskId?: number): Promise<RuntimeSceneObjectInspectorTaskState | null>;
+  startSceneObjectHeaderAnalysis(objectAddress: string): Promise<RuntimeSceneObjectHeaderTaskState | null>;
+  getSceneObjectHeaderState(objectAddress: string): Promise<RuntimeSceneObjectHeaderTaskState | null>;
+  cancelSceneObjectHeaderAnalysis(objectAddress: string, taskId?: number): Promise<RuntimeSceneObjectHeaderTaskState | null>;
+  startSceneObjectComponentsAnalysis(objectAddress: string): Promise<RuntimeSceneObjectComponentsTaskState | null>;
+  getSceneObjectComponentsState(objectAddress: string): Promise<RuntimeSceneObjectComponentsTaskState | null>;
+  cancelSceneObjectComponentsAnalysis(objectAddress: string, taskId?: number): Promise<RuntimeSceneObjectComponentsTaskState | null>;
   createSceneRoot(sceneHandle: number, name: string): Promise<RuntimeSceneMutationResult>;
   createSceneChild(parentObjectAddress: string, name: string): Promise<RuntimeSceneMutationResult>;
   duplicateSceneObject(objectAddress: string): Promise<RuntimeSceneMutationResult>;

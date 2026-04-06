@@ -25,15 +25,6 @@ pub fn load_scene_children_page(
     kernel.load_scene_children_page(object_address, offset, limit)
 }
 
-pub fn load_scene_inspector(
-    runtime_session: &RuntimeSession,
-    object_address: &str,
-) -> Result<RuntimeSceneObjectInspectorSnapshot, String> {
-    let mut kernel = SceneQueryKernel::new(runtime_session)?;
-    let object_address = parse_address(object_address)?;
-    kernel.load_scene_inspector(object_address)
-}
-
 pub fn load_scene_inspector_header(
     runtime_session: &RuntimeSession,
     object_address: &str,
@@ -41,17 +32,6 @@ pub fn load_scene_inspector_header(
     let mut kernel = SceneQueryKernel::new(runtime_session)?;
     let object_address = parse_address(object_address)?;
     kernel.load_scene_inspector_header(object_address)
-}
-
-pub fn load_scene_inspector_children_page(
-    runtime_session: &RuntimeSession,
-    object_address: &str,
-    offset: usize,
-    limit: usize,
-) -> Result<RuntimeSceneChildrenPageSnapshot, String> {
-    let mut kernel = SceneQueryKernel::new(runtime_session)?;
-    let object_address = parse_address(object_address)?;
-    kernel.load_scene_inspector_children_page(object_address, offset, limit)
 }
 
 pub fn load_scene_inspector_components_page(

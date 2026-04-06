@@ -111,5 +111,7 @@ fn reset_runtime_backing_state(state: &AppState) {
     state.runtime_kernel().session().reset();
     state.scene().workspace().reset();
     state.scene().children().reset();
-    state.scene().inspector().reset();
+    state.scene().header().reset();
+    state.scene().components().reset();
+    state.scene().picker().reset();
 }
