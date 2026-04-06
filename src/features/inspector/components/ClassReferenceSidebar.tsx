@@ -1,5 +1,6 @@
 import { Search, LoaderCircle, Database, X, Waypoints } from 'lucide-react';
 import type { ClassReferenceResult } from '@/domain/analysis/view-models';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 type ReferenceMode = 'Inheritance' | 'Member' | 'Function';
 
@@ -78,14 +79,18 @@ export function ClassReferenceSidebar({
               className="w-full bg-[#05080c]/60 border border-[#1c2838] rounded-lg text-[11px] py-2 pl-9 pr-3 outline-none focus:border-cyan-500/50 focus:bg-[#070a0f]/90 focus:shadow-[0_0_15px_rgba(34,211,238,0.1)] transition-all text-slate-100 placeholder:text-slate-600 font-mono tracking-wide"
             />
           </div>
-          <button
-            onClick={executeSearch}
-            disabled={!targetInput.trim() || isSearching}
-            className="flex items-center justify-center p-2 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500 hover:text-white hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-            title="Search References"
-          >
-            <Search className="w-4 h-4" />
-          </button>
+          <Tooltip position="bottom" content={<TooltipPanel label="Search References" description="Run the selected reference search against the metadata catalog." shortcut="Enter" tone="accent" />}>
+            <span className="inline-flex shrink-0">
+              <button
+                onClick={executeSearch}
+                disabled={!targetInput.trim() || isSearching}
+                aria-label="Search References"
+                className="flex items-center justify-center p-2 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500 hover:text-white hover:shadow-[0_0_15px_rgba(34,211,238,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+            </span>
+          </Tooltip>
         </div>
 
         {targetError && (

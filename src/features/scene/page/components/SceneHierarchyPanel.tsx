@@ -6,6 +6,7 @@ import type {
   RuntimeSceneKind,
   RuntimeSceneNodeSummary,
 } from '@/domain/analysis/contracts';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 import { buildLoadedSceneGraph, createLoadedSceneSearchProjection } from '../loadedSceneNodes';
 import { useSceneMutationState, useSceneTreeState } from '../SceneWorkspaceContext';
 
@@ -371,18 +372,25 @@ export function SceneHierarchyPanel() {
           <div className="mt-1 text-lg text-white font-bold tracking-tight drop-shadow-sm">Loaded Objects</div>
           <div className="text-xs text-slate-500">{summary.sceneCount} scenes, {summary.rootCount} root objects</div>
         </div>
-        <button
-          onClick={() => refreshSceneWorkspace().catch(() => undefined)}
-          className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all ${
-            sceneWorkspace.refreshStatus === 'refreshing'
-              ? 'bg-transparent text-cyan-400'
-              : 'border border-[#1a2636] bg-[#0a0f16] text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 shadow-sm'
-          }`}
-          title="Refresh scene workspace"
-          disabled={sceneWorkspace.refreshStatus === 'refreshing'}
+        <Tooltip
+          position="bottom"
+          content={<TooltipPanel label="Refresh Scene Workspace" description="Request a fresh scene workspace snapshot from the runtime session." tone={sceneWorkspace.refreshStatus === 'refreshing' ? 'accent' : 'default'} />}
         >
-          <RefreshCw size={14} className={sceneWorkspace.refreshStatus === 'refreshing' ? 'animate-[spin_2s_linear_infinite]' : ''} />
-        </button>
+          <span className="inline-flex">
+            <button
+              onClick={() => refreshSceneWorkspace().catch(() => undefined)}
+              className={`h-9 w-9 flex items-center justify-center rounded-lg transition-all ${
+                sceneWorkspace.refreshStatus === 'refreshing'
+                  ? 'bg-transparent text-cyan-400'
+                  : 'border border-[#1a2636] bg-[#0a0f16] text-slate-400 hover:text-cyan-300 hover:border-cyan-500/30 shadow-sm'
+              }`}
+              aria-label="Refresh Scene Workspace"
+              disabled={sceneWorkspace.refreshStatus === 'refreshing'}
+            >
+              <RefreshCw size={14} className={sceneWorkspace.refreshStatus === 'refreshing' ? 'animate-[spin_2s_linear_infinite]' : ''} />
+            </button>
+          </span>
+        </Tooltip>
       </div>
 
       <div className="px-4 pt-4">

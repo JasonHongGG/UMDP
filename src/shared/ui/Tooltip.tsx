@@ -2,6 +2,41 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 
+type TooltipTone = 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'muted';
+
+const TOOLTIP_TONE_CLASSES: Record<TooltipTone, { dot: string; label: string; detail: string }> = {
+  default: {
+    dot: 'bg-slate-300/80',
+    label: 'text-slate-100',
+    detail: 'text-slate-500',
+  },
+  accent: {
+    dot: 'bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,0.65)]',
+    label: 'text-cyan-100',
+    detail: 'text-cyan-300/75',
+  },
+  success: {
+    dot: 'bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.65)]',
+    label: 'text-emerald-100',
+    detail: 'text-emerald-300/75',
+  },
+  warning: {
+    dot: 'bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,0.65)]',
+    label: 'text-amber-100',
+    detail: 'text-amber-300/75',
+  },
+  danger: {
+    dot: 'bg-rose-300 shadow-[0_0_8px_rgba(253,164,175,0.65)]',
+    label: 'text-rose-100',
+    detail: 'text-rose-300/80',
+  },
+  muted: {
+    dot: 'bg-slate-500/90',
+    label: 'text-slate-200',
+    detail: 'text-slate-500',
+  },
+};
+
 type TooltipTriggerElement = HTMLElement;
 
 type TooltipTriggerProps = {
@@ -20,6 +55,50 @@ export interface TooltipProps {
   position?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
   offset?: number;
+}
+
+export interface TooltipPanelProps {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  detail?: React.ReactNode;
+  shortcut?: React.ReactNode;
+  tone?: TooltipTone;
+}
+
+export function TooltipPanel({
+  label,
+  description,
+  detail,
+  shortcut,
+  tone = 'default',
+}: TooltipPanelProps) {
+  const toneClasses = TOOLTIP_TONE_CLASSES[tone];
+
+  return (
+    <div className="min-w-[11rem] max-w-[18rem] text-left">
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${toneClasses.dot}`} />
+        <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.16em] ${toneClasses.label}`}>
+          {label}
+        </span>
+        {shortcut ? (
+          <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            {shortcut}
+          </span>
+        ) : null}
+      </div>
+      {description ? (
+        <div className="mt-1.5 text-[11px] leading-relaxed text-slate-300">
+          {description}
+        </div>
+      ) : null}
+      {detail ? (
+        <div className={`mt-2 text-[10px] leading-relaxed ${toneClasses.detail}`}>
+          {detail}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function Tooltip({ children, content, delay = 300, position = 'bottom', className = '', offset = 8 }: TooltipProps) {
@@ -139,7 +218,8 @@ export function Tooltip({ children, content, delay = 300, position = 'bottom', c
                 zIndex: 99999,
                 pointerEvents: 'none'
               }}
-              className={`px-3 py-2 bg-[#0c1520]/95 backdrop-blur-md border border-slate-700/60 shadow-[0_8px_30px_rgba(0,0,0,0.6)] rounded-lg text-[11px] font-medium text-slate-300 tracking-wide text-center whitespace-pre-wrap leading-[1.6] ${className}`}
+              role="tooltip"
+              className={`max-w-[18rem] rounded-xl border border-[#213246] bg-[#07111b]/96 px-3 py-2.5 text-left text-[11px] font-medium tracking-wide text-slate-300 shadow-[0_10px_32px_rgba(0,0,0,0.58)] backdrop-blur-xl whitespace-pre-wrap leading-[1.6] ${className}`}
             >
               {content}
             </motion.div>

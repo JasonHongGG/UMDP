@@ -22,7 +22,7 @@ import { useSceneWorkspaceStore } from './useSceneWorkspaceStore';
 import { useSceneMutationActions } from './useSceneMutationActions';
 import { useSceneMousePickerState } from './useSceneMousePickerState';
 import { useSceneWorkspaceSync } from './useSceneWorkspaceSync';
-import type { SceneInspectorTab } from './useSceneWorkspaceStore';
+import type { SceneInspectorComponentsPanelState, SceneInspectorTab } from './useSceneWorkspaceStore';
 
 export interface SceneWorkspaceStateResult {
   sceneWorkspace: SceneWorkspaceState;
@@ -47,6 +47,7 @@ export interface SceneWorkspaceStateResult {
   sceneInspector: RuntimeSceneObjectInspectorSnapshot | null;
   sceneInspectorHeaderTaskState: RuntimeSceneObjectHeaderTaskState | null;
   sceneInspectorComponentsTaskState: RuntimeSceneObjectComponentsTaskState | null;
+  sceneInspectorComponentsPanel: SceneInspectorComponentsPanelState | null;
   sceneInspectorLoading: boolean;
   sceneInspectorChildrenLoading: boolean;
   sceneInspectorComponentsLoading: boolean;
@@ -137,6 +138,7 @@ export function useSceneWorkspaceState({
     sceneInspector,
     sceneInspectorHeaderTaskState,
     sceneInspectorComponentsTaskState,
+    sceneInspectorComponentsPanel,
     sceneInspectorLoading,
     sceneInspectorError,
     sceneInspectorComponentsError,
@@ -327,6 +329,7 @@ export function useSceneWorkspaceState({
     sceneInspector,
     sceneInspectorHeaderTaskState,
     sceneInspectorComponentsTaskState,
+    sceneInspectorComponentsPanel,
     sceneInspectorLoading,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,

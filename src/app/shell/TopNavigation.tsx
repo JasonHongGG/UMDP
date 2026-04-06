@@ -1,5 +1,6 @@
 import { Boxes, LayoutDashboard, ScanSearch } from 'lucide-react';
 import type { WorkspacePresentation } from '@/domain/workspace/presentation';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 const NAV_ITEMS = [
   { key: 'inspector', label: 'Inspector', icon: ScanSearch },
@@ -40,25 +41,39 @@ export function TopNavigation({ activePage, onPageChange, pages }: TopNavigation
 
           return (
             <div key={item.key} className={index > 0 ? 'ml-1' : ''}>
-              <button
-                onClick={() => {
-                  if (!disabled) {
-                    onPageChange(item.key);
-                  }
-                }}
-                disabled={disabled}
-                title={disabled ? detail.description : item.label}
-                className={`relative w-[110px] py-1.5 flex items-center justify-center gap-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-300 z-10 ${
-                  active
-                    ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]'
-                    : disabled
-                      ? 'text-slate-700 cursor-not-allowed'
-                      : 'text-slate-500 hover:text-slate-300'
-                }`}
+              <Tooltip
+                position="bottom"
+                content={(
+                  <TooltipPanel
+                    label={item.label}
+                    description={detail.description}
+                    detail={disabled ? 'Current runtime session does not expose this capability.' : active ? 'Current workspace page.' : 'Switch workspace page.'}
+                    tone={disabled ? 'warning' : active ? 'accent' : 'default'}
+                  />
+                )}
               >
-                <Icon size={14} className={active ? 'animate-[pulse_3s_ease-in-out_infinite]' : ''} />
-                {item.label}
-              </button>
+                <span className="block">
+                  <button
+                    onClick={() => {
+                      if (!disabled) {
+                        onPageChange(item.key);
+                      }
+                    }}
+                    disabled={disabled}
+                    aria-label={item.label}
+                    className={`relative w-[110px] py-1.5 flex items-center justify-center gap-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-300 z-10 ${
+                      active
+                        ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]'
+                        : disabled
+                          ? 'text-slate-700 cursor-not-allowed'
+                          : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <Icon size={14} className={active ? 'animate-[pulse_3s_ease-in-out_infinite]' : ''} />
+                    {item.label}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           );
         })}

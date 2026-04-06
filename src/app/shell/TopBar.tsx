@@ -7,6 +7,7 @@ import {
     minimizeCurrentWindow,
     toggleCurrentWindowMaximized,
 } from '@/infrastructure/tauri/TauriWindowGateway';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 interface TopBarProps {
     onOpenSelector: () => void;
@@ -55,37 +56,53 @@ export function TopBar({ onOpenSelector, activePage, onPageChange, workspace, wo
             <TopNavigation activePage={activePage} onPageChange={onPageChange} pages={workspacePresentation.pages} />
 
             <div className="flex items-center gap-2 relative z-10">
-                <button
-                    onClick={onOpenSelector}
-                    title="Select Process"
-                    className="group flex items-center justify-center w-9 h-9 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-all duration-300 border border-cyan-500/30 hover:border-cyan-500/60 hover:shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mr-2"
-                >
-                    <Cpu size={18} />
-                </button>
+                <Tooltip position="bottom" content={<TooltipPanel label="Select Process" description="Attach or switch the target runtime process." tone="accent" />}>
+                    <span className="inline-flex mr-2">
+                        <button
+                            onClick={onOpenSelector}
+                            aria-label="Select Process"
+                            className="group flex items-center justify-center w-9 h-9 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 rounded-lg transition-all duration-300 border border-cyan-500/30 hover:border-cyan-500/60 hover:shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95"
+                        >
+                            <Cpu size={18} />
+                        </button>
+                    </span>
+                </Tooltip>
 
                 <div className="w-[1px] h-6 bg-white/10 mx-1"></div>
 
-                <button
-                    onClick={handleMinimize}
-                    title="Minimize"
-                    className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all duration-300 border border-transparent hover:border-white/10"
-                >
-                    <Minus size={16} className="transition-all" />
-                </button>
-                <button
-                    onClick={handleToggleMaximize}
-                    title="Maximize / Restore"
-                    className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all duration-300 border border-transparent hover:border-white/10"
-                >
-                    <Square size={14} className="transition-all" />
-                </button>
-                <button
-                    onClick={handleClose}
-                    title="Close Window"
-                    className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition-all duration-300 border border-transparent hover:border-rose-500/40"
-                >
-                    <X size={18} className="group-hover:drop-shadow-[0_0_8px_rgba(244,63,94,0.6)] transition-all" />
-                </button>
+                <Tooltip position="bottom" content={<TooltipPanel label="Minimize" description="Send the current window to the taskbar." tone="muted" />}>
+                    <span className="inline-flex">
+                        <button
+                            onClick={handleMinimize}
+                            aria-label="Minimize"
+                            className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all duration-300 border border-transparent hover:border-white/10"
+                        >
+                            <Minus size={16} className="transition-all" />
+                        </button>
+                    </span>
+                </Tooltip>
+                <Tooltip position="bottom" content={<TooltipPanel label="Maximize / Restore" description="Toggle the current window between normal and maximized bounds." tone="muted" />}>
+                    <span className="inline-flex">
+                        <button
+                            onClick={handleToggleMaximize}
+                            aria-label="Maximize or Restore"
+                            className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all duration-300 border border-transparent hover:border-white/10"
+                        >
+                            <Square size={14} className="transition-all" />
+                        </button>
+                    </span>
+                </Tooltip>
+                <Tooltip position="bottom" content={<TooltipPanel label="Close Window" description="Close the current workspace window." tone="danger" />}>
+                    <span className="inline-flex">
+                        <button
+                            onClick={handleClose}
+                            aria-label="Close Window"
+                            className="group flex items-center justify-center w-9 h-9 bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg transition-all duration-300 border border-transparent hover:border-rose-500/40"
+                        >
+                            <X size={18} className="group-hover:drop-shadow-[0_0_8px_rgba(244,63,94,0.6)] transition-all" />
+                        </button>
+                    </span>
+                </Tooltip>
             </div>
         </div>
     );

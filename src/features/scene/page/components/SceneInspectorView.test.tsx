@@ -31,6 +31,10 @@ function findButtonByTextInDocument(text: string) {
   return Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes(text)) ?? null;
 }
 
+function findButtonByTestId(container: HTMLElement, testId: string) {
+  return container.querySelector(`button[data-testid="${testId}"]`) as HTMLButtonElement | null;
+}
+
 async function flushEffects() {
   await act(async () => {
     await Promise.resolve();
@@ -109,6 +113,16 @@ describe('SceneInspectorView', () => {
       }),
       sceneInspectorHeaderTaskState: null,
       sceneInspectorComponentsTaskState: null,
+      sceneInspectorComponentsPanel: {
+        objectAddress: player.objectAddress,
+        components: [],
+        totalCount: 0,
+        loadedCount: 0,
+        status: 'ready',
+        isLoading: false,
+        isStale: false,
+        errorMessage: null,
+      },
       sceneInspectorLoading: false,
       sceneInspectorChildrenLoading: false,
       sceneInspectorComponentsLoading: false,
@@ -145,6 +159,7 @@ describe('SceneInspectorView', () => {
         loading: false,
         errorMessage: null,
         pendingOperations: {},
+        activeIntentByObject: {},
       },
     });
   });
@@ -174,7 +189,7 @@ describe('SceneInspectorView', () => {
     });
     await flushEffects();
 
-    const copyButton = container.querySelector('button[title="Copy Path"]') as HTMLButtonElement | null;
+    const copyButton = findButtonByTestId(container, 'scene-copy-path');
     expect(copyButton).not.toBeNull();
 
     await act(async () => {
@@ -277,6 +292,16 @@ describe('SceneInspectorView', () => {
       sceneInspector: createSceneInspectorSnapshot(),
       sceneInspectorHeaderTaskState: null,
       sceneInspectorComponentsTaskState: null,
+      sceneInspectorComponentsPanel: {
+        objectAddress: '0x1000',
+        components: [],
+        totalCount: 0,
+        loadedCount: 0,
+        status: 'error',
+        isLoading: false,
+        isStale: false,
+        errorMessage: componentsError,
+      },
       sceneInspectorLoading: false,
       sceneInspectorChildrenLoading: false,
       sceneInspectorComponentsLoading: false,
@@ -300,7 +325,72 @@ describe('SceneInspectorView', () => {
     expect(occurrences).toBe(1);
   });
 
-  it('only blocks the matching control when a local mutation is pending', async () => {
+  it('renders components from the canonical panel state with quiet icon-first controls', async () => {
+    const behaviourComponent = {
+      componentAddress: '0xcomponent-behaviour',
+      typeName: 'PlayerController',
+      isBehaviour: true,
+      behaviourEnabled: true,
+    };
+    const readonlyComponent = {
+      componentAddress: '0xcomponent-readonly',
+      typeName: 'UnityEngine.Transform',
+      isBehaviour: false,
+      behaviourEnabled: null,
+    };
+
+    mockUseSceneInspectorState.mockReturnValue({
+      setSelectedObjectAddress: vi.fn(),
+      sceneTabs: [],
+      activeSceneTabIndex: -1,
+      handleCloseTab: vi.fn(),
+      setActiveSceneTabIndex: vi.fn(),
+      sceneInspector: createSceneInspectorSnapshot({
+        object: createSceneNodeSummary({ objectAddress: '0xplayer', name: 'Player', componentCount: 0 }),
+        components: [],
+      }),
+      sceneInspectorHeaderTaskState: null,
+      sceneInspectorComponentsTaskState: null,
+      sceneInspectorComponentsPanel: {
+        objectAddress: '0xplayer',
+        components: [behaviourComponent, readonlyComponent],
+        totalCount: 2,
+        loadedCount: 2,
+        status: 'ready',
+        isLoading: false,
+        isStale: false,
+        errorMessage: null,
+      },
+      sceneInspectorLoading: false,
+      sceneInspectorChildrenLoading: false,
+      sceneInspectorComponentsLoading: false,
+      sceneInspectorError: null,
+      sceneInspectorComponentsError: null,
+      sceneObjectComponentsCapability: {
+        status: 'supported',
+        strategy: 'get-components-by-type',
+        reason: null,
+        checkedAt: '2026-04-06T12:00:00.000Z',
+      },
+    });
+
+    await act(async () => {
+      root.render(createElement(SceneInspectorView));
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain('Components (2)');
+    expect(container.textContent).toContain('PlayerController');
+    expect(container.textContent).toContain('UnityEngine.Transform');
+    expect(container.textContent).not.toContain('Materialized 2/2');
+    expect(container.textContent).not.toContain('Behaviour');
+    expect(container.textContent).not.toContain('Read-only');
+    expect(findButtonByTestId(container, 'scene-component-toggle-0xcomponent-behaviour')).not.toBeNull();
+    expect(findButtonByTestId(container, 'scene-component-remove-0xcomponent-readonly')).not.toBeNull();
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+
+  it('keeps the active control interactive while the pending intent collapses into a quiet icon state', async () => {
     mockUseSceneMutationState.mockReturnValue({
       createSceneChild: vi.fn().mockResolvedValue(null),
       duplicateSceneObject: vi.fn().mockResolvedValue(null),
@@ -321,6 +411,12 @@ describe('SceneInspectorView', () => {
         loading: true,
         errorMessage: null,
         pendingOperations: { 'set-active': 1 },
+        activeIntentByObject: {
+          '0xplayer': {
+            desiredActiveSelf: false,
+            status: 'running',
+          },
+        },
       },
     });
 
@@ -329,10 +425,13 @@ describe('SceneInspectorView', () => {
     });
     await flushEffects();
 
-    const toggleButton = container.querySelector('button[title="Enable/Disable Object"]') as HTMLButtonElement | null;
+    const toggleButton = findButtonByTestId(container, 'scene-object-active-toggle');
     const nameInput = container.querySelector('input[type="text"]') as HTMLInputElement | null;
 
-    expect(toggleButton?.disabled).toBe(true);
+    expect(toggleButton).not.toBeNull();
+    expect(toggleButton?.disabled).toBe(false);
+    expect(container.textContent).not.toContain('Syncing');
+    expect(container.textContent).not.toContain('Deactivating…');
     expect(nameInput?.disabled).toBe(false);
   });
 });

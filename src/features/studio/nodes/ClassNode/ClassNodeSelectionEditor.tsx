@@ -7,6 +7,7 @@ import { beginPointerExpressionDrag } from '@/features/studio/core/drag/expressi
 import { createExpressionReferenceDragPayload, createStaticExpressionSource } from '@/features/studio/core/expression';
 import { reconcileClassInfoSelection, type ClassInfoCatalog } from '@/domain/studio/editor';
 import type { StableId } from '@/domain/contracts/shared-identity';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 import type { ClassNodeData } from './classNodeModel';
 import { createEmptyCatalog, toggleSelectionEntry } from './classNodeModel';
 
@@ -212,23 +213,31 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
           </div>
           {descriptors.length > 0 ? (
             <div className="flex items-center gap-1.5 text-slate-400">
-              <button
-                type="button"
-                className={`p-1.5 rounded-md hover:bg-slate-800 ${tone.accentText} transition-all`}
-                onClick={() => updateSelectionBucket(bucket, descriptors.map((item) => item.id))}
-                title={`Select all ${tone.label}`}
-              >
-                <CheckCheck size={14} />
-              </button>
+              <Tooltip position="bottom" content={<TooltipPanel label={`Select All ${tone.label}`} description="Add every available item in this section to the info payload selection." tone="accent" />}>
+                <span className="inline-flex">
+                  <button
+                    type="button"
+                    className={`p-1.5 rounded-md hover:bg-slate-800 ${tone.accentText} transition-all`}
+                    onClick={() => updateSelectionBucket(bucket, descriptors.map((item) => item.id))}
+                    aria-label={`Select all ${tone.label}`}
+                  >
+                    <CheckCheck size={14} />
+                  </button>
+                </span>
+              </Tooltip>
               <div className="w-px h-3 bg-slate-700 mx-0.5"></div>
-              <button
-                type="button"
-                className="p-1.5 rounded-md hover:bg-red-500/10 hover:text-red-400 transition-all"
-                onClick={() => updateSelectionBucket(bucket, [])}
-                title={`Clear all ${tone.label}`}
-              >
-                <XSquare size={14} />
-              </button>
+              <Tooltip position="bottom" content={<TooltipPanel label={`Clear All ${tone.label}`} description="Remove every selected item in this section from the info payload." tone="danger" />}>
+                <span className="inline-flex">
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-md hover:bg-red-500/10 hover:text-red-400 transition-all"
+                    onClick={() => updateSelectionBucket(bucket, [])}
+                    aria-label={`Clear all ${tone.label}`}
+                  >
+                    <XSquare size={14} />
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           ) : null}
         </div>
@@ -244,7 +253,7 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
               const isSelected = isDescriptorSelected(selectedIds, descriptor);
               const canDragStaticAddress = bucket === 'statics' && Boolean(data.binding);
 
-              return (
+              const descriptorCard = (
                 <div
                   key={`${descriptor.id}-${index}`}
                   style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as React.CSSProperties}
@@ -274,7 +283,6 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
                       ? `${tone.accentBg} ${tone.accentBorder} ${tone.shadow} scale-[1.01]`
                       : 'bg-slate-800/30 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 opacity-80 hover:opacity-100'}
                   `}
-                  title={canDragStaticAddress ? `Drag static reference ${data.binding?.name}.${descriptor.label}` : undefined}
                 >
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
                     {renderDescriptorTitleRow(bucket, descriptor, isSelected)}
@@ -290,6 +298,16 @@ export const ClassNodeSelectionEditor: React.FC<INodeEditProps<ClassNodeData>> =
                   </div>
                 </div>
               );
+
+              return canDragStaticAddress ? (
+                <Tooltip
+                  key={`${descriptor.id}-${index}`}
+                  position="bottom"
+                  content={<TooltipPanel label="Drag Static Reference" description={`${data.binding?.name}.${descriptor.label}`} detail="Drag this row into another editor to bind a static expression reference." tone="accent" />}
+                >
+                  {descriptorCard}
+                </Tooltip>
+              ) : descriptorCard;
             })}
           </div>
         )}

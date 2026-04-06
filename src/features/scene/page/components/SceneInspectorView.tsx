@@ -2,14 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Copy,
-  GitBranchPlus,
-  Info,
   Layers3,
-  Pencil,
   Plus,
   Power,
   Search,
-  Tags,
   Trash2,
   ChevronRight,
   ChevronDown,
@@ -18,6 +14,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select } from '@/shared/ui/Select';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 import type {
   ClassDescriptor,
   RuntimeQuaternionSnapshot,
@@ -30,7 +27,7 @@ import type {
 import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
 import { EMPTY_LOADED_SCENE_GRAPH, buildLoadedSceneGraph, collectLoadedDescendantAddresses, filterLoadedSceneNodeRecords } from '../loadedSceneNodes';
 import { useSceneInspectorState, useSceneMutationState, useSceneWorkspace } from '../SceneWorkspaceContext';
-import { ActionButton, EmptyNotice, ErrorNotice, KeyValue, ObjectLinkCard, SceneCard } from './SceneUiPrimitives';
+import { EmptyNotice, ErrorNotice } from './SceneUiPrimitives';
 import { SceneInspectorTabBar } from './SceneInspectorTabBar';
 
 type TransformVectorKey = 'worldPosition' | 'localPosition' | 'localEulerAngles' | 'localScale';
@@ -51,8 +48,7 @@ export function SceneInspectorView() {
     handleCloseTab,
     setActiveSceneTabIndex,
     sceneInspector,
-    sceneInspectorHeaderTaskState,
-    sceneInspectorComponentsTaskState,
+    sceneInspectorComponentsPanel,
     sceneInspectorLoading,
     sceneInspectorChildrenLoading,
     sceneInspectorComponentsLoading,
@@ -150,6 +146,7 @@ export function SceneInspectorView() {
     return filterLoadedSceneNodeRecords(loadedSceneGraph, reparentQuery, blockedReparentAddresses);
   }, [blockedReparentAddresses, loadedSceneGraph, reparentQuery]);
   const selectedReparentCandidate = reparentTargetAddress ? loadedNodeRecordByAddress.get(reparentTargetAddress) ?? null : null;
+  const copyableHierarchyPath = formatCopyableHierarchyPath(sceneInspector?.object.path, sceneInspector?.hierarchyPath ?? []);
 
   const transformDirty = useMemo(() => {
     if (!sceneInspector?.transform || !transformDraft) {
@@ -171,7 +168,27 @@ export function SceneInspectorView() {
     && parsedLayer !== (sceneInspector.object.layer ?? 0);
   const currentParentAddress = sceneInspector?.parent?.objectAddress ?? null;
   const reparentDirty = sceneInspector != null && reparentTargetAddress !== currentParentAddress;
-  const toggleActivePending = isSceneMutationPending('set-active');
+  const activeIntent = sceneInspector
+    ? sceneMutationState.activeIntentByObject[sceneInspector.object.objectAddress] ?? null
+    : null;
+  const displayedActiveSelf = activeIntent?.desiredActiveSelf ?? (sceneInspector?.object.activeSelf ?? true);
+  const activeToggleLabel = activeIntent
+    ? activeIntent.status === 'running'
+      ? (displayedActiveSelf ? 'Activating…' : 'Deactivating…')
+      : (displayedActiveSelf ? 'Queued Activation' : 'Queued Deactivation')
+    : (displayedActiveSelf ? 'Active' : 'Inactive');
+  const activeTooltipDescription = activeIntent
+    ? activeIntent.status === 'running'
+      ? (displayedActiveSelf
+        ? 'Activation has been committed and is syncing back from the runtime session.'
+        : 'Deactivation has been committed and is syncing back from the runtime session.')
+      : (displayedActiveSelf
+        ? 'Activation is queued behind the current scene mutation.'
+        : 'Deactivation is queued behind the current scene mutation.')
+    : (displayedActiveSelf
+      ? 'This scene object is currently active in the hierarchy.'
+      : 'This scene object is currently inactive in the hierarchy.');
+  const activeTooltipTone = activeIntent ? 'warning' : displayedActiveSelf ? 'accent' : 'muted';
   const renamePending = isSceneMutationPending('rename');
   const duplicatePending = isSceneMutationPending('duplicate');
   const deletePending = isSceneMutationPending('delete');
@@ -188,7 +205,21 @@ export function SceneInspectorView() {
     ? sceneObjectComponentsCapability.reason
       ?? 'Scene object component materialization is unavailable for this runtime session.'
     : null;
-  const sceneInspectorComponentsMessage = sceneObjectComponentsUnavailableMessage ?? sceneInspectorComponentsError;
+  const componentPanel = sceneInspectorComponentsPanel;
+  const sceneInspectorComponentsMessage = sceneObjectComponentsUnavailableMessage
+    ?? componentPanel?.errorMessage
+    ?? sceneInspectorComponentsError;
+  const visibleComponents = componentPanel?.components ?? sceneInspector?.components ?? [];
+  const visibleComponentCount = componentPanel?.totalCount ?? visibleComponents.length;
+
+  const commitTransformDraft = (nextDraft: RuntimeSceneTransformUpdate | null) => {
+    const mutationPayload = buildTransformMutationPayload(nextDraft);
+    if (!mutationPayload) {
+      return;
+    }
+
+    setSceneObjectTransform(mutationPayload).catch(() => undefined);
+  };
 
   const updateTransformAxis = (vectorKey: TransformVectorKey, axis: TransformAxis, nextValue: number, commit: boolean) => {
     const current = transformDraftRef.current;
@@ -209,7 +240,7 @@ export function SceneInspectorView() {
     setTransformDraft(nextDraft);
 
     if (commit) {
-      setSceneObjectTransform(nextDraft).catch(() => undefined);
+      commitTransformDraft(nextDraft);
     }
   };
 
@@ -218,13 +249,12 @@ export function SceneInspectorView() {
   };
 
   const copyHierarchyPath = async () => {
-    const path = formatCopyableHierarchyPath(sceneInspector?.object.path, sceneInspector?.hierarchyPath ?? []);
-    if (!sceneInspector || path === 'n/a') {
+    if (!sceneInspector || copyableHierarchyPath === 'n/a') {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(path);
+      await navigator.clipboard.writeText(copyableHierarchyPath);
       setPathCopyState('copied');
     } catch {
       setPathCopyState('error');
@@ -277,20 +307,41 @@ export function SceneInspectorView() {
           >
             {/* Top Toolbar */}
             <div className="sticky top-0 z-20 flex items-center justify-between px-3 py-2 bg-[#10151c] border-b border-[#1c2838] shadow-sm backdrop-blur-md">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSceneObjectActive(!(sceneInspector?.object.activeSelf ?? true)).catch(() => undefined)}
-                  disabled={toggleActivePending}
-                  className={`flex items-center justify-center w-[18px] h-[18px] rounded transition-all border ${
-                    (sceneInspector?.object.activeSelf ?? true) 
-                      ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.2)]' 
-                      : 'bg-[#090e15] border-[#1c2838] hover:border-slate-500/50 text-slate-600'
-                  }`}
-                  title="Enable/Disable Object"
+              <div className="flex items-center gap-2.5">
+                <Tooltip
+                  position="bottom"
+                  content={(
+                    <TooltipPanel
+                      label={activeToggleLabel}
+                      description={activeTooltipDescription}
+                      detail={displayedActiveSelf ? 'Click to deactivate this object.' : 'Click to activate this object.'}
+                      tone={activeTooltipTone}
+                    />
+                  )}
                 >
-                  <Check size={13} strokeWidth={3} className={(sceneInspector?.object.activeSelf ?? true) ? 'opacity-100 scale-100' : 'opacity-0 scale-75'} style={{ transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }} />
-                </button>
+                  <span className="inline-flex">
+                    <button
+                      type="button"
+                      data-testid="scene-object-active-toggle"
+                      onClick={() => setSceneObjectActive(!displayedActiveSelf).catch(() => undefined)}
+                      aria-label={displayedActiveSelf ? 'Deactivate Scene Object' : 'Activate Scene Object'}
+                      className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
+                        displayedActiveSelf
+                          ? 'border-cyan-400/40 bg-cyan-500/12 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.12)] hover:bg-cyan-500/18'
+                          : 'border-[#223042] bg-[#090e15] text-slate-400 hover:border-slate-500/60 hover:text-white'
+                      }`}
+                    >
+                      <Power size={14} className={displayedActiveSelf ? 'text-cyan-200' : 'text-slate-400'} />
+                      {activeIntent ? (
+                        <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#10151c] ${
+                          activeIntent.status === 'running'
+                            ? 'bg-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.7)]'
+                            : 'bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.75)]'
+                        }`} />
+                      ) : null}
+                    </button>
+                  </span>
+                </Tooltip>
                 <input
                   type="text"
                   value={nameDraft}
@@ -305,22 +356,32 @@ export function SceneInspectorView() {
                 )}
               </div>
               <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => duplicateSceneObject().catch(() => undefined)}
-                  disabled={duplicatePending}
-                  className="p-1.5 rounded hover:bg-[#1a2636] text-slate-400 hover:text-slate-200 transition-colors"
-                  title="Duplicate Object"
-                >
-                  <Copy size={14} />
-                </button>
-                <button
-                  onClick={() => deleteSceneObject().catch(() => undefined)}
-                  disabled={deletePending}
-                  className="p-1.5 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors"
-                  title="Delete Object"
-                >
-                  <Trash2 size={14} />
-                </button>
+                <Tooltip position="bottom" content={<TooltipPanel label="Duplicate Object" description="Clone the selected scene object under the same parent." tone="default" />}>
+                  <span className="inline-flex">
+                    <button
+                      data-testid="scene-object-duplicate"
+                      onClick={() => duplicateSceneObject().catch(() => undefined)}
+                      disabled={duplicatePending}
+                      aria-label="Duplicate Object"
+                      className="p-1.5 rounded hover:bg-[#1a2636] text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      <Copy size={14} />
+                    </button>
+                  </span>
+                </Tooltip>
+                <Tooltip position="bottom" content={<TooltipPanel label="Delete Object" description="Remove the selected scene object from the current scene." tone="danger" />}>
+                  <span className="inline-flex">
+                    <button
+                      data-testid="scene-object-delete"
+                      onClick={() => deleteSceneObject().catch(() => undefined)}
+                      disabled={deletePending}
+                      aria-label="Delete Object"
+                      className="p-1.5 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </span>
+                </Tooltip>
               </div>
             </div>
 
@@ -358,21 +419,36 @@ export function SceneInspectorView() {
             <PropertyAccordion title="Transform" expanded={expandedSections.transform} onToggle={() => toggleSection('transform')}>
               {transformDraft ? (
                 <div className="px-2 py-3 flex flex-col gap-2 bg-[#090e15]">
-                  <CompactVectorEditor
-                    label="Position"
-                    value={transformDraft.localPosition ?? transformDraft.worldPosition!}
-                    onAxisChange={(axis, val, commit) => updateTransformAxis(transformDraft.localPosition ? 'localPosition' : 'worldPosition', axis, val, commit)}
-                  />
-                  <CompactVectorEditor
-                    label="Rotation"
-                    value={transformDraft.localEulerAngles!}
-                    onAxisChange={(axis, val, commit) => updateTransformAxis('localEulerAngles', axis, val, commit)}
-                  />
-                  <CompactVectorEditor
-                    label="Scale"
-                    value={transformDraft.localScale!}
-                    onAxisChange={(axis, val, commit) => updateTransformAxis('localScale', axis, val, commit)}
-                  />
+                  {transformDraft.worldPosition ? (
+                    <CompactReadonlyVectorRow label="World Pos" value={transformDraft.worldPosition} />
+                  ) : null}
+                  {transformDraft.localPosition ? (
+                    <CompactVectorEditor
+                      label="Local Pos"
+                      value={transformDraft.localPosition}
+                      onAxisChange={(axis, val, commit) => updateTransformAxis('localPosition', axis, val, commit)}
+                    />
+                  ) : transformDraft.worldPosition ? (
+                    <CompactVectorEditor
+                      label="World Pos"
+                      value={transformDraft.worldPosition}
+                      onAxisChange={(axis, val, commit) => updateTransformAxis('worldPosition', axis, val, commit)}
+                    />
+                  ) : null}
+                  {transformDraft.localEulerAngles ? (
+                    <CompactVectorEditor
+                      label="Local Rot"
+                      value={transformDraft.localEulerAngles}
+                      onAxisChange={(axis, val, commit) => updateTransformAxis('localEulerAngles', axis, val, commit)}
+                    />
+                  ) : null}
+                  {transformDraft.localScale ? (
+                    <CompactVectorEditor
+                      label="Local Scale"
+                      value={transformDraft.localScale}
+                      onAxisChange={(axis, val, commit) => updateTransformAxis('localScale', axis, val, commit)}
+                    />
+                  ) : null}
                   {transformDirty && (
                     <div className="flex justify-end gap-2 pt-2 mt-1 border-t border-[#141b24]">
                       <button
@@ -386,7 +462,7 @@ export function SceneInspectorView() {
                         Revert
                       </button>
                       <button
-                        onClick={() => setSceneObjectTransform(transformDraft).catch(() => undefined)}
+                        onClick={() => commitTransformDraft(transformDraft)}
                         disabled={transformPending}
                         className="px-3 py-1.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-[11px] font-medium text-cyan-200 transition-colors border border-cyan-500/30"
                       >
@@ -401,7 +477,7 @@ export function SceneInspectorView() {
             </PropertyAccordion>
 
             {/* Components Accordion */}
-            <PropertyAccordion title={`Components (${sceneInspector?.object.componentCount ?? 0})`} expanded={expandedSections.components} onToggle={() => toggleSection('components')}>
+            <PropertyAccordion title={`Components (${visibleComponentCount})`} expanded={expandedSections.components} onToggle={() => toggleSection('components')}>
               <div className="bg-[#090e15] px-2 py-2 flex flex-col gap-2">
                 <div className="flex gap-2 px-1 pb-1">
                   <div className="flex-1">
@@ -421,7 +497,7 @@ export function SceneInspectorView() {
                   </button>
                 </div>
 
-                {sceneInspectorComponentsLoading && (
+                {(componentPanel?.isLoading ?? sceneInspectorComponentsLoading) && (
                   <div className="px-2 py-2 text-[11px] text-cyan-500/70 animate-pulse font-mono flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/50" /> Fetching components...
                   </div>
@@ -433,9 +509,9 @@ export function SceneInspectorView() {
                   </div>
                 )}
                 
-                {!sceneObjectComponentsUnavailable && sceneInspector && sceneInspector.components.length > 0 ? (
+                {!sceneObjectComponentsUnavailable && sceneInspector && visibleComponents.length > 0 ? (
                   <div className="flex flex-col gap-1 border-t border-[#141b24] pt-2">
-                    {sceneInspector.components.map((component: RuntimeSceneComponentSummary) => (
+                    {visibleComponents.map((component: RuntimeSceneComponentSummary) => (
                       <CompactComponentRow
                         key={component.componentAddress}
                         component={component}
@@ -445,7 +521,7 @@ export function SceneInspectorView() {
                       />
                     ))}
                   </div>
-                ) : !sceneInspectorComponentsLoading && !sceneInspectorComponentsMessage ? (
+                ) : !(componentPanel?.isLoading ?? sceneInspectorComponentsLoading) && !sceneInspectorComponentsMessage ? (
                   <div className="border-t border-[#141b24] px-2 pt-3">
                     <EmptyNotice message="No materialized components are currently available for this object." />
                   </div>
@@ -512,13 +588,32 @@ export function SceneInspectorView() {
                       {formatHierarchyPath(sceneInspector?.hierarchyPath ?? [])}
                     </div>
                   </div>
-                  <button
-                    onClick={() => copyHierarchyPath().catch(() => undefined)}
-                    className="p-2 rounded bg-[#10151c] hover:bg-[#1a2636] text-slate-400 hover:text-white transition-colors border border-[#1a2636] shadow-sm shrink-0 mt-4"
-                    title="Copy Path"
+                  <Tooltip
+                    position="bottom"
+                    content={(
+                      <TooltipPanel
+                        label={pathCopyState === 'copied' ? 'Path Copied' : pathCopyState === 'error' ? 'Copy Failed' : 'Copy Hierarchy Path'}
+                        description={pathCopyState === 'copied'
+                          ? 'The current hierarchy path has been copied to the clipboard.'
+                          : pathCopyState === 'error'
+                            ? 'Clipboard access failed for the current hierarchy path.'
+                            : 'Copy the canonical hierarchy path for this object.'}
+                        detail={copyableHierarchyPath}
+                        tone={pathCopyState === 'copied' ? 'success' : pathCopyState === 'error' ? 'danger' : 'default'}
+                      />
+                    )}
                   >
-                    <Copy size={14} />
-                  </button>
+                    <span className="inline-flex shrink-0 mt-4">
+                      <button
+                        data-testid="scene-copy-path"
+                        onClick={() => copyHierarchyPath().catch(() => undefined)}
+                        className="p-2 rounded bg-[#10151c] hover:bg-[#1a2636] text-slate-400 hover:text-white transition-colors border border-[#1a2636] shadow-sm"
+                        aria-label="Copy Hierarchy Path"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </span>
+                  </Tooltip>
                 </div>
                 
                 <div className="flex flex-col gap-2">
@@ -595,11 +690,39 @@ function PropertyAccordion({ title, expanded, onToggle, children }: { title: str
 function CompactVectorEditor({ label, value, onAxisChange }: { label: string, value: RuntimeVector3Snapshot, onAxisChange: (axis: TransformAxis, val: number, commit: boolean) => void }) {
   return (
     <div className="flex items-center gap-2 pl-2 pr-1">
-      <div className="w-[80px] shrink-0 text-[11px] font-medium text-slate-400">{label}</div>
+      <div className="w-[92px] shrink-0 text-[11px] font-medium text-slate-400">{label}</div>
       <div className="flex-1 flex items-center gap-1 overflow-hidden">
         <CompactNumberInput tone="x" value={value.x} onChange={(v: number) => onAxisChange('x', v, false)} onDragCommit={(v: number) => onAxisChange('x', v, true)} />
         <CompactNumberInput tone="y" value={value.y} onChange={(v: number) => onAxisChange('y', v, false)} onDragCommit={(v: number) => onAxisChange('y', v, true)} />
         <CompactNumberInput tone="z" value={value.z} onChange={(v: number) => onAxisChange('z', v, false)} onDragCommit={(v: number) => onAxisChange('z', v, true)} />
+      </div>
+    </div>
+  );
+}
+
+function CompactReadonlyVectorRow({ label, value }: { label: string; value: RuntimeVector3Snapshot }) {
+  return (
+    <div className="flex items-center gap-2 pl-2 pr-1">
+      <div className="w-[92px] shrink-0 text-[11px] font-medium text-slate-400">{label}</div>
+      <div className="flex-1 flex items-center gap-1 overflow-hidden">
+        <CompactReadonlyNumber tone="x" value={value.x} />
+        <CompactReadonlyNumber tone="y" value={value.y} />
+        <CompactReadonlyNumber tone="z" value={value.z} />
+      </div>
+    </div>
+  );
+}
+
+function CompactReadonlyNumber({ tone, value }: { tone: 'x' | 'y' | 'z'; value: number }) {
+  const prefix = tone.toUpperCase();
+
+  return (
+    <div className="flex-1 flex overflow-hidden rounded bg-[#0d131a] border border-[#1a2636] shadow-inner">
+      <div className={`px-1.5 flex items-center justify-center text-[9px] font-bold border-r ${resolveAxisToneClass(tone)}`}>
+        {prefix}
+      </div>
+      <div className="w-full min-w-0 px-1.5 py-1 text-[11px] font-mono text-slate-400">
+        {formatNumericDraft(value)}
       </div>
     </div>
   );
@@ -624,7 +747,7 @@ function CompactNumberInput({
   useEffect(() => setDraft(formatNumericDraft(value)), [value]);
   useEffect(() => () => dragCleanupRef.current?.(), []);
 
-  const labelColorClass = tone === 'x' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : tone === 'y' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+  const labelColorClass = resolveAxisToneClass(tone);
   const prefix = tone.toUpperCase();
 
   const startDrag = (event: React.PointerEvent) => {
@@ -700,34 +823,119 @@ function CompactComponentRow({
 }) {
   const isBehaviour = component.isBehaviour;
   const isEnabled = component.behaviourEnabled !== false;
+  const canDelete = component.typeName !== 'UnityEngine.Transform';
+  const componentTooltipDescription = isBehaviour
+    ? isEnabled
+      ? 'Behaviour component · enabled.'
+      : 'Behaviour component · disabled.'
+    : 'Read-only component.';
+  const componentTooltipDetail = isBehaviour
+    ? disabled
+      ? 'A scene mutation is already running for this object.'
+      : isEnabled
+        ? 'Click to disable this behaviour.'
+        : 'Click to enable this behaviour.'
+    : 'This component does not expose an enabled state.';
+  const componentTooltipTone = isBehaviour ? (isEnabled ? 'accent' : 'warning') : 'muted';
 
   return (
-    <div className={`flex items-center gap-2 p-1.5 rounded transition-colors ${isEnabled ? 'hover:bg-[#10151c]' : 'opacity-60'}`}>
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {isBehaviour && (
-          <input
-            type="checkbox"
-            checked={isEnabled}
-            onChange={(e) => onToggleBehaviour(e.target.checked)}
-            disabled={disabled}
-            className="w-3 h-3 rounded-sm border-[#1c2838] bg-[#090e15] checked:bg-cyan-500 cursor-pointer shrink-0"
+    <div className={`flex items-center gap-3 rounded-xl border px-2.5 py-2 transition-colors ${
+      isEnabled ? 'border-[#182230] bg-[#0d131a] hover:border-[#223042]' : 'border-[#1a2230] bg-[#0b1018]'
+    }`}>
+      <Tooltip
+        position="bottom"
+        content={(
+          <TooltipPanel
+            label={component.typeName}
+            description={componentTooltipDescription}
+            detail={componentTooltipDetail}
+            tone={componentTooltipTone}
           />
         )}
-        {!isBehaviour && <Tags size={12} className="text-slate-500 shrink-0 mx-0.5" />}
-        <span className={`text-[11px] font-bold truncate ${isEnabled ? 'text-slate-300' : 'text-slate-500'} select-all`}>
-          {component.typeName}
-        </span>
-      </div>
-      <button
-        onClick={onDelete}
-        disabled={disabled || component.typeName === 'UnityEngine.Transform'}
-        className="shrink-0 p-1 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
-        title="Remove Component"
       >
-        <X size={13} />
-      </button>
+        <span className="inline-flex shrink-0">
+          {isBehaviour ? (
+            <button
+              type="button"
+              data-testid={`scene-component-toggle-${component.componentAddress}`}
+              onClick={() => onToggleBehaviour(!isEnabled)}
+              disabled={disabled}
+              aria-label={isEnabled ? `Disable ${component.typeName}` : `Enable ${component.typeName}`}
+              aria-pressed={isEnabled}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-all ${
+                isEnabled
+                  ? 'border-cyan-500/40 bg-cyan-500/14 text-cyan-100 hover:bg-cyan-500/22'
+                  : 'border-[#28364a] bg-[#10151c] text-slate-300 hover:border-slate-500/60 hover:text-white'
+              }`}
+            >
+              {isEnabled ? <Check size={12} strokeWidth={2.4} /> : <Power size={12} strokeWidth={2.1} />}
+            </button>
+          ) : (
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#28364a] bg-[#111822] text-slate-400">
+              <Box size={12} />
+            </span>
+          )}
+        </span>
+      </Tooltip>
+      <Tooltip
+        position="bottom"
+        content={(
+          <TooltipPanel
+            label={component.typeName}
+            description={componentTooltipDescription}
+            detail={componentTooltipDetail}
+            tone={componentTooltipTone}
+          />
+        )}
+      >
+        <div className="flex-1 min-w-0">
+          <span className={`text-[11px] font-bold truncate ${isEnabled ? 'text-slate-200' : 'text-slate-400'} select-all`}>
+            {component.typeName}
+          </span>
+        </div>
+      </Tooltip>
+      <Tooltip
+        position="bottom"
+        content={(
+          <TooltipPanel
+            label={canDelete ? `Remove ${component.typeName}` : 'Transform Component'}
+            description={canDelete
+              ? 'Remove this component from the selected scene object.'
+              : 'UnityEngine.Transform is required and cannot be removed.'}
+            tone={canDelete ? 'danger' : 'muted'}
+          />
+        )}
+      >
+        <span className="inline-flex shrink-0">
+          <button
+            data-testid={`scene-component-remove-${component.componentAddress}`}
+            onClick={onDelete}
+            disabled={disabled || !canDelete}
+            aria-label={canDelete ? `Remove ${component.typeName}` : `${component.typeName} cannot be removed`}
+            className="shrink-0 p-1.5 rounded-lg text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-400"
+          >
+            <X size={12} />
+          </button>
+        </span>
+      </Tooltip>
     </div>
   );
+}
+
+function buildTransformMutationPayload(transform: RuntimeSceneTransformUpdate | null): RuntimeSceneTransformUpdate | null {
+  if (!transform) {
+    return null;
+  }
+
+  const hasLocalPosition = transform.localPosition != null;
+
+  return {
+    worldPosition: hasLocalPosition ? undefined : transform.worldPosition,
+    localPosition: transform.localPosition,
+    localRotation: transform.localRotation,
+    localEulerAngles: transform.localEulerAngles,
+    localScale: transform.localScale,
+  };
 }
 
 function toTransformDraft(transform: RuntimeSceneTransformSnapshot | null | undefined): RuntimeSceneTransformUpdate | null {
@@ -765,6 +973,14 @@ function isLikelyComponentClass(descriptor: ClassDescriptor) {
 function formatNumericDraft(value: number) {
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function resolveAxisToneClass(tone: 'x' | 'y' | 'z') {
+  return tone === 'x'
+    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+    : tone === 'y'
+      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+      : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
 }
 
 function roundToStep(value: number, step: number) {

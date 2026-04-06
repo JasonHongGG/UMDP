@@ -70,6 +70,8 @@ describe('SceneHierarchyPanel', () => {
         operation: null,
         loading: false,
         errorMessage: null,
+        pendingOperations: {},
+        activeIntentByObject: {},
       },
     });
   });

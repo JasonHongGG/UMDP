@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Layers3, Search, X } from 'lucide-react';
 import { createEmptyClassInfoSelection, filterStudioClassCatalog } from '@/domain/studio/editor';
 import { useStudioAddNodeModalState } from '@/features/studio/application/useStudioAddNodeModalState';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 type ModalMode = 'nodes' | 'class-picker';
 
@@ -127,13 +128,17 @@ export function AddNodeModal() {
             }}
           />
           {mode === 'class-picker' ? (
-            <button 
-              onClick={() => { setMode('nodes'); setSearchQuery(''); }} 
-              className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
-              title="Back to Nodes"
-            >
-              <ArrowLeft size={14} />
-            </button>
+            <Tooltip position="bottom" content={<TooltipPanel label="Back To Nodes" description="Return to the generic node catalog." tone="default" />}>
+              <span className="inline-flex">
+                <button 
+                  onClick={() => { setMode('nodes'); setSearchQuery(''); }} 
+                  className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+                  aria-label="Back To Nodes"
+                >
+                  <ArrowLeft size={14} />
+                </button>
+              </span>
+            </Tooltip>
           ) : null}
           <button 
             onClick={closeAddModal} 
@@ -184,7 +189,11 @@ export function AddNodeModal() {
                              </div>
                              <div className="flex flex-col min-w-0">
                                <span className="text-slate-200 text-[14px] font-bold group-hover:text-cyan-300 transition-colors drop-shadow-sm">{node.manifest.displayName}</span>
-                               <span className="text-slate-500 text-[11px] font-medium truncate w-full mt-0.5" title={node.manifest.description}>{node.manifest.description}</span>
+                               <Tooltip position="bottom" content={<TooltipPanel label={node.manifest.displayName} description={node.manifest.description} tone="default" />}>
+                                 <span className="text-slate-500 text-[11px] font-medium truncate w-full mt-0.5">
+                                   {node.manifest.description}
+                                 </span>
+                               </Tooltip>
                              </div>
                           </div>
                         </button>

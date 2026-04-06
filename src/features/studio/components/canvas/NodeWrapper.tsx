@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { NodeExecutionSnapshot, NodeExecutionState, StudioNode } from '@/features/studio/core/types';
 import { useStudioNodeWrapperState } from '@/features/studio/application/useStudioNodeWrapperState';
 import { Trash2 } from 'lucide-react';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 interface NodeWrapperProps {
   node: StudioNode;
@@ -158,13 +159,17 @@ export function NodeWrapper({ node, executionState = 'idle', executionSnapshot =
       {/* n8n-style Hover Toolbar - rendered above node layer */}
       <div data-studio-no-drag="true" data-studio-toolbar="true" className={`absolute bottom-full left-1/2 -translate-x-1/2 z-[100] pb-1 transition-all duration-150 ${isHovered && !isDragging ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex items-center gap-1">
-          <button
-            onClick={handleDelete}
-            className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors"
-            title="Delete Node"
-          >
-            <Trash2 size={14} />
-          </button>
+          <Tooltip position="top" content={<TooltipPanel label="Delete Node" description="Remove this node from the current workflow canvas." tone="danger" />}>
+            <span className="inline-flex">
+              <button
+                onClick={handleDelete}
+                className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-red-400 transition-colors"
+                aria-label="Delete Node"
+              >
+                <Trash2 size={14} />
+              </button>
+            </span>
+          </Tooltip>
         </div>
       </div>
       {children}

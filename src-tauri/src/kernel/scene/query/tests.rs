@@ -1,4 +1,7 @@
-use super::{infer_scene_kind, normalize_scene_type_name, scene_name_from_path};
+use super::{
+    decode_quaternion_bytes, decode_vector3_bytes, infer_scene_kind,
+    normalize_scene_type_name, scene_name_from_path,
+};
 use crate::domain::analysis_models::RuntimeSceneKind;
 
 #[test]
@@ -34,4 +37,38 @@ fn normalize_scene_type_name_maps_runtime_aliases() {
     assert_eq!(normalize_scene_type_name("string"), "System.String");
     assert_eq!(normalize_scene_type_name("int[]"), "System.Int32[]");
     assert_eq!(normalize_scene_type_name("int &"), "System.Int32&");
+}
+
+#[test]
+fn decode_vector3_bytes_reads_unboxed_payload_in_field_order() {
+    let bytes = [
+        1.25f32.to_ne_bytes(),
+        (-3.5f32).to_ne_bytes(),
+        9.0f32.to_ne_bytes(),
+    ]
+    .concat();
+
+    let decoded = decode_vector3_bytes(&bytes).unwrap();
+
+    assert_eq!(decoded.x, 1.25);
+    assert_eq!(decoded.y, -3.5);
+    assert_eq!(decoded.z, 9.0);
+}
+
+#[test]
+fn decode_quaternion_bytes_reads_unboxed_payload_in_field_order() {
+    let bytes = [
+        0.0f32.to_ne_bytes(),
+        0.25f32.to_ne_bytes(),
+        (-0.5f32).to_ne_bytes(),
+        1.0f32.to_ne_bytes(),
+    ]
+    .concat();
+
+    let decoded = decode_quaternion_bytes(&bytes).unwrap();
+
+    assert_eq!(decoded.x, 0.0);
+    assert_eq!(decoded.y, 0.25);
+    assert_eq!(decoded.z, -0.5);
+    assert_eq!(decoded.w, 1.0);
 }

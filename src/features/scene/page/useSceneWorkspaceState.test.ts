@@ -3,7 +3,7 @@
 import React, { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import type { RuntimeSceneMousePickerSnapshot } from '@/domain/analysis/contracts';
+import type { RuntimeSceneMousePickerSnapshot, RuntimeSceneMutationResult } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
@@ -36,6 +36,9 @@ vi.mock('@/infrastructure/tauri/TauriSceneEvents', () => ({
 interface HookSnapshot {
   sceneWorkspace: ReturnType<typeof useSceneWorkspaceState>['sceneWorkspace'];
   selectedObjectAddress: ReturnType<typeof useSceneWorkspaceState>['selectedObjectAddress'];
+  setSelectedObjectAddress: ReturnType<typeof useSceneWorkspaceState>['setSelectedObjectAddress'];
+  setSceneObjectActive: ReturnType<typeof useSceneWorkspaceState>['setSceneObjectActive'];
+  sceneMutationState: ReturnType<typeof useSceneWorkspaceState>['sceneMutationState'];
   sceneTabs: ReturnType<typeof useSceneWorkspaceState>['sceneTabs'];
   activeSceneTabIndex: ReturnType<typeof useSceneWorkspaceState>['activeSceneTabIndex'];
   sceneRootsByHandle: ReturnType<typeof useSceneWorkspaceState>['sceneRootsByHandle'];
@@ -68,6 +71,46 @@ function createMousePickerState(
     lastUpdatedAt: null,
     errorMessage: null,
     ...overrides,
+  };
+}
+
+function createSceneMutationResult(
+  overrides: Partial<RuntimeSceneMutationResult> = {},
+): RuntimeSceneMutationResult {
+  const object = createSceneNodeSummary({ objectAddress: '0xroot', name: 'GameplayRoot', activeSelf: true });
+
+  return {
+    operation: 'set-active',
+    sceneHandle: 7,
+    targetObjectAddress: object.objectAddress,
+    parentObjectAddress: null,
+    object,
+    deletedObjectAddress: null,
+    preferredSelectionAddress: object.objectAddress,
+    preferredSelectionHint: null,
+    activeSelf: object.activeSelf,
+    tag: null,
+    layer: null,
+    hideFlags: null,
+    behaviourEnabled: null,
+    hierarchyPath: [],
+    transform: null,
+    ...overrides,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
   };
 }
 
@@ -142,7 +185,22 @@ function createRepository(sessionKey = 'session-1'): SceneGateway {
     getSceneObjectComponentsState: vi.fn().mockResolvedValue(null),
     cancelSceneObjectComponentsAnalysis: vi.fn(),
     cancelSceneObjectChildrenAnalysis: vi.fn(),
-  } as unknown as SceneGateway;
+    createSceneRoot: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'create-root', targetObjectAddress: null, preferredSelectionAddress: null })),
+    createSceneChild: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'create-child' })),
+    duplicateSceneObject: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'duplicate' })),
+    deleteSceneObject: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'delete', deletedObjectAddress: '0xroot', object: null, preferredSelectionAddress: null, activeSelf: null })),
+    renameSceneObject: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'rename' })),
+    setSceneObjectTag: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'set-tag' })),
+    setSceneObjectLayer: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'set-layer' })),
+    setSceneObjectHideFlags: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'set-hide-flags' })),
+    reparentSceneObject: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'reparent' })),
+    setSceneObjectActive: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'set-active' })),
+    setSceneObjectTransform: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'set-transform' })),
+    setSceneBehaviourEnabled: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'set-behaviour-enabled' })),
+    createSceneComponent: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'add-component' })),
+    deleteSceneComponent: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'remove-component' })),
+    loadSceneByBuildIndex: vi.fn().mockResolvedValue(createSceneMutationResult({ operation: 'load-scene', targetObjectAddress: null, preferredSelectionAddress: null, object: null, activeSelf: null })),
+  };
 }
 
 function HookHarness({
@@ -172,6 +230,9 @@ function HookHarness({
   latestState = {
     sceneWorkspace: state.sceneWorkspace,
     selectedObjectAddress: state.selectedObjectAddress,
+    setSelectedObjectAddress: state.setSelectedObjectAddress,
+    setSceneObjectActive: state.setSceneObjectActive,
+    sceneMutationState: state.sceneMutationState,
     sceneTabs: state.sceneTabs,
     activeSceneTabIndex: state.activeSceneTabIndex,
     sceneRootsByHandle: state.sceneRootsByHandle,
@@ -545,5 +606,72 @@ describe('useSceneWorkspaceState', () => {
     expect(latestState?.sceneTabs).toHaveLength(1);
     expect(latestState?.sceneTabs[0]?.objectAddress).toBe('0xfresh');
     expect(latestState?.selectedObjectAddress).toBe('0xfresh');
+  });
+
+  it('serializes active mutations and keeps only the latest queued active intent for an object', async () => {
+    const repository = createRepository() as SceneGateway & {
+      setSceneObjectActive: ReturnType<typeof vi.fn>;
+    };
+    const firstMutation = createDeferred<RuntimeSceneMutationResult>();
+    const secondMutation = createDeferred<RuntimeSceneMutationResult>();
+
+    repository.setSceneObjectActive = vi.fn()
+      .mockImplementationOnce(() => firstMutation.promise)
+      .mockImplementationOnce(() => secondMutation.promise);
+
+    await act(async () => {
+      root.render(createElement(HookHarness, { repository }));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      latestState?.setSelectedObjectAddress('0xroot');
+    });
+    await flushEffects();
+
+    let firstPromise: Promise<RuntimeSceneMutationResult | null> | undefined;
+    let secondPromise: Promise<RuntimeSceneMutationResult | null> | undefined;
+    let thirdPromise: Promise<RuntimeSceneMutationResult | null> | undefined;
+
+    await act(async () => {
+      firstPromise = latestState?.setSceneObjectActive(false);
+      secondPromise = latestState?.setSceneObjectActive(true);
+      thirdPromise = latestState?.setSceneObjectActive(false);
+      await Promise.resolve();
+    });
+
+    expect(repository.setSceneObjectActive).toHaveBeenCalledTimes(1);
+    expect(repository.setSceneObjectActive).toHaveBeenCalledWith('0xroot', false);
+    expect(latestState?.sceneMutationState.activeIntentByObject['0xroot']?.desiredActiveSelf).toBe(false);
+    expect(latestState?.sceneMutationState.pendingOperations['set-active']).toBe(2);
+
+    await act(async () => {
+      firstMutation.resolve(createSceneMutationResult({
+        operation: 'set-active',
+        activeSelf: false,
+        object: createSceneNodeSummary({ objectAddress: '0xroot', name: 'GameplayRoot', activeSelf: false }),
+      }));
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(repository.setSceneObjectActive).toHaveBeenCalledTimes(2);
+    expect(repository.setSceneObjectActive).toHaveBeenNthCalledWith(2, '0xroot', false);
+
+    await act(async () => {
+      secondMutation.resolve(createSceneMutationResult({
+        operation: 'set-active',
+        activeSelf: false,
+        object: createSceneNodeSummary({ objectAddress: '0xroot', name: 'GameplayRoot', activeSelf: false }),
+      }));
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    await expect(firstPromise).resolves.toEqual(expect.objectContaining({ activeSelf: false }));
+    await expect(secondPromise).resolves.toBeNull();
+    await expect(thirdPromise).resolves.toEqual(expect.objectContaining({ activeSelf: false }));
+    expect(latestState?.sceneMutationState.pendingOperations['set-active']).toBeUndefined();
+    expect(latestState?.sceneMutationState.activeIntentByObject['0xroot']).toBeUndefined();
   });
 });

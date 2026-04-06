@@ -7,6 +7,7 @@ import { Port } from '@/features/studio/components/canvas/Port';
 import type { INodeComponentProps, IPort } from '@/features/studio/core/types';
 import { hasExpressionSourceValue } from '@/features/studio/core/expression';
 import { reconcileClassInfoSelection } from '@/domain/studio/editor';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 import type { ClassNodeData } from './classNodeModel';
 import { createEmptyCatalog, hasResolvedExecutionValue } from './classNodeModel';
 
@@ -52,9 +53,11 @@ export const ClassNodeCanvas: React.FC<INodeComponentProps<ClassNodeData>> = ({ 
           'border-slate-700 hover:border-cyan-500/60'}
       `}>
         {isErrorState ? (
-          <span title="Missing Instance Address" className="absolute -top-1.5 -right-1.5 z-30 bg-[#0f172a] rounded-full border border-red-900/50">
-            <AlertCircle size={14} className="text-red-400 animate-pulse" />
-          </span>
+          <Tooltip position="top" content={<TooltipPanel label="Missing Instance Address" description="Connect an instance source or literal address before this class node can resolve runtime data." tone="danger" />}>
+            <span className="absolute -top-1.5 -right-1.5 z-30 bg-[#0f172a] rounded-full border border-red-900/50">
+              <AlertCircle size={14} className="text-red-400 animate-pulse" />
+            </span>
+          </Tooltip>
         ) : null}
 
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-center gap-2 -translate-x-[calc(50%+1px)] z-20">

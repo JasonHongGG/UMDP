@@ -5,6 +5,7 @@ import { useStudioRuntimeViewState } from '@/features/studio/application/useStud
 import { Port } from '@/features/studio/components/canvas/Port';
 import type { INodeComponentProps, IPort } from '@/features/studio/core/types';
 import type { EditorNodeQueryState } from '@/domain/studio/contracts';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 import type { EditorNodeData } from './editorNodeModel';
 
 export const EditorNodeCanvas: React.FC<INodeComponentProps<EditorNodeData>> = ({ id, data, inputs, outputs }) => {
@@ -36,9 +37,11 @@ export const EditorNodeCanvas: React.FC<INodeComponentProps<EditorNodeData>> = (
               : 'border-slate-700 hover:border-cyan-500/60'
       }`}>
         {hasIssues ? (
-          <span className="absolute -top-1.5 -right-1.5 z-30 bg-[#0f172a] rounded-full border border-amber-900/50" title="Editor node has unresolved targets or missing input data">
-            <AlertCircle size={14} className="text-amber-400" />
-          </span>
+          <Tooltip position="top" content={<TooltipPanel label="Editor Node Warning" description="This node still has unresolved targets or missing input data." tone="warning" />}>
+            <span className="absolute -top-1.5 -right-1.5 z-30 bg-[#0f172a] rounded-full border border-amber-900/50">
+              <AlertCircle size={14} className="text-amber-400" />
+            </span>
+          </Tooltip>
         ) : null}
 
         <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-center gap-2 -translate-x-[calc(50%+1px)] z-20">

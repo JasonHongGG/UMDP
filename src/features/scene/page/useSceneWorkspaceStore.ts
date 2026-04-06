@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef } from 'react';
 import type {
+  RuntimeSceneComponentSummary,
   RuntimeSceneMutationOperation,
   RuntimeSceneNodeSummary,
   RuntimeSceneObjectChildrenTaskState,
@@ -28,6 +29,7 @@ import {
   patchRootsWithSummary,
   sameComponentOrder,
   sameNodeOrder,
+  syncInspectorComponentCount,
 } from './sceneWorkspaceStatePatches';
 import {
   buildLoadedSceneGraph,
@@ -43,12 +45,29 @@ export type SceneInspectorTab = {
   sceneKind?: string;
 };
 
+export type SceneObjectActiveIntentState = {
+  desiredActiveSelf: boolean;
+  status: 'queued' | 'running';
+};
+
+export type SceneInspectorComponentsPanelState = {
+  objectAddress: string;
+  components: RuntimeSceneComponentSummary[];
+  totalCount: number;
+  loadedCount: number;
+  status: RuntimeSceneObjectComponentsTaskState['status'] | 'idle';
+  isLoading: boolean;
+  isStale: boolean;
+  errorMessage: string | null;
+};
+
 export type SceneMutationState = {
   operation: RuntimeSceneMutationOperation | null;
   loading: boolean;
   errorMessage: string | null;
   task: WorkspaceTaskSnapshot | null;
   pendingOperations: Partial<Record<RuntimeSceneMutationOperation, number>>;
+  activeIntentByObject: Record<string, SceneObjectActiveIntentState>;
 };
 
 export const EMPTY_MUTATION_STATE: SceneMutationState = {
@@ -57,6 +76,7 @@ export const EMPTY_MUTATION_STATE: SceneMutationState = {
   errorMessage: null,
   task: null,
   pendingOperations: {},
+  activeIntentByObject: {},
 };
 
 type SceneWorkspaceStoreState = {
@@ -209,6 +229,35 @@ function patchSummaryBatchCollections(
     sceneWorkspace: patchRootsWithSummaries(sceneWorkspace, summaries),
     childrenByParent: patchChildrenWithSummaries(childrenByParent, summaries),
     inspectorsByAddress: patchInspectorsWithSummaries(inspectorsByAddress, summaries),
+  };
+}
+
+function buildSceneInspectorComponentsPanelState(
+  selectedObjectAddress: string | null,
+  inspectorsByAddress: Record<string, RuntimeSceneObjectInspectorSnapshot>,
+  componentsTaskByAddress: Record<string, RuntimeSceneObjectComponentsTaskState>,
+  componentsLoadingByAddress: Record<string, boolean>,
+  componentsErrorByAddress: Record<string, string | null>,
+): SceneInspectorComponentsPanelState | null {
+  if (!selectedObjectAddress) {
+    return null;
+  }
+
+  const taskState = componentsTaskByAddress[selectedObjectAddress] ?? null;
+  const inspector = inspectorsByAddress[selectedObjectAddress] ?? null;
+  const components = taskState?.components ?? inspector?.components ?? [];
+
+  return {
+    objectAddress: selectedObjectAddress,
+    components,
+    totalCount: taskState?.totalCount ?? components.length,
+    loadedCount: taskState?.loadedCount ?? components.length,
+    status: taskState?.status ?? 'idle',
+    isLoading: componentsLoadingByAddress[selectedObjectAddress] ?? false,
+    isStale: taskState?.isStale ?? false,
+    errorMessage: componentsErrorByAddress[selectedObjectAddress]
+      ?? taskState?.errorMessage
+      ?? null,
   };
 }
 
@@ -404,15 +453,19 @@ function sceneWorkspaceStoreReducer(
     }
     case 'applyHeaderTaskState': {
       const { taskState } = action;
-      const nextSnapshot = buildInspectorSnapshot(
+      const componentsTask = state.componentsTaskByAddress[taskState.objectAddress] ?? null;
+      const nextSnapshotBase = buildInspectorSnapshot(
         taskState,
         state.childrenByParent[taskState.objectAddress]
           ?? state.inspectorsByAddress[taskState.objectAddress]?.children
           ?? [],
-        state.componentsTaskByAddress[taskState.objectAddress]?.components
+        componentsTask?.components
           ?? state.inspectorsByAddress[taskState.objectAddress]?.components
           ?? [],
       );
+      const nextSnapshot = nextSnapshotBase
+        ? syncInspectorComponentCount(nextSnapshotBase, componentsTask?.totalCount)
+        : null;
       if (!nextSnapshot) {
         return {
           ...state,
@@ -479,7 +532,7 @@ function sceneWorkspaceStoreReducer(
     case 'applyComponentsTaskState': {
       const { taskState } = action;
       const currentInspector = state.inspectorsByAddress[taskState.objectAddress] ?? null;
-      const nextSnapshot = currentInspector
+      const nextSnapshotBase = currentInspector
         ? (sameComponentOrder(currentInspector.components, taskState.components)
           ? currentInspector
           : {
@@ -491,6 +544,9 @@ function sceneWorkspaceStoreReducer(
             state.childrenByParent[taskState.objectAddress] ?? [],
             taskState.components,
           );
+      const nextSnapshot = nextSnapshotBase
+        ? syncInspectorComponentCount(nextSnapshotBase, taskState.totalCount)
+        : null;
 
       return {
         ...state,
@@ -707,12 +763,20 @@ export function useSceneWorkspaceStore() {
       return null;
     }
 
-    return inspectorsByAddress[selectedObjectAddress]
-      ?? buildInspectorSnapshot(
-        headerTaskByAddress[selectedObjectAddress],
-        childrenByParent[selectedObjectAddress] ?? [],
-        componentsTaskByAddress[selectedObjectAddress]?.components ?? [],
-      );
+    const cachedInspector = inspectorsByAddress[selectedObjectAddress] ?? null;
+    if (cachedInspector) {
+      return syncInspectorComponentCount(cachedInspector, componentsTaskByAddress[selectedObjectAddress]?.totalCount);
+    }
+
+    const nextSnapshot = buildInspectorSnapshot(
+      headerTaskByAddress[selectedObjectAddress],
+      childrenByParent[selectedObjectAddress] ?? [],
+      componentsTaskByAddress[selectedObjectAddress]?.components ?? [],
+    );
+
+    return nextSnapshot
+      ? syncInspectorComponentCount(nextSnapshot, componentsTaskByAddress[selectedObjectAddress]?.totalCount)
+      : null;
   }, [childrenByParent, componentsTaskByAddress, headerTaskByAddress, inspectorsByAddress, selectedObjectAddress]);
 
   const sceneInspectorHeaderTaskState = useMemo(() => {
@@ -722,6 +786,15 @@ export function useSceneWorkspaceStore() {
   const sceneInspectorComponentsTaskState = useMemo(() => {
     return selectedObjectAddress ? componentsTaskByAddress[selectedObjectAddress] ?? null : null;
   }, [componentsTaskByAddress, selectedObjectAddress]);
+  const sceneInspectorComponentsPanel = useMemo(() => {
+    return buildSceneInspectorComponentsPanelState(
+      selectedObjectAddress,
+      inspectorsByAddress,
+      componentsTaskByAddress,
+      componentsLoadingByAddress,
+      componentsErrorByAddress,
+    );
+  }, [componentsErrorByAddress, componentsLoadingByAddress, componentsTaskByAddress, inspectorsByAddress, selectedObjectAddress]);
 
   const sceneInspectorLoading = selectedObjectAddress
     ? (headerLoadingByAddress[selectedObjectAddress] ?? false) && sceneInspector == null
@@ -795,6 +868,7 @@ export function useSceneWorkspaceStore() {
     sceneInspector,
     sceneInspectorHeaderTaskState,
     sceneInspectorComponentsTaskState,
+    sceneInspectorComponentsPanel,
     sceneInspectorLoading,
     sceneInspectorError,
     sceneInspectorComponentsError,

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Download, FolderOpen, History, Redo2, RotateCcw, Save, Undo2 } from 'lucide-react';
 import { useStudioToolbarState } from '@/features/studio/application/useStudioToolbarState';
 import { useStudioFeedback } from '@/features/studio/application/feedback/StudioFeedbackContext';
-import { Tooltip } from '@/shared/ui/Tooltip';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 function formatTimestamp(timestamp: number | null) {
   if (!timestamp) {
@@ -99,7 +99,14 @@ export function StudioToolbar() {
         <div className="flex items-center gap-4 min-w-0">
           <Tooltip 
             position="bottom" 
-            content={`Manual save: ${formatTimestamp(lastSavedAt)}\nAutosave: ${formatTimestamp(lastAutosavedAt)}\nLoad/undo anchor: ${formatTimestamp(lastLoadedAt)}`}
+            content={(
+              <TooltipPanel
+                label={hasUnsavedChanges ? 'Unsaved Changes' : 'Saved Snapshot'}
+                description={`Manual save: ${formatTimestamp(lastSavedAt)}`}
+                detail={`Autosave: ${formatTimestamp(lastAutosavedAt)}\nLoad / undo anchor: ${formatTimestamp(lastLoadedAt)}`}
+                tone={hasUnsavedChanges ? 'warning' : 'success'}
+              />
+            )}
           >
             <div 
               className={`flex items-center gap-2 px-2.5 py-1 rounded border text-[11px] font-bold uppercase tracking-[0.15em] transition-colors cursor-help
@@ -123,48 +130,68 @@ export function StudioToolbar() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={undo}
-            disabled={!canUndo}
-            className="studio-toolbar-button"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 size={14} /> Undo
-          </button>
-          <button
-            type="button"
-            onClick={redo}
-            disabled={!canRedo}
-            className="studio-toolbar-button"
-            title="Redo (Ctrl+Shift+Z)"
-          >
-            <Redo2 size={14} /> Redo
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="studio-toolbar-button studio-toolbar-button--accent"
-            title="Save workflow (Ctrl+S)"
-          >
-            <Save size={14} /> Save
-          </button>
-          <button
-            type="button"
-            onClick={handleLoad}
-            className="studio-toolbar-button"
-            title="Load last saved workflow"
-          >
-            <FolderOpen size={14} /> Load
-          </button>
-          <button
-            type="button"
-            onClick={handleClear}
-            className="studio-toolbar-button"
-            title="Clear current workflow"
-          >
-            <RotateCcw size={14} /> Reset
-          </button>
+          <Tooltip position="bottom" content={<TooltipPanel label="Undo" description="Revert the most recent workflow edit." shortcut="Ctrl+Z" tone="muted" />}>
+            <span className="inline-flex">
+              <button
+                type="button"
+                onClick={undo}
+                disabled={!canUndo}
+                className="studio-toolbar-button"
+                aria-label="Undo"
+              >
+                <Undo2 size={14} /> Undo
+              </button>
+            </span>
+          </Tooltip>
+          <Tooltip position="bottom" content={<TooltipPanel label="Redo" description="Reapply the last reverted workflow edit." shortcut="Ctrl+Shift+Z" tone="muted" />}>
+            <span className="inline-flex">
+              <button
+                type="button"
+                onClick={redo}
+                disabled={!canRedo}
+                className="studio-toolbar-button"
+                aria-label="Redo"
+              >
+                <Redo2 size={14} /> Redo
+              </button>
+            </span>
+          </Tooltip>
+          <Tooltip position="bottom" content={<TooltipPanel label="Save Workflow" description="Store the current workflow into the local draft slot." shortcut="Ctrl+S" tone="accent" />}>
+            <span className="inline-flex">
+              <button
+                type="button"
+                onClick={handleSave}
+                className="studio-toolbar-button studio-toolbar-button--accent"
+                aria-label="Save Workflow"
+              >
+                <Save size={14} /> Save
+              </button>
+            </span>
+          </Tooltip>
+          <Tooltip position="bottom" content={<TooltipPanel label="Load Saved Workflow" description="Restore the last saved workflow snapshot into the canvas." tone="default" />}>
+            <span className="inline-flex">
+              <button
+                type="button"
+                onClick={handleLoad}
+                className="studio-toolbar-button"
+                aria-label="Load Saved Workflow"
+              >
+                <FolderOpen size={14} /> Load
+              </button>
+            </span>
+          </Tooltip>
+          <Tooltip position="bottom" content={<TooltipPanel label="Reset Workflow" description="Clear the current canvas and discard saved and autosaved drafts." tone="danger" />}>
+            <span className="inline-flex">
+              <button
+                type="button"
+                onClick={handleClear}
+                className="studio-toolbar-button"
+                aria-label="Reset Workflow"
+              >
+                <RotateCcw size={14} /> Reset
+              </button>
+            </span>
+          </Tooltip>
         </div>
       </div>
 

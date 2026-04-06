@@ -156,6 +156,23 @@ export function buildInspectorSnapshot(
   };
 }
 
+export function syncInspectorComponentCount(
+  inspector: RuntimeSceneObjectInspectorSnapshot,
+  totalCount: number | null | undefined,
+) {
+  if (totalCount == null || inspector.object.componentCount === totalCount) {
+    return inspector;
+  }
+
+  return {
+    ...inspector,
+    object: {
+      ...inspector.object,
+      componentCount: totalCount,
+    },
+  };
+}
+
 function updateNodeInList(nodes: RuntimeSceneNodeSummary[], summary: RuntimeSceneNodeSummary) {
   let touched = false;
   const next = nodes.map((node) => {

@@ -7,6 +7,7 @@ import { getStudioNodePort } from '@/features/studio/core/NodeRegistry';
 import { beginPointerExpressionDrag } from '@/features/studio/core/drag/expressionPointerDrag';
 import { createExpressionReferenceDragPayload, createInputExpressionSource } from '@/features/studio/core/expression';
 import { NodeParameterEditor } from '../editor/NodeParameterEditor';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 // --- Helper for Draggable JSON Tree ---
 interface JsonTreeProps {
@@ -212,13 +213,14 @@ export function EditNodeModal() {
                      className="bg-transparent border-b border-cyan-500/50 text-slate-100 font-semibold text-lg leading-tight outline-none focus:border-cyan-400 min-w-[16rem]"
                    />
                  ) : (
-                   <h2
-                     className="text-slate-100 font-semibold text-lg leading-tight cursor-text"
-                     onDoubleClick={() => setIsEditingName(true)}
-                     title="Double click to rename node"
-                   >
-                     {resolvedNodeName}
-                   </h2>
+                   <Tooltip position="bottom" content={<TooltipPanel label="Rename Node" description="Double click to edit the node display name." tone="default" />}>
+                     <h2
+                       className="text-slate-100 font-semibold text-lg leading-tight cursor-text"
+                       onDoubleClick={() => setIsEditingName(true)}
+                     >
+                       {resolvedNodeName}
+                     </h2>
+                   </Tooltip>
                  )}
                  <p className="text-slate-500 text-xs">{node.id}</p>
              </div>
@@ -275,42 +277,43 @@ export function EditNodeModal() {
 
                         return (
                         <div key={`${bindingState.port.id}:${source.edge.id}:${sourceIndex}`} className="bg-[#0f172a] border border-slate-700/60 rounded-xl overflow-hidden shadow-sm flex flex-col group/card hover:border-slate-600 transition-colors">
-                            <div 
-                              onMouseDown={(event) => {
-                                if (event.button !== 0 || !source.sourceNode || !source.sourcePort) {
-                                  return;
-                                }
+                            <Tooltip position="bottom" content={<TooltipPanel label="Drag Full Object" description="Drag this source header to bind the full upstream object as an expression reference." tone="accent" />}>
+                              <div 
+                                onMouseDown={(event) => {
+                                  if (event.button !== 0 || !source.sourceNode || !source.sourcePort) {
+                                    return;
+                                  }
 
-                                beginPointerExpressionDrag(
-                                  event,
-                                  createExpressionReferenceDragPayload(
-                                  createInputExpressionSource(
-                                    source.sourceNode.id,
-                                    source.sourcePort.id,
-                                    [],
-                                    `${source.sourceNode.data.nodeName || source.sourceNode.id}.${source.sourcePort.id}`,
-                                  ),
-                                  'input-panel',
-                                  ),
-                                  expressionDrag,
-                                );
-                              }}
-                              className="p-2.5 border-b border-slate-700/60 bg-slate-800/60 hover:bg-slate-800 flex items-center justify-between cursor-grab active:cursor-grabbing transition-colors"
-                              title="Drag to reference entire object"
-                              style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as any}
-                            >
-                                <div className="flex items-center gap-2">
-                                  <div className="w-5 h-5 rounded-md bg-slate-900 flex items-center justify-center border border-slate-700 shrink-0">
-                                    {sourceNodeDef?.icon ? React.createElement(sourceNodeDef.icon as any, { size: 10, className: "text-slate-400" }) : <Box size={10} className="text-slate-400" />}
+                                  beginPointerExpressionDrag(
+                                    event,
+                                    createExpressionReferenceDragPayload(
+                                    createInputExpressionSource(
+                                      source.sourceNode.id,
+                                      source.sourcePort.id,
+                                      [],
+                                      `${source.sourceNode.data.nodeName || source.sourceNode.id}.${source.sourcePort.id}`,
+                                    ),
+                                    'input-panel',
+                                    ),
+                                    expressionDrag,
+                                  );
+                                }}
+                                className="p-2.5 border-b border-slate-700/60 bg-slate-800/60 hover:bg-slate-800 flex items-center justify-between cursor-grab active:cursor-grabbing transition-colors"
+                                style={{ WebkitAppRegion: 'no-drag', userSelect: 'none' } as any}
+                              >
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-md bg-slate-900 flex items-center justify-center border border-slate-700 shrink-0">
+                                      {sourceNodeDef?.icon ? React.createElement(sourceNodeDef.icon as any, { size: 10, className: "text-slate-400" }) : <Box size={10} className="text-slate-400" />}
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-200 truncate">
+                                      {source.sourceNode?.data.nodeName || sourceNodeDef?.manifest.displayName || source.sourceNode?.type}
+                                    </span>
                                   </div>
-                                  <span className="text-xs font-bold text-slate-200 truncate">
-                                    {source.sourceNode?.data.nodeName || sourceNodeDef?.manifest.displayName || source.sourceNode?.type}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-slate-500 font-medium">{bindingState.port.label}</span>
-                                </div>
-                            </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-slate-500 font-medium">{bindingState.port.label}</span>
+                                  </div>
+                              </div>
+                            </Tooltip>
                             <div className="p-3 overflow-x-auto bg-[#0a0f16] flex-1">
                                 <div className="flex items-center gap-3 mb-2 ml-1 opacity-70">
                                   <div className="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] font-bold text-slate-400 uppercase tracking-wider">{source.sourcePort?.type || 'JSON'}</div>

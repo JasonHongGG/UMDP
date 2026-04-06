@@ -494,32 +494,6 @@ impl<'a> SceneQueryKernel<'a> {
         )))
     }
 
-    fn read_float_field(
-        &mut self,
-        class_handle: NativeAddress,
-        instance_address: NativeAddress,
-        field_name: &str,
-    ) -> Result<Option<f32>, String> {
-        let Some(field) = self.try_find_instance_field(class_handle, field_name, "System.Single")?
-        else {
-            return Ok(None);
-        };
-        let Some(bytes) = self.runtime_api.try_read_instance_field_bytes(
-            instance_address,
-            &field,
-            std::mem::size_of::<f32>(),
-        )?
-        else {
-            return Ok(None);
-        };
-        if bytes.len() != std::mem::size_of::<f32>() {
-            return Err(format!("invalid Single field payload for {field_name}"));
-        }
-        Ok(Some(f32::from_ne_bytes(bytes.try_into().map_err(
-            |_| "invalid Single field payload".to_string(),
-        )?)))
-    }
-
     fn try_read_parent_object_address(
         &mut self,
         game_object_address: NativeAddress,
@@ -612,49 +586,28 @@ impl<'a> SceneQueryKernel<'a> {
         &mut self,
         boxed_value_address: NativeAddress,
     ) -> Result<Option<RuntimeVector3Snapshot>, String> {
-        if boxed_value_address == 0 {
-            return Ok(None);
-        }
-
-        let vector3_class = self.resolve_unity_class("UnityEngine", "Vector3")?;
-        let raw_value = self.require_unboxed(boxed_value_address, "UnityEngine.Vector3")?;
-        let Some(x) = self.read_float_field(vector3_class, raw_value, "x")? else {
-            return Ok(None);
-        };
-        let Some(y) = self.read_float_field(vector3_class, raw_value, "y")? else {
-            return Ok(None);
-        };
-        let Some(z) = self.read_float_field(vector3_class, raw_value, "z")? else {
+        let Some(bytes) = self
+            .runtime_api
+            .try_read_unboxed_bytes(boxed_value_address, 12)?
+        else {
             return Ok(None);
         };
 
-        Ok(Some(RuntimeVector3Snapshot { x, y, z }))
+        Ok(Some(decode_vector3_bytes(&bytes)?))
     }
 
     fn read_quaternion(
         &mut self,
         boxed_value_address: NativeAddress,
     ) -> Result<Option<RuntimeQuaternionSnapshot>, String> {
-        if boxed_value_address == 0 {
-            return Ok(None);
-        }
-
-        let quaternion_class = self.resolve_unity_class("UnityEngine", "Quaternion")?;
-        let raw_value = self.require_unboxed(boxed_value_address, "UnityEngine.Quaternion")?;
-        let Some(x) = self.read_float_field(quaternion_class, raw_value, "x")? else {
-            return Ok(None);
-        };
-        let Some(y) = self.read_float_field(quaternion_class, raw_value, "y")? else {
-            return Ok(None);
-        };
-        let Some(z) = self.read_float_field(quaternion_class, raw_value, "z")? else {
-            return Ok(None);
-        };
-        let Some(w) = self.read_float_field(quaternion_class, raw_value, "w")? else {
+        let Some(bytes) = self
+            .runtime_api
+            .try_read_unboxed_bytes(boxed_value_address, 16)?
+        else {
             return Ok(None);
         };
 
-        Ok(Some(RuntimeQuaternionSnapshot { x, y, z, w }))
+        Ok(Some(decode_quaternion_bytes(&bytes)?))
     }
 
     fn read_enum_string(
@@ -839,4 +792,41 @@ impl<'a> SceneQueryKernel<'a> {
             "managed class not found: {class_namespace}.{class_name}"
         ))
     }
+}
+
+fn decode_f32_component(bytes: &[u8], context: &str) -> Result<f32, String> {
+    if bytes.len() != std::mem::size_of::<f32>() {
+        return Err(format!("{context}: invalid float payload size"));
+    }
+
+    Ok(f32::from_ne_bytes(
+        bytes
+            .try_into()
+            .map_err(|_| format!("{context}: invalid float payload"))?,
+    ))
+}
+
+fn decode_vector3_bytes(bytes: &[u8]) -> Result<RuntimeVector3Snapshot, String> {
+    if bytes.len() != 12 {
+        return Err("UnityEngine.Vector3: invalid payload size".to_string());
+    }
+
+    Ok(RuntimeVector3Snapshot {
+        x: decode_f32_component(&bytes[0..4], "UnityEngine.Vector3.x")?,
+        y: decode_f32_component(&bytes[4..8], "UnityEngine.Vector3.y")?,
+        z: decode_f32_component(&bytes[8..12], "UnityEngine.Vector3.z")?,
+    })
+}
+
+fn decode_quaternion_bytes(bytes: &[u8]) -> Result<RuntimeQuaternionSnapshot, String> {
+    if bytes.len() != 16 {
+        return Err("UnityEngine.Quaternion: invalid payload size".to_string());
+    }
+
+    Ok(RuntimeQuaternionSnapshot {
+        x: decode_f32_component(&bytes[0..4], "UnityEngine.Quaternion.x")?,
+        y: decode_f32_component(&bytes[4..8], "UnityEngine.Quaternion.y")?,
+        z: decode_f32_component(&bytes[8..12], "UnityEngine.Quaternion.z")?,
+        w: decode_f32_component(&bytes[12..16], "UnityEngine.Quaternion.w")?,
+    })
 }

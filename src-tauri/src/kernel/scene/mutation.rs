@@ -261,14 +261,18 @@ where
     ensure_attached_session(state).map(|_| ())?;
 
     let runtime_session = ensure_runtime_session_ready(state)?;
-    let snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
-    invalidate_scene_inspector_after_mutation(state, &snapshot);
-    invalidate_scene_children_after_mutation(state, &snapshot);
-    let session_key = current_scene_session_key(state);
-    let workspace = state
-        .scene()
-        .workspace()
-        .bump_mutation_epoch(session_key.as_deref());
+    let mutation_result: OperationResult<_> = state.workspace().lifecycle().with_scene_mutation_lock(|| {
+        let snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
+        invalidate_scene_inspector_after_mutation(state, &snapshot);
+        invalidate_scene_children_after_mutation(state, &snapshot);
+        let session_key = current_scene_session_key(state);
+        let workspace = state
+            .scene()
+            .workspace()
+            .bump_mutation_epoch(session_key.as_deref());
+        Ok((snapshot, workspace))
+    });
+    let (snapshot, workspace) = mutation_result?;
     emit_scene_workspace_state(app, &workspace);
     log_scene_duration(label, started_at, &details);
     Ok(snapshot)

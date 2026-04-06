@@ -4,6 +4,7 @@ import type { AnalysisClassInfo, AnalysisFieldInfo, AnalysisStaticFieldInfo } fr
 import type { ClassBinding } from '@/domain/studio/editor';
 import type { InspectorTab } from '@/domain/analysis/workspace-types';
 import { formatHexAddress } from '@/core/addressFormat';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 
 interface ClassInspectorAppProps {
   classInfo: AnalysisClassInfo;
@@ -41,29 +42,37 @@ function ClassInspectorApp({
             {classInfo.name}
           </h1>
           {onSetReferenceTarget && (
-            <button
-              onClick={() => onSetReferenceTarget(classInfo.fullName)}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
-              title="Find references to this class"
-            >
-              <Waypoints size={16} />
-            </button>
+            <Tooltip position="bottom" content={<TooltipPanel label="Find References" description="Search inheritance, member, and function references for this class." tone="accent" />}>
+              <span className="inline-flex shrink-0">
+                <button
+                  onClick={() => onSetReferenceTarget(classInfo.fullName)}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
+                  aria-label="Find references to this class"
+                >
+                  <Waypoints size={16} />
+                </button>
+              </span>
+            </Tooltip>
           )}
           {onAddToStudio && (
-            <button
-              onClick={() => activeTab && onAddToStudio({
-                imageStableId: activeTab.imageStableId,
-                classStableId: activeTab.classStableId,
-                fullName: classInfo.fullName,
-                name: classInfo.name,
-                namespace: classInfo.namespace,
-                imageName: activeTabImageName,
-              })}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
-              title="Add this class as a Studio node"
-            >
-              <Plus size={16} />
-            </button>
+            <Tooltip position="bottom" content={<TooltipPanel label="Add To Studio" description="Create a Studio class node using this class binding." tone="accent" />}>
+              <span className="inline-flex shrink-0">
+                <button
+                  onClick={() => activeTab && onAddToStudio({
+                    imageStableId: activeTab.imageStableId,
+                    classStableId: activeTab.classStableId,
+                    fullName: classInfo.fullName,
+                    name: classInfo.name,
+                    namespace: classInfo.namespace,
+                    imageName: activeTabImageName,
+                  })}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all shrink-0"
+                  aria-label="Add this class as a Studio node"
+                >
+                  <Plus size={16} />
+                </button>
+              </span>
+            </Tooltip>
           )}
         </div>
         <div className="flex items-center gap-4 text-xs font-mono text-slate-400">

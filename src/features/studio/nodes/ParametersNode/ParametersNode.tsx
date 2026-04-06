@@ -29,6 +29,7 @@ import {
 } from '@/domain/studio/contracts';
 import { createStableId } from '@/domain/contracts/shared-identity';
 import type { StudioNodeQueryContext } from '@/features/studio/core/queryTypes';
+import { Tooltip, TooltipPanel } from '@/shared/ui/Tooltip';
 import {
   PARAMETER_SCALAR_VALUE_TYPES,
   coerceParameterValue,
@@ -388,15 +389,19 @@ const ParametersNodeEditor: React.FC<INodeEditProps<ParametersNodeData>> = ({ da
                     <span className="flex items-center justify-center w-5 h-5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-400">{index + 1}</span>
                     <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">Parameter</span>
                   </div>
-                  <button
-                    type="button"
-                    disabled={data.parameters.length <= 1}
-                    onClick={() => updateParameters(data.parameters.filter((candidate) => candidate.id !== entry.id))}
-                    className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 transition-all hover:bg-red-500/10 hover:text-red-400 disabled:opacity-20 disabled:cursor-not-allowed group/btn focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                    title="Remove Parameter"
-                  >
-                    <Trash2 size={14} className="group-hover/btn:scale-110 transition-transform" />
-                  </button>
+                  <Tooltip position="bottom" content={<TooltipPanel label="Remove Parameter" description="Delete this parameter definition from the node output payload." tone="danger" />}>
+                    <span className="inline-flex">
+                      <button
+                        type="button"
+                        disabled={data.parameters.length <= 1}
+                        onClick={() => updateParameters(data.parameters.filter((candidate) => candidate.id !== entry.id))}
+                        className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 transition-all hover:bg-red-500/10 hover:text-red-400 disabled:opacity-20 disabled:cursor-not-allowed group/btn focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                        aria-label="Remove Parameter"
+                      >
+                        <Trash2 size={14} className="group-hover/btn:scale-110 transition-transform" />
+                      </button>
+                    </span>
+                  </Tooltip>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_160px_minmax(0,1.8fr)] items-start">

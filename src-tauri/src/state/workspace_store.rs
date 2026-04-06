@@ -13,6 +13,7 @@ fn bump_resource_revision(lifecycle: &mut WorkspaceLifecycleState) {
 #[derive(Default)]
 pub struct WorkspaceState {
     lifecycle: Mutex<WorkspaceLifecycleState>,
+    scene_mutation_channel: Mutex<()>,
 }
 
 impl WorkspaceState {
@@ -198,6 +199,11 @@ impl WorkspaceState {
         lifecycle.runtime_session.last_error = None;
         bump_resource_revision(&mut lifecycle);
         lifecycle.runtime_session.clone()
+    }
+
+    pub fn with_scene_mutation_lock<T>(&self, execute: impl FnOnce() -> T) -> T {
+        let _guard = self.scene_mutation_channel.lock();
+        execute()
     }
 }
 

@@ -551,7 +551,8 @@ impl<'a> SceneQueryKernel<'a> {
         let parent_object_address = self
             .try_read_parent_object_address(object_address)?
             .map(format_address);
-        let object = self.build_node_summary(object_address, NodeSummaryFlavor::Inspector, None)?;
+        let mut object = self.build_node_summary(object_address, NodeSummaryFlavor::Inspector, None)?;
+        object.active_self = active_self;
         Ok(RuntimeSceneMutationResult {
             operation: RuntimeSceneMutationOperation::SetActive,
             scene_handle: self.read_scene_handle_for_object(object_address)?,
@@ -561,7 +562,7 @@ impl<'a> SceneQueryKernel<'a> {
             deleted_object_address: None,
             preferred_selection_address: Some(format_address(object_address)),
             preferred_selection_hint: None,
-            active_self: Some(object.active_self),
+            active_self: Some(active_self),
             tag: None,
             layer: None,
             hide_flags: None,
