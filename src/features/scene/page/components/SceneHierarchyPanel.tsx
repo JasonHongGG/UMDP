@@ -90,10 +90,7 @@ export function SceneHierarchyPanel() {
   } = useSceneMutationState();
   const createRootPending = isSceneMutationPending('create-root');
   const loadScenePending = isSceneMutationPending('load-scene');
-
-  const [fallbackSearchQuery, setFallbackSearchQuery] = useState('');
-  const sceneHierarchySearchQuery = sceneTreeState.sceneHierarchySearchQuery ?? fallbackSearchQuery;
-  const setSceneHierarchySearchQuery = sceneTreeState.setSceneHierarchySearchQuery ?? setFallbackSearchQuery;
+  const { sceneHierarchySearchQuery, setSceneHierarchySearchQuery } = sceneTreeState;
 
   const [expandedSceneHandles, setExpandedSceneHandles] = useState<Record<number, boolean>>({});
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});

@@ -1,7 +1,8 @@
-import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
+import { useStudioGraph, useStudioUi } from '@/features/studio/application/StudioModuleContext';
 
 export function useStudioNodeWrapperState() {
-  const { graph, ui } = useStudioServices();
+  const graph = useStudioGraph();
+  const ui = useStudioUi();
 
   return {
     nodes: graph.nodes,

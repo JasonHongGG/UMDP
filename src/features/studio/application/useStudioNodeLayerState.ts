@@ -1,10 +1,11 @@
 import { getNodePortsByDirection } from '@/features/studio/core/NodeRegistry';
 import { getRegisteredStudioNodeCatalog } from '@/features/studio/core/catalog/studioNodeCatalogRuntime';
 import { getStudioNodePresentationDefinition } from '@/features/studio/core/types';
-import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
+import { useStudioGraph, useStudioRuntime } from '@/features/studio/application/StudioModuleContext';
 
 export function useStudioNodeLayerState() {
-  const { graph, runtime } = useStudioServices();
+  const graph = useStudioGraph();
+  const runtime = useStudioRuntime();
   const catalog = getRegisteredStudioNodeCatalog();
   const isExecutionActive = Object.values(runtime.nodeStates).some((state) => state === 'running');
 

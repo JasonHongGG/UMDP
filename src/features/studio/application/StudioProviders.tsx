@@ -1,6 +1,6 @@
 import React from 'react';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
-import { StudioProvider } from '@/features/studio/application/StudioServicesContext';
+import { StudioProvider } from '@/features/studio/application/StudioModuleContext';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import { StudioFeedbackProvider } from './feedback/StudioFeedbackContext';
 

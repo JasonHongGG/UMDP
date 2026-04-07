@@ -4,7 +4,7 @@ import React, { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { SceneHierarchyPanel } from './SceneHierarchyPanel';
-import { buildLoadedSceneGraph } from '../loadedSceneNodes';
+import { buildLoadedSceneGraph, createLoadedSceneSearchProjection } from '../loadedSceneNodes';
 import { createSceneDescriptor, createSceneNodeSummary, createSceneResourceState, createSceneWorkspaceState } from '../testUtils';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -59,6 +59,9 @@ describe('SceneHierarchyPanel', () => {
       setSelectedObjectAddress: vi.fn(),
       openTabForSceneObject: vi.fn(),
       loadedSceneGraph: buildLoadedSceneGraph(sceneWorkspace, childrenByParent),
+      sceneHierarchySearchQuery: '',
+      setSceneHierarchySearchQuery: vi.fn(),
+      sceneHierarchySearch: null,
       childrenByParent,
       childTaskByParent: {},
       loadingChildrenByParent: {},
@@ -91,6 +94,45 @@ describe('SceneHierarchyPanel', () => {
   });
 
   it('filters the hierarchy using only already loaded nodes while keeping ancestor context', async () => {
+    const environmentRoot = createSceneNodeSummary({ objectAddress: '0xroot-1', name: 'EnvironmentRoot', hasChildren: true, childCount: 1, path: 'EnvironmentRoot' });
+    const cameraRig = createSceneNodeSummary({ objectAddress: '0xroot-2', name: 'CameraRig', path: 'CameraRig' });
+    const matchChild = createSceneNodeSummary({ objectAddress: '0xchild-1', parentObjectAddress: '0xroot-1', name: 'MatchChild', path: 'EnvironmentRoot/MatchChild' });
+    const sceneWorkspace = createSceneWorkspaceState({
+      snapshot: {
+        generatedAt: '2026-03-30T00:00:00.000Z',
+        scenes: [createSceneDescriptor({ roots: [environmentRoot, cameraRig] })],
+        buildSettingsScenes: [],
+      },
+    });
+    const childrenByParent = {
+      '0xroot-1': [matchChild],
+    };
+    let sceneHierarchySearchQuery = '';
+    const setSceneHierarchySearchQuery = vi.fn((value: string) => {
+      sceneHierarchySearchQuery = value;
+    });
+
+    mockUseSceneTreeState.mockImplementation(() => {
+      const loadedSceneGraph = buildLoadedSceneGraph(sceneWorkspace, childrenByParent);
+      return {
+        sceneWorkspace,
+        refreshSceneWorkspace: vi.fn().mockResolvedValue(undefined),
+        selectedObjectAddress: null,
+        setSelectedObjectAddress: vi.fn(),
+        openTabForSceneObject: vi.fn(),
+        loadedSceneGraph,
+        sceneHierarchySearchQuery,
+        setSceneHierarchySearchQuery,
+        sceneHierarchySearch: createLoadedSceneSearchProjection(loadedSceneGraph, sceneHierarchySearchQuery.trim().toLowerCase()),
+        childrenByParent,
+        childTaskByParent: {},
+        loadingChildrenByParent: {},
+        childErrorByParent: {},
+        ensureSceneObjectChildrenLoaded: vi.fn().mockResolvedValue(undefined),
+        stopSceneObjectChildrenObservation: vi.fn(),
+      };
+    });
+
     await act(async () => {
       root.render(createElement(SceneHierarchyPanel));
     });
@@ -101,6 +143,7 @@ describe('SceneHierarchyPanel', () => {
 
     await act(async () => {
       setInputValue(searchInput!, 'match');
+      root.render(createElement(SceneHierarchyPanel));
     });
     await flushEffects();
 
@@ -132,6 +175,9 @@ describe('SceneHierarchyPanel', () => {
       setSelectedObjectAddress: vi.fn(),
       openTabForSceneObject: vi.fn(),
       loadedSceneGraph: buildLoadedSceneGraph(sceneWorkspace, childrenByParent),
+      sceneHierarchySearchQuery: '',
+      setSceneHierarchySearchQuery: vi.fn(),
+      sceneHierarchySearch: null,
       childrenByParent,
       childTaskByParent: {},
       loadingChildrenByParent: {},

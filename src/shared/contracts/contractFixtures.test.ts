@@ -8,7 +8,7 @@ import type {
   RuntimeSceneObjectHeaderTaskState,
   SceneWorkspaceState,
 } from '@/domain/analysis/contracts';
-import type { SystemContractVersions } from './workspace';
+import { CURRENT_SYSTEM_CONTRACT_VERSIONS, type SystemContractVersions } from './workspace';
 
 function readFixture<T>(name: string): T {
   const raw = readFileSync(join(process.cwd(), 'contract-fixtures', name), 'utf8');
@@ -28,11 +28,7 @@ describe('shared contract fixtures', () => {
   it('keeps the workspace versions fixture aligned with the shell contract', () => {
     const fixture = readFixture<SystemContractVersions>('workspace-contract-versions.json');
 
-    expect(fixture).toEqual({
-      tauriCommandVersion: 5,
-      analysisSchemaVersion: 5,
-      workflowSchemaVersion: 1,
-    });
+    expect(fixture).toEqual(CURRENT_SYSTEM_CONTRACT_VERSIONS);
   });
 
   it('keeps the scene resource fixture aligned with the scene resource contracts', () => {

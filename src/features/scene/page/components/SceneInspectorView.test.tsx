@@ -10,7 +10,7 @@ import { createSceneDescriptor, createSceneInspectorSnapshot, createSceneNodeSum
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mockUseAnalysisWorkspace = vi.fn();
-const mockUseSceneWorkspace = vi.fn();
+const mockUseSceneHierarchyGraphState = vi.fn();
 const mockUseSceneInspectorState = vi.fn();
 const mockUseSceneMutationState = vi.fn();
 
@@ -19,7 +19,7 @@ vi.mock('@/app/state/useAnalysisWorkspace', () => ({
 }));
 
 vi.mock('../SceneWorkspaceContext', () => ({
-  useSceneWorkspace: () => mockUseSceneWorkspace(),
+  useSceneHierarchyGraphState: () => mockUseSceneHierarchyGraphState(),
   useSceneInspectorState: () => mockUseSceneInspectorState(),
   useSceneMutationState: () => mockUseSceneMutationState(),
 }));
@@ -96,7 +96,7 @@ describe('SceneInspectorView', () => {
       '0xui-root': [uiLayer],
     };
 
-    mockUseSceneWorkspace.mockReturnValue({
+    mockUseSceneHierarchyGraphState.mockReturnValue({
       sceneWorkspace,
       loadedSceneGraph: buildLoadedSceneGraph(sceneWorkspace, childrenByParent),
       childrenByParent,
@@ -175,7 +175,7 @@ describe('SceneInspectorView', () => {
     });
     container.remove();
     mockUseAnalysisWorkspace.mockReset();
-    mockUseSceneWorkspace.mockReset();
+    mockUseSceneHierarchyGraphState.mockReset();
     mockUseSceneInspectorState.mockReset();
     mockUseSceneMutationState.mockReset();
   });

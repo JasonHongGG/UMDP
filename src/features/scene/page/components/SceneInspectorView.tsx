@@ -26,7 +26,7 @@ import type {
 } from '@/domain/analysis/contracts';
 import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
 import { collectLoadedDescendantAddresses, filterLoadedSceneNodeRecords } from '../loadedSceneNodes';
-import { useSceneInspectorState, useSceneMutationState, useSceneWorkspace } from '../SceneWorkspaceContext';
+import { useSceneHierarchyGraphState, useSceneInspectorState, useSceneMutationState } from '../SceneWorkspaceContext';
 import { EmptyNotice, ErrorNotice } from './SceneUiPrimitives';
 import { SceneInspectorTabBar } from './SceneInspectorTabBar';
 
@@ -35,9 +35,7 @@ type TransformAxis = keyof RuntimeVector3Snapshot;
 
 export function SceneInspectorView() {
   const { analysisSnapshot } = useAnalysisWorkspace();
-  const sceneWorkspaceState = useSceneWorkspace();
-  const childrenByParent = sceneWorkspaceState.childrenByParent;
-  const loadedSceneGraph = sceneWorkspaceState.loadedSceneGraph;
+  const { childrenByParent, loadedSceneGraph } = useSceneHierarchyGraphState();
   const {
     setSelectedObjectAddress,
     sceneTabs,

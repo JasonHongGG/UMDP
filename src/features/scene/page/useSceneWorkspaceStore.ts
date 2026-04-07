@@ -31,6 +31,12 @@ import {
   buildSceneInspectors,
   type SceneEntityMap,
 } from './sceneWorkspaceModel';
+import {
+  persistSceneWorkspaceActiveTabIndex,
+  persistSceneWorkspaceSelectedObject,
+  persistSceneWorkspaceTabs,
+  readSceneWorkspacePersistence,
+} from './sceneWorkspacePersistence';
 
 export type SceneInspectorTab = {
   objectAddress: string;
@@ -141,33 +147,6 @@ type SceneWorkspaceStoreAction =
   | { type: 'setSceneTabs'; updater: SceneStateUpdater<SceneInspectorTab[]> }
   | { type: 'setActiveSceneTabIndex'; updater: SceneStateUpdater<number> };
 
-const getSavedTabs = () => {
-  try {
-    const data = sessionStorage.getItem('mndp_scene_tabs');
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-};
-
-const getSavedTabIndex = () => {
-  try {
-    const data = sessionStorage.getItem('mndp_scene_tab_index');
-    return data ? Number(data) : -1;
-  } catch {
-    return -1;
-  }
-};
-
-const getSavedSelected = () => {
-  try {
-    const data = sessionStorage.getItem('mndp_scene_selected_address');
-    return data || null;
-  } catch {
-    return null;
-  }
-};
-
 const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
   sceneWorkspace: EMPTY_SCENE_WORKSPACE_STATE,
   selectedObjectAddress: null,
@@ -192,11 +171,13 @@ const EMPTY_SCENE_WORKSPACE_STORE_STATE: SceneWorkspaceStoreState = {
 };
 
 function initSceneWorkspaceStoreState(): SceneWorkspaceStoreState {
+  const persistedState = readSceneWorkspacePersistence();
+
   return {
     ...EMPTY_SCENE_WORKSPACE_STORE_STATE,
-    sceneTabs: getSavedTabs(),
-    activeSceneTabIndex: getSavedTabIndex(),
-    selectedObjectAddress: getSavedSelected(),
+    sceneTabs: persistedState.sceneTabs,
+    activeSceneTabIndex: persistedState.activeSceneTabIndex,
+    selectedObjectAddress: persistedState.selectedObjectAddress,
   };
 }
 
@@ -275,11 +256,6 @@ function sceneWorkspaceStoreReducer(
     }
     case 'setSelectedObjectAddress': {
       const nextAddress = resolveSceneStateUpdater(state.selectedObjectAddress, action.updater);
-      if (nextAddress) {
-        sessionStorage.setItem('mndp_scene_selected_address', nextAddress);
-      } else {
-        sessionStorage.removeItem('mndp_scene_selected_address');
-      }
       return {
         ...state,
         selectedObjectAddress: nextAddress,
@@ -376,7 +352,6 @@ function sceneWorkspaceStoreReducer(
       };
     case 'setSceneTabs': {
       const nextTabs = resolveSceneStateUpdater(state.sceneTabs, action.updater);
-      sessionStorage.setItem('mndp_scene_tabs', JSON.stringify(nextTabs));
       return {
         ...state,
         sceneTabs: nextTabs,
@@ -384,7 +359,6 @@ function sceneWorkspaceStoreReducer(
     }
     case 'setActiveSceneTabIndex': {
       const nextIndex = resolveSceneStateUpdater(state.activeSceneTabIndex, action.updater);
-      sessionStorage.setItem('mndp_scene_tab_index', String(nextIndex));
       return {
         ...state,
         activeSceneTabIndex: nextIndex,
@@ -517,6 +491,18 @@ export function useSceneWorkspaceStore() {
   useEffect(() => {
     componentsTaskByAddressRef.current = componentsTaskByAddress;
   }, [componentsTaskByAddress]);
+
+  useEffect(() => {
+    persistSceneWorkspaceSelectedObject(selectedObjectAddress);
+  }, [selectedObjectAddress]);
+
+  useEffect(() => {
+    persistSceneWorkspaceTabs(sceneTabs);
+  }, [sceneTabs]);
+
+  useEffect(() => {
+    persistSceneWorkspaceActiveTabIndex(activeSceneTabIndex);
+  }, [activeSceneTabIndex]);
 
   const childrenByParent = useMemo(() => buildSceneChildrenByParent(sceneEntities), [sceneEntities]);
   const inspectorsByAddress = useMemo(() => buildSceneInspectors({

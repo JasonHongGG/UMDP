@@ -272,7 +272,7 @@ where
     ensure_attached_session(state).map(|_| ())?;
 
     let runtime_session = ensure_runtime_session_ready(state)?;
-    let mutation_result: OperationResult<_> = state.workspace().lifecycle().with_scene_mutation_lock(|| {
+    let mutation_result: OperationResult<_> = state.workspace().with_scene_mutation_lock(|| {
         let mut snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
         let session_key = current_scene_session_key(state);
         let impacted_addresses = collect_impacted_object_addresses(&snapshot);
@@ -283,10 +283,7 @@ where
             session_key.as_deref(),
         );
         let session_key = current_scene_session_key(state);
-        let workspace = state
-            .scene()
-            .workspace()
-            .bump_mutation_epoch(session_key.as_deref());
+        let workspace = state.scene().mark_mutation_epoch(session_key.as_deref());
         snapshot.affected_resources = build_affected_resources(&snapshot, &impacted_addresses);
         Ok((snapshot, workspace, invalidation))
     });

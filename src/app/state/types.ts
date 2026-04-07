@@ -38,12 +38,16 @@ export interface AnalysisSliceState {
   loadingRuntimeByKey: Record<string, boolean>;
   runtimeInstanceFieldErrorByKey: Record<string, OperationErrorEnvelope | null>;
   loadingRuntimeInstanceByKey: Record<string, boolean>;
+}
+
+export interface HandoffSliceState {
   pendingClassNode: PendingClassNodeRequest | null;
 }
 
 export interface AppStateShape {
   workspace: WorkspaceSliceState;
   analysis: AnalysisSliceState;
+  handoff: HandoffSliceState;
 }
 
 export interface ThunkConfig {

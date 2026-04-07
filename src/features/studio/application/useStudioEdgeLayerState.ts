@@ -1,7 +1,9 @@
-import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
+import { useStudioGraph, useStudioRuntime, useStudioUi } from '@/features/studio/application/StudioModuleContext';
 
 export function useStudioEdgeLayerState() {
-  const { graph, runtime, ui } = useStudioServices();
+  const graph = useStudioGraph();
+  const runtime = useStudioRuntime();
+  const ui = useStudioUi();
 
   return {
     edges: graph.edges,

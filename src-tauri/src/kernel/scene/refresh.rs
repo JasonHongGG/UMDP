@@ -20,19 +20,13 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> OperationResult
     ensure_attached_session(state).map(|_| ())?;
     ensure_scene_query_runtime_ready(state)?;
     let session_key = current_scene_session_key(state);
-    let workspace = state
-        .scene()
-        .workspace()
-        .set_refreshing(session_key.clone());
+    let workspace = state.scene().begin_refresh(session_key.clone());
     emit_scene_workspace_state(app, &workspace);
 
     let snapshot = match execute_runtime_operation(state, || load_scene_catalog(state)) {
         Ok(snapshot) => snapshot,
         Err(error) => {
-            let workspace = state
-                .scene()
-                .workspace()
-                .set_error(session_key.as_deref(), error.to_string());
+            let workspace = state.scene().fail_refresh(session_key.as_deref(), error.to_string());
             emit_scene_workspace_state(app, &workspace);
             return Err(error);
         }
@@ -44,16 +38,8 @@ pub fn start_scene_refresh(app: &AppHandle, state: &AppState) -> OperationResult
         .iter()
         .map(|scene| scene.roots.len())
         .sum::<usize>();
-    let workspace = state
-        .scene()
-        .workspace()
-        .set_snapshot(session_key.as_deref(), snapshot);
+    let workspace = state.scene().complete_refresh(session_key.as_deref(), snapshot);
     emit_scene_workspace_state(app, &workspace);
-    if current_scene_session_key(state) == session_key {
-        state.scene().children().reset();
-        state.scene().header().reset();
-        state.scene().components().reset();
-    }
     log_scene_duration(
         "start_scene_refresh",
         started_at,

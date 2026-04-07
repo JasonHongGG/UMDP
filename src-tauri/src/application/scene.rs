@@ -5,6 +5,7 @@ use crate::domain::analysis_models::{
     RuntimeSceneTransformUpdate, SceneWorkspaceState,
 };
 use crate::domain::operation::OperationResult;
+use crate::kernel::workspace as workspace_kernel;
 use crate::kernel::scene::{mutation, picker, refresh, tasks};
 use crate::state::AppState;
 use tauri::AppHandle;
@@ -17,16 +18,8 @@ pub fn start_scene_refresh(
 }
 
 pub fn get_scene_workspace_state(state: &AppState) -> SceneWorkspaceState {
-    let session_key = state
-        .workspace()
-        .lifecycle()
-        .current()
-        .runtime_session
-        .session_key;
-    state
-        .scene()
-        .workspace()
-        .current_for(session_key.as_deref())
+    let session_key = workspace_kernel::current_lifecycle(state).runtime_session.session_key;
+    state.scene().current_workspace(session_key.as_deref())
 }
 
 pub fn list_scene_picker_windows(state: &AppState) -> OperationResult<Vec<ProcessWindowCandidate>> {

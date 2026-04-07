@@ -1,73 +1,11 @@
 use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
-use serde::Serialize;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum OperationErrorCode {
-    ProcessNotFound,
-    NotAttached,
-    MetadataUnavailable,
-    MetadataSourceUnavailable,
-    ClassNotFound,
-    MethodNotFound,
-    FieldNotFound,
-    InstanceRequired,
-    ArgumentMismatch,
-    InvalidAddress,
-    ResourceUnavailable,
-    RuntimeSessionUnavailable,
-    RuntimeApiUnavailable,
-    CapabilityUnavailable,
-    RuntimeFault,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum OperationFailureEffect {
-    None,
-    RuntimeSessionDropped,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum OperationDisplayHint {
-    Inline,
-    Banner,
-    Toast,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OperationErrorEnvelope {
-    pub code: OperationErrorCode,
-    pub message: String,
-    pub effect: OperationFailureEffect,
-    pub operation_key: Option<String>,
-    pub recoverable: bool,
-    pub display_hint: OperationDisplayHint,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OperationFeedbackEnvelope {
-    pub operation_key: String,
-    pub tone: String,
-    pub title: String,
-    pub description: String,
-    pub target_id: Option<String>,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandEnvelope<T> {
-    pub ok: bool,
-    pub data: Option<T>,
-    pub error: Option<OperationErrorEnvelope>,
-    pub feedback: Option<OperationFeedbackEnvelope>,
-}
+#[allow(unused_imports)]
+pub use crate::generated::contracts::operation::{
+    CommandEnvelope, OperationDisplayHint, OperationErrorCode, OperationErrorEnvelope,
+    OperationFailureEffect, OperationFeedbackEnvelope, OperationFeedbackTone,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationError {

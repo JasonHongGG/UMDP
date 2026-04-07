@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::domain::workspace::current_contract_versions;
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
@@ -123,9 +124,11 @@ mod tests {
         ))
         .expect("workspace versions fixture should deserialize");
 
-        assert_eq!(fixture.tauri_command_version, 5);
-        assert_eq!(fixture.analysis_schema_version, 5);
-        assert_eq!(fixture.workflow_schema_version, 1);
+        let current = current_contract_versions();
+
+        assert_eq!(fixture.tauri_command_version, current.tauri_command_version);
+        assert_eq!(fixture.analysis_schema_version, current.analysis_schema_version);
+        assert_eq!(fixture.workflow_schema_version, current.workflow_schema_version);
     }
 
     #[test]

@@ -1,9 +1,10 @@
 import { getRegisteredStudioNodeCatalog } from '@/features/studio/core/catalog/studioNodeCatalogRuntime';
-import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
+import { useStudioGraph, useStudioUi } from '@/features/studio/application/StudioModuleContext';
 import { useStudioRuntimeDataState } from './useStudioRuntimeDataState';
 
 export function useStudioAddNodeModalState() {
-  const { graph, ui } = useStudioServices();
+  const graph = useStudioGraph();
+  const ui = useStudioUi();
   const runtimeData = useStudioRuntimeDataState();
 
   return {

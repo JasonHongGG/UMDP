@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasMode } from '@/domain/studio/kernel';
 import { validateConnection } from './connectionPolicy';
-import { useStudioEngineState, type StudioEngineController } from '@/features/studio/application/kernel/useStudioEngineState';
+import { useStudioEngineState, type StudioEngineController } from '@/features/studio/application/engine/useStudioEngineState';
 import type { ConnectPortsOptions, DraftConnection, PortHandleType, PortType, StudioEdge, StudioNode } from './types';
 import { getConnectionChannelForPortType, getPortTypeForConnectionChannel } from './types';
 

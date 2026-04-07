@@ -23,6 +23,8 @@ Available variables:
 
 ## Scripts
 
+- `npm run generate:contracts`: regenerate canonical contract artifacts for TypeScript and Rust.
+- `npm run check:contracts`: fail when generated contract artifacts drift from the canonical source.
 - `npm run dev`: start the Vite frontend in development mode.
 - `npm run tauri dev`: run the desktop app through Tauri.
 - `npm run build`: type-check and create a production build.

@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
+import { useStudioHandoff } from '@/app/state/useStudioHandoff';
 import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import { useInspectorModuleState } from '@/features/inspector/application/useInspectorModuleState';
 
@@ -14,9 +15,9 @@ export function useInspectorPageState() {
     runtimeFieldErrorByKey,
     loadingRuntimeByKey,
     ensureRuntimeOverlayLoaded,
-    queuePendingClassNode,
     workspaceLifecycle,
   } = useAnalysisWorkspace();
+  const { queuePendingClassNode } = useStudioHandoff();
   const { setActivePage } = useWorkspaceShellState();
   const resetRevisionRef = useRef(0);
   const previousSessionKeyRef = useRef<string | null>(workspaceLifecycle.runtimeSession.sessionKey);

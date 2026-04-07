@@ -11,22 +11,6 @@ import type { ThunkConfig, WorkspaceSliceState } from './types';
 
 const ATTACH_TO_PROCESS_REJECTED = 'workspace/attachToProcess/rejected';
 
-function makeFallbackLifecycle(
-  fallback: Partial<WorkspaceLifecycleState>,
-  previous: WorkspaceLifecycleState,
-): WorkspaceLifecycleState {
-  return {
-    ...previous,
-    ...fallback,
-    runtimeSession: fallback.runtimeSession
-      ? {
-          ...previous.runtimeSession,
-          ...fallback.runtimeSession,
-        }
-      : previous.runtimeSession,
-  };
-}
-
 function areTaskProgressEqual(left: WorkspaceTaskSnapshot['progress'], right: WorkspaceTaskSnapshot['progress']) {
   if (left === right) {
     return true;
@@ -118,9 +102,9 @@ export function createWorkspaceSlice({
       clearWorkspaceTasks(state) {
         state.tasksBySource = {};
       },
-      applyLifecycleFallback(state, action: PayloadAction<Partial<WorkspaceLifecycleState>>) {
+      replaceLifecycle(state, action: PayloadAction<WorkspaceLifecycleState>) {
         state.previousLifecycle = state.lifecycle;
-        state.lifecycle = makeFallbackLifecycle(action.payload, state.lifecycle);
+        state.lifecycle = action.payload;
       },
       setFeedback(state, action: PayloadAction<OperationFeedbackEnvelope | null>) {
         state.feedback = action.payload;

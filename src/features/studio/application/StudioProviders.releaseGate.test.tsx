@@ -8,7 +8,7 @@ import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { studioNodeCatalog } from '@/features/studio/nodes';
 import { initializeStudioNodeRegistry } from '@/features/studio/core/NodeRegistry';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
-import { useStudioRuntime } from '@/features/studio/application/StudioServicesContext';
+import { useStudioRuntime } from '@/features/studio/application/StudioModuleContext';
 import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 import { StudioProviders } from './StudioProviders';
 import { useStudioFeedback, type StudioFeedbackMessage } from './feedback/StudioFeedbackContext';

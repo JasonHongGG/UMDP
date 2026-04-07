@@ -13,9 +13,14 @@ import type {
 } from '@/domain/analysis/contracts';
 import type { ActivePage } from '@/domain/analysis/workspace-types';
 import { createAnalysisClassInfo, createAnalysisClassSummary } from '@/domain/analysis/view-models';
-import { buildStudioClassCatalog, createClassInfoCatalogFromClassDescriptor, type PendingClassNodeRequest } from '@/domain/studio/editor';
+import { buildStudioClassCatalog, createClassInfoCatalogFromClassDescriptor } from '@/domain/studio/editor';
 import type { ResolvedMemberRuntimeValue } from '@/domain/studio/runtime';
-import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
+import {
+  createAttachedWithoutSnapshotLifecycle,
+  createAttachFailureWorkspaceLifecycle,
+  createAttachingWorkspaceLifecycle,
+  EMPTY_WORKSPACE_LIFECYCLE,
+} from '@/app/shell/workspaceLifecycle';
 import {
   createWorkspacePresentation,
   createWorkspaceViewState,
@@ -35,15 +40,8 @@ import type {
   AppStateShape,
   ThunkConfig,
 } from './types';
+import { createHandoffSlice } from './handoffSlice';
 import { createWorkspaceSlice } from './workspaceSlice';
-
-const ATTACHED_SCENE_RUNTIME_CAPABILITIES: WorkspaceLifecycleState['runtimeSession']['capabilities'] = [
-  'metadata',
-  'execution',
-  'scene-catalog-read',
-  'scene-object-header-read',
-  'scene-object-children-read',
-];
 
 const SERIALIZABLE_CHECK_IGNORED_PATHS = [
   'analysis.analysisSnapshot',
@@ -52,15 +50,6 @@ const SERIALIZABLE_CHECK_IGNORED_PATHS = [
 ] as const;
 
 const SERIALIZABLE_CHECK_WARN_AFTER_MS = 1000;
-
-function makeRuntimeSessionKey(processSession: ProcessSession) {
-  const runtime = processSession.runtime === 'unknown'
-    ? 'Unknown'
-    : processSession.runtime === 'il2cpp'
-      ? 'Il2cpp'
-      : 'Mono';
-  return `${processSession.pid}:${processSession.processName}:${runtime}`;
-}
 
 export const refreshWorkspaceLifecycle = createAsyncThunk<WorkspaceLifecycleState, string | undefined, ThunkConfig>(
   'workspace/refreshLifecycle',
@@ -163,33 +152,21 @@ const analysisSlice = createAnalysisSlice({
   ensureRuntimeInstanceFieldsLoaded,
 });
 
+const handoffSlice = createHandoffSlice({
+  refreshWorkspaceLifecycle,
+});
+
 export const workspaceActions = workspaceSlice.actions;
 export const analysisActions = analysisSlice.actions;
+export const handoffActions = handoffSlice.actions;
 
 export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, ThunkConfig>(
   'workspace/attachToProcess',
   async (process, { dispatch, extra, rejectWithValue }) => {
-    dispatch(workspaceActions.applyLifecycleFallback({
-      status: 'attaching',
-      processSession: null,
-      runtime: 'unknown',
-      hasSnapshot: false,
-      errorMessage: null,
-      runtimeSession: {
-        status: 'starting',
-        runtime: 'unknown',
-        capabilities: [...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.capabilities],
-        sceneObjectComponents: {
-          ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
-        },
-        connected: false,
-        sessionKey: null,
-        lastError: null,
-        lastHeartbeatAt: null,
-      },
-    }));
+    dispatch(workspaceActions.replaceLifecycle(createAttachingWorkspaceLifecycle()));
     dispatch(workspaceActions.clearWorkspaceTasks());
     dispatch(analysisActions.resetForSession());
+    dispatch(handoffActions.resetStudioHandoffs());
 
     try {
       const session = await extra.analysisRepository.attachToProcess({
@@ -197,50 +174,14 @@ export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, Thu
         name: process.name,
       });
 
-      dispatch(workspaceActions.applyLifecycleFallback({
-        status: 'attached-without-snapshot',
-        processSession: session,
-        runtime: session.runtime,
-        hasSnapshot: false,
-        errorMessage: null,
-        runtimeSession: {
-          status: 'starting',
-          runtime: session.runtime,
-          capabilities: ATTACHED_SCENE_RUNTIME_CAPABILITIES,
-          sceneObjectComponents: {
-            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
-          },
-          connected: false,
-          sessionKey: makeRuntimeSessionKey(session),
-          lastError: null,
-          lastHeartbeatAt: null,
-        },
-      }));
+      dispatch(workspaceActions.replaceLifecycle(createAttachedWithoutSnapshotLifecycle(session)));
 
       await dispatch(refreshWorkspaceLifecycle('workspace.after-attach')).unwrap();
       await dispatch(loadAnalysisSnapshot(session)).unwrap();
       return session;
     } catch (error) {
       const envelope = coerceOperationErrorEnvelope(error, 'workspace.attach-to-process');
-      dispatch(workspaceActions.applyLifecycleFallback({
-        status: 'runtime-error',
-        processSession: null,
-        runtime: 'unknown',
-        hasSnapshot: false,
-        errorMessage: envelope.message,
-        runtimeSession: {
-          status: 'error',
-          runtime: 'unknown',
-          capabilities: [],
-          sceneObjectComponents: {
-            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
-          },
-          connected: false,
-          sessionKey: null,
-          lastError: envelope.message,
-          lastHeartbeatAt: null,
-        },
-      }));
+      dispatch(workspaceActions.replaceLifecycle(createAttachFailureWorkspaceLifecycle(envelope.message)));
       return rejectWithValue(envelope);
     }
   },
@@ -257,6 +198,7 @@ export function createAppStore(services: AppServices) {
     reducer: {
       workspace: workspaceSlice.reducer,
       analysis: analysisSlice.reducer,
+      handoff: handoffSlice.reducer,
     },
     middleware: (getDefaultMiddleware) => getDefaultMiddleware({
       thunk: {
@@ -276,6 +218,7 @@ export type AppDispatch = AppStore['dispatch'];
 
 const selectWorkspaceState = (state: AppStateShape) => state.workspace;
 const selectAnalysisState = (state: AppStateShape) => state.analysis;
+const selectHandoffState = (state: AppStateShape) => state.handoff;
 
 export const selectActivePage = createSelector([selectWorkspaceState], (workspace) => workspace.activePage);
 export const selectWorkspaceLifecycle = createSelector([selectWorkspaceState], (workspace) => workspace.lifecycle);
@@ -325,7 +268,7 @@ export const selectRuntimeFieldErrorMessages = createSelector([selectAnalysisSta
 });
 export const selectLoadingRuntimeByKey = createSelector([selectAnalysisState], (analysis) => analysis.loadingRuntimeByKey);
 export const selectRuntimeInstanceFieldSnapshots = createSelector([selectAnalysisState], (analysis) => analysis.runtimeInstanceFieldSnapshots);
-export const selectPendingClassNode = createSelector([selectAnalysisState], (analysis) => analysis.pendingClassNode);
+export const selectPendingClassNode = createSelector([selectHandoffState], (handoff) => handoff.pendingClassNode);
 
 export const selectImages = createSelector([selectAnalysisSnapshot], (analysisSnapshot) => analysisSnapshot?.images ?? []);
 

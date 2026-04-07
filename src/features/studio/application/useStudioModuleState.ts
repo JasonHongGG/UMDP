@@ -3,7 +3,7 @@ import { getRegisteredStudioNodeCatalog } from '@/features/studio/core/catalog/s
 import { useStudioGraphStore } from '@/features/studio/core/graphStore';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import { useStudioUiState } from '@/features/studio/core/studioUiState';
-import { useStudioEngineState } from './kernel/useStudioEngineState';
+import { useStudioEngineState } from './engine/useStudioEngineState';
 import { useStudioNodeLifecycle } from './lifecycle/StudioNodeLifecycle';
 import { useStudioQueryState } from './query/useStudioQueryState';
 import { useStudioRuntimeState } from './runtime/useStudioRuntimeState';

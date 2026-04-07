@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkspaceLifecycleState } from './workspace';
+import { CURRENT_SYSTEM_CONTRACT_VERSIONS, type WorkspaceLifecycleState } from './workspace';
 
 describe('workspace contracts', () => {
   it('supports the runtime session fields required by the workbench shell', () => {
@@ -32,5 +32,6 @@ describe('workspace contracts', () => {
     expect(state.runtimeSession.sceneObjectComponents.status).toBe('supported');
     expect(state.runtimeSession.sessionKey).toBe('session-1');
     expect(state.resourceRevision).toBe(3);
+    expect(CURRENT_SYSTEM_CONTRACT_VERSIONS.tauriCommandVersion).toBe(5);
   });
 });

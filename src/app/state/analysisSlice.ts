@@ -5,7 +5,6 @@ import type {
   RuntimeClassOverlayDescriptor,
   RuntimeInstanceFieldSnapshot,
 } from '@/domain/analysis/contracts';
-import type { PendingClassNodeRequest } from '@/domain/studio/editor';
 import { formatHexAddress } from '@/core/addressFormat';
 import type { ThunkConfig, AnalysisSliceState } from './types';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
@@ -39,7 +38,6 @@ const initialAnalysisState: AnalysisSliceState = {
   loadingRuntimeByKey: {},
   runtimeInstanceFieldErrorByKey: {},
   loadingRuntimeInstanceByKey: {},
-  pendingClassNode: null,
 };
 
 interface AnalysisThunkReferences {
@@ -59,17 +57,10 @@ export function createAnalysisSlice({
     name: 'analysis',
     initialState: initialAnalysisState,
     reducers: {
-      queuePendingClassNode(state, action: PayloadAction<PendingClassNodeRequest>) {
-        state.pendingClassNode = action.payload;
-      },
-      clearPendingClassNode(state) {
-        state.pendingClassNode = null;
-      },
       resetForSession(state) {
         state.attachError = null;
         state.analysisSnapshot = null;
         state.loadingSnapshot = false;
-        state.pendingClassNode = null;
         clearRuntimeCaches(state);
       },
     },
@@ -93,7 +84,6 @@ export function createAnalysisSlice({
       builder.addCase(refreshWorkspaceLifecycle.fulfilled, (state, action) => {
         if (!action.payload.processSession) {
           state.analysisSnapshot = null;
-          state.pendingClassNode = null;
         }
 
         if (shouldClearRuntimeState(action.payload)) {
@@ -157,7 +147,6 @@ export function createAnalysisSlice({
         (state, action) => {
           state.attachError = (action.payload as AnalysisSliceState['attachError']) ?? null;
           state.analysisSnapshot = null;
-          state.pendingClassNode = null;
           clearRuntimeCaches(state);
         },
       );

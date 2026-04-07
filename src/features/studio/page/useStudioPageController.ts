@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { createEmptyClassInfoSelection } from '@/domain/studio/editor';
+import { createEmptyClassInfoSelection, type PendingClassNodeRequest } from '@/domain/studio/editor';
 
 const CLASS_NODE_CENTER_OFFSET = { x: 32, y: 44 };
-
-interface PendingClassNodeRequest {
-  requestId: string;
-  binding: unknown;
-  suggestedPosition?: { x: number; y: number } | null;
-}
 
 interface UseStudioPageControllerOptions {
   pendingClassNode: PendingClassNodeRequest | null;

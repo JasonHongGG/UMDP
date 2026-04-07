@@ -8,64 +8,54 @@ import { type StudioQueryState } from './query/useStudioQueryState';
 import { type StudioRuntimeState } from './runtime/useStudioRuntimeState';
 import { type StudioUiState } from '@/features/studio/core/studioUiState';
 
-export interface StudioServices {
-  graph: StudioGraphStore;
-  ui: StudioUiState;
-  runtime: StudioRuntimeState;
-  query: StudioQueryState;
-}
+const StudioGraphContext = createContext<StudioGraphStore | null>(null);
+const StudioUiContext = createContext<StudioUiState | null>(null);
+const StudioRuntimeContext = createContext<StudioRuntimeState | null>(null);
+const StudioQueryContext = createContext<StudioQueryState | null>(null);
 
-const StudioServicesContext = createContext<StudioServices | null>(null);
-
-export function useStudioServices() {
-  const context = useContext(StudioServicesContext);
-  if (!context) {
-    throw new Error('useStudioServices must be used within a StudioProvider');
+function useRequiredStudioContext<T>(
+  context: React.Context<T | null>,
+  name: string,
+) {
+  const value = useContext(context);
+  if (!value) {
+    throw new Error(`${name} must be used within a StudioProvider`);
   }
 
-  return context;
+  return value;
 }
 
 export function useStudioGraph() {
-  return useStudioServices().graph;
+  return useRequiredStudioContext(StudioGraphContext, 'useStudioGraph');
 }
 
 export function useStudioUi() {
-  return useStudioServices().ui;
+  return useRequiredStudioContext(StudioUiContext, 'useStudioUi');
 }
 
 export function useStudioRuntime() {
-  return useStudioServices().runtime;
+  return useRequiredStudioContext(StudioRuntimeContext, 'useStudioRuntime');
 }
 
 export function useStudioQuery() {
-  return useStudioServices().query;
-}
-
-export function useStudio() {
-  return {
-    ...useStudioGraph(),
-    ...useStudioUi(),
-    ...useStudioRuntime(),
-    ...useStudioQuery(),
-  };
+  return useRequiredStudioContext(StudioQueryContext, 'useStudioQuery');
 }
 
 export function StudioProvider({ children, runtimeData, workspaceLifecycle }: { children: React.ReactNode; runtimeData: StudioRuntimeDataState; workspaceLifecycle: WorkspaceLifecycleState }) {
   const { graph, ui, runtime, query } = useStudioModuleState(runtimeData, workspaceLifecycle);
-  const services: StudioServices = {
-    graph,
-    ui,
-    runtime,
-    query,
-  };
 
   return (
     <StudioRuntimeDataProvider value={runtimeData}>
       <ExpressionDragProvider>
-        <StudioServicesContext.Provider value={services}>
-          {children}
-        </StudioServicesContext.Provider>
+        <StudioGraphContext.Provider value={graph}>
+          <StudioUiContext.Provider value={ui}>
+            <StudioRuntimeContext.Provider value={runtime}>
+              <StudioQueryContext.Provider value={query}>
+                {children}
+              </StudioQueryContext.Provider>
+            </StudioRuntimeContext.Provider>
+          </StudioUiContext.Provider>
+        </StudioGraphContext.Provider>
       </ExpressionDragProvider>
     </StudioRuntimeDataProvider>
   );

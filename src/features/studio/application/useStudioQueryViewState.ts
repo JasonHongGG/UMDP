@@ -1,5 +1,5 @@
-import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
+import { useStudioQuery } from '@/features/studio/application/StudioModuleContext';
 
 export function useStudioQueryViewState() {
-  return useStudioServices().query;
+  return useStudioQuery();
 }

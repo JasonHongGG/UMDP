@@ -1,6 +1,7 @@
 mod application;
 mod commands;
 mod domain;
+mod generated;
 mod infrastructure;
 mod kernel;
 mod state;

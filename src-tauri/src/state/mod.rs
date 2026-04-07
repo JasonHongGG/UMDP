@@ -8,6 +8,14 @@ pub use scene_store::{
     SceneObjectHeaderState, SceneState,
 };
 pub use workspace_store::WorkspaceState;
+use crate::domain::analysis_models::{
+    AnalysisSnapshot, ProcessSession, RuntimeFlavor, RuntimeSceneCatalogSnapshot,
+    SceneWorkspaceState,
+};
+use crate::domain::workspace::{
+    RuntimeCapability, RuntimeSceneObjectComponentsCapabilityState, RuntimeSessionState,
+    WorkspaceLifecycleState,
+};
 
 #[derive(Default)]
 pub struct WorkspaceSessionState {
@@ -15,8 +23,82 @@ pub struct WorkspaceSessionState {
 }
 
 impl WorkspaceSessionState {
-    pub fn lifecycle(&self) -> &WorkspaceState {
-        &self.lifecycle
+    pub fn current(&self) -> WorkspaceLifecycleState {
+        self.lifecycle.current()
+    }
+
+    pub fn current_with_runtime_projection(&self) -> WorkspaceLifecycleState {
+        self.lifecycle.current_with_runtime_projection()
+    }
+
+    pub fn process_session(&self) -> Option<ProcessSession> {
+        self.lifecycle.process_session()
+    }
+
+    pub fn metadata_snapshot(&self) -> Option<AnalysisSnapshot> {
+        self.lifecycle.metadata_snapshot()
+    }
+
+    pub fn set_metadata_snapshot(&self, snapshot: AnalysisSnapshot) {
+        self.lifecycle.set_metadata_snapshot(snapshot);
+    }
+
+    pub fn clear_metadata(&self) {
+        self.lifecycle.clear_metadata();
+    }
+
+    pub fn begin_attach(&self) {
+        self.lifecycle.begin_attach();
+    }
+
+    pub fn fail_attach(&self, error_message: impl Into<String>) {
+        self.lifecycle.fail_attach(error_message);
+    }
+
+    pub fn complete_attach(&self, process_session: ProcessSession) {
+        self.lifecycle.complete_attach(process_session);
+    }
+
+    pub fn begin_snapshot_load(&self) {
+        self.lifecycle.begin_snapshot_load();
+    }
+
+    pub fn fail_snapshot_load(
+        &self,
+        error_message: impl Into<String>,
+        runtime_session_dropped: bool,
+    ) {
+        self.lifecycle
+            .fail_snapshot_load(error_message, runtime_session_dropped);
+    }
+
+    pub fn complete_snapshot_load(&self, runtime_connected: bool) {
+        self.lifecycle.complete_snapshot_load(runtime_connected);
+    }
+
+    pub fn mark_runtime_error(&self, error_message: impl Into<String>) {
+        self.lifecycle.mark_runtime_error(error_message);
+    }
+
+    pub fn refresh_runtime_session_profile(
+        &self,
+        runtime: RuntimeFlavor,
+        capabilities: Vec<RuntimeCapability>,
+        scene_object_components: RuntimeSceneObjectComponentsCapabilityState,
+    ) -> WorkspaceLifecycleState {
+        self.lifecycle.refresh_runtime_session_profile(
+            runtime,
+            capabilities,
+            scene_object_components,
+        )
+    }
+
+    pub fn record_runtime_heartbeat(&self) -> RuntimeSessionState {
+        self.lifecycle.record_runtime_heartbeat()
+    }
+
+    pub fn with_scene_mutation_lock<T>(&self, execute: impl FnOnce() -> T) -> T {
+        self.lifecycle.with_scene_mutation_lock(execute)
     }
 }
 
@@ -41,8 +123,8 @@ pub struct SceneModuleState {
 }
 
 impl SceneModuleState {
-    pub fn workspace(&self) -> &SceneState {
-        &self.workspace
+    pub fn current_workspace(&self, session_key: Option<&str>) -> SceneWorkspaceState {
+        self.workspace.current_for(session_key)
     }
 
     pub fn children(&self) -> &SceneChildrenState {
@@ -59,6 +141,46 @@ impl SceneModuleState {
 
     pub fn picker(&self) -> &SceneMousePickerState {
         &self.picker
+    }
+
+    pub fn reset_query_state(&self) {
+        self.children.reset();
+        self.header.reset();
+        self.components.reset();
+    }
+
+    pub fn reset_runtime_state(&self) {
+        self.workspace.reset();
+        self.reset_query_state();
+        self.picker.reset();
+    }
+
+    pub fn begin_refresh(&self, session_key: Option<String>) -> SceneWorkspaceState {
+        self.workspace.set_refreshing(session_key)
+    }
+
+    pub fn complete_refresh(
+        &self,
+        session_key: Option<&str>,
+        snapshot: RuntimeSceneCatalogSnapshot,
+    ) -> SceneWorkspaceState {
+        let workspace = self.workspace.set_snapshot(session_key, snapshot);
+        if workspace.session_key.as_deref() == session_key {
+            self.reset_query_state();
+        }
+        workspace
+    }
+
+    pub fn fail_refresh(
+        &self,
+        session_key: Option<&str>,
+        error_message: impl Into<String>,
+    ) -> SceneWorkspaceState {
+        self.workspace.set_error(session_key, error_message)
+    }
+
+    pub fn mark_mutation_epoch(&self, session_key: Option<&str>) -> SceneWorkspaceState {
+        self.workspace.bump_mutation_epoch(session_key)
     }
 }
 
@@ -189,8 +311,8 @@ mod tests {
     #[test]
     fn workspace_marks_runtime_error_after_runtime_drop_when_attached() {
         let workspace = WorkspaceState::default();
-        workspace.set_attached_without_snapshot(sample_session());
-        workspace.set_runtime_error("runtime session dropped");
+        workspace.complete_attach(sample_session());
+        workspace.mark_runtime_error("runtime session dropped");
 
         let current = workspace.current();
         assert_eq!(current.resource_revision, 2);
@@ -206,14 +328,31 @@ mod tests {
     #[test]
     fn workspace_touch_promotes_runtime_session_and_heartbeats() {
         let workspace = WorkspaceState::default();
-        workspace.set_attached_without_snapshot(sample_session());
-        workspace.set_ready(Some(sample_session()), false);
+        workspace.complete_attach(sample_session());
+        workspace.complete_snapshot_load(false);
 
         let connected = workspace.record_runtime_heartbeat();
         assert!(connected.connected);
         assert!(connected.last_heartbeat_at.is_some());
         assert_eq!(connected.session_key.as_deref(), Some("777:Unity.exe:Mono"));
         assert_eq!(workspace.current().resource_revision, 3);
+    }
+
+    #[test]
+    fn workspace_begin_attach_clears_previous_session_projection() {
+        let workspace = WorkspaceState::default();
+        workspace.complete_attach(sample_session());
+        workspace.complete_snapshot_load(false);
+
+        workspace.begin_attach();
+
+        let current = workspace.current();
+        assert_eq!(current.status, WorkspaceLifecycleStatus::Attaching);
+        assert!(current.process_session.is_none());
+        assert_eq!(current.runtime, RuntimeFlavor::Unknown);
+        assert!(!current.has_snapshot);
+        assert_eq!(current.runtime_session.status, RuntimeSessionStatus::Starting);
+        assert_eq!(current.runtime_session.session_key, None);
     }
 
     #[test]

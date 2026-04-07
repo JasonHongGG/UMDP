@@ -1,8 +1,6 @@
 import { useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from './hooks';
-import type { PendingClassNodeRequest } from '@/domain/studio/editor';
 import {
-  analysisActions,
   ensureRuntimeInstanceFieldsLoaded,
   ensureRuntimeOverlayLoaded,
   selectAnalysisSnapshot,
@@ -13,7 +11,6 @@ import {
   selectContractVersions,
   selectImages,
   selectLoadingRuntimeByKey,
-  selectPendingClassNode,
   selectRuntimeFieldErrorMessages,
   selectRuntimeMemberValuesByClassAndAddress,
   selectRuntimeOverlays,
@@ -38,7 +35,6 @@ export function useAnalysisWorkspace() {
   const runtimeMemberValuesByClassAndAddress = useAppSelector(selectRuntimeMemberValuesByClassAndAddress);
   const runtimeFieldErrorByKey = useAppSelector(selectRuntimeFieldErrorMessages);
   const loadingRuntimeByKey = useAppSelector(selectLoadingRuntimeByKey);
-  const pendingClassNode = useAppSelector(selectPendingClassNode);
 
   return useMemo(() => ({
     processSession: workspaceLifecycle.processSession,
@@ -54,13 +50,6 @@ export function useAnalysisWorkspace() {
     studioClassCatalogEntries,
     classInfoCatalogByStableId,
     staticFieldAddressByClassAndMember,
-    pendingClassNode,
-    clearPendingClassNode: () => {
-      dispatch(analysisActions.clearPendingClassNode());
-    },
-    queuePendingClassNode: (request: PendingClassNodeRequest) => {
-      dispatch(analysisActions.queuePendingClassNode(request));
-    },
     ensureRuntimeOverlayLoaded: (classStableId: string) => {
       dispatch(ensureRuntimeOverlayLoaded(classStableId));
     },
@@ -80,7 +69,6 @@ export function useAnalysisWorkspace() {
     dispatch,
     images,
     loadingRuntimeByKey,
-    pendingClassNode,
     runtimeFieldErrorByKey,
     runtimeMemberValuesByClassAndAddress,
     runtimeOverlays,

@@ -22,7 +22,7 @@ fn same_metadata_source(
 pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<AnalysisSnapshot> {
     let attached = ensure_attached_session(state)?;
 
-    if let Some(mut cached) = state.workspace().lifecycle().metadata_snapshot() {
+    if let Some(mut cached) = state.workspace().metadata_snapshot() {
         if cached
             .process
             .as_ref()
@@ -68,9 +68,6 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<A
         ],
     );
 
-    state
-        .workspace()
-        .lifecycle()
-        .set_metadata_snapshot(response.clone());
+    state.workspace().set_metadata_snapshot(response.clone());
     Ok(response)
 }

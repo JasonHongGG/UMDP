@@ -1,8 +1,10 @@
 import { getRegisteredStudioNodeCatalog } from '@/features/studio/core/catalog/studioNodeCatalogRuntime';
-import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
+import { useStudioGraph, useStudioQuery, useStudioUi } from '@/features/studio/application/StudioModuleContext';
 
 export function useStudioEditNodeModalState() {
-  const { graph, ui, query } = useStudioServices();
+  const graph = useStudioGraph();
+  const ui = useStudioUi();
+  const query = useStudioQuery();
   const catalog = getRegisteredStudioNodeCatalog();
 
   return {
