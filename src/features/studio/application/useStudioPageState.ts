@@ -1,4 +1,4 @@
-import { useStudioGraph, useStudioUi } from '@/features/studio/core/StudioContext';
+import { useStudioGraph, useStudioUi } from '@/features/studio/application/StudioServicesContext';
 
 export function useStudioPageState() {
   const graph = useStudioGraph();

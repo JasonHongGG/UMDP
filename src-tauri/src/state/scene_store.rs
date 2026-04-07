@@ -902,12 +902,17 @@ impl SceneChildrenState {
         Some(current.clone())
     }
 
-    pub fn invalidate_related(&self, impacted_addresses: &[String], session_key: Option<&str>) {
+    pub fn invalidate_related(
+        &self,
+        impacted_addresses: &[String],
+        session_key: Option<&str>,
+    ) -> Vec<RuntimeSceneObjectChildrenTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
-            return;
+            return Vec::new();
         }
         store.mutation_epoch += 1;
+        let mutation_epoch = store.mutation_epoch;
 
         if impacted_addresses.is_empty() {
             store.cache.clear();
@@ -929,11 +934,13 @@ impl SceneChildrenState {
             impacted_addresses.is_empty() || scene_children_task_impacted(task, &impacted_refs)
         });
         let next_revision = has_impacted_task.then(|| bump_children_revision(&mut store));
+        let mut invalidated = Vec::new();
         for task in store.tasks_by_parent.values_mut() {
             if impacted_addresses.is_empty() || scene_children_task_impacted(task, &impacted_refs) {
                 if let Some(next_revision) = next_revision {
                     task.resource_revision = next_revision;
                 }
+                task.mutation_epoch = mutation_epoch;
                 task.is_stale = true;
                 let has_retained = task_has_retained_children(task);
                 task.status = if has_retained {
@@ -957,8 +964,11 @@ impl SceneChildrenState {
                     retained_snapshot_kind(has_retained),
                     error_message,
                 );
+                invalidated.push(task.clone());
             }
         }
+
+        invalidated
     }
 
     pub fn reset(&self) {
@@ -1219,12 +1229,17 @@ impl SceneObjectHeaderState {
         Some(current.clone())
     }
 
-    pub fn invalidate_related(&self, impacted_addresses: &[String], session_key: Option<&str>) {
+    pub fn invalidate_related(
+        &self,
+        impacted_addresses: &[String],
+        session_key: Option<&str>,
+    ) -> Vec<RuntimeSceneObjectHeaderTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
-            return;
+            return Vec::new();
         }
         store.mutation_epoch += 1;
+        let mutation_epoch = store.mutation_epoch;
 
         if impacted_addresses.is_empty() {
             store.cache.clear();
@@ -1254,6 +1269,7 @@ impl SceneObjectHeaderState {
                 })
         });
         let next_revision = has_impacted_task.then(|| bump_header_revision(&mut store));
+            let mut invalidated = Vec::new();
         for task in store.tasks_by_object.values_mut() {
             let impacted = impacted_addresses.is_empty()
                 || impacted_refs.contains(&task.object_address.as_str())
@@ -1267,6 +1283,7 @@ impl SceneObjectHeaderState {
                 if let Some(next_revision) = next_revision {
                     task.resource_revision = next_revision;
                 }
+                task.mutation_epoch = mutation_epoch;
                 task.is_stale = true;
                 let has_retained = task_has_retained_header(task);
                 task.status = if has_retained {
@@ -1290,8 +1307,11 @@ impl SceneObjectHeaderState {
                     retained_snapshot_kind(has_retained),
                     error_message,
                 );
+                invalidated.push(task.clone());
             }
         }
+
+        invalidated
     }
 
     pub fn reset(&self) {
@@ -1614,12 +1634,17 @@ impl SceneObjectComponentsState {
         Some(current.clone())
     }
 
-    pub fn invalidate_related(&self, impacted_addresses: &[String], session_key: Option<&str>) {
+    pub fn invalidate_related(
+        &self,
+        impacted_addresses: &[String],
+        session_key: Option<&str>,
+    ) -> Vec<RuntimeSceneObjectComponentsTaskState> {
         let mut store = self.store.lock();
         if !same_session_key(store.active_session_key.as_deref(), session_key) {
-            return;
+            return Vec::new();
         }
         store.mutation_epoch += 1;
+        let mutation_epoch = store.mutation_epoch;
 
         if impacted_addresses.is_empty() {
             store.cache.clear();
@@ -1639,11 +1664,13 @@ impl SceneObjectComponentsState {
             impacted_addresses.is_empty() || impacted_refs.contains(&task.object_address.as_str())
         });
         let next_revision = has_impacted_task.then(|| bump_components_revision(&mut store));
+        let mut invalidated = Vec::new();
         for task in store.tasks_by_object.values_mut() {
             if impacted_addresses.is_empty() || impacted_refs.contains(&task.object_address.as_str()) {
                 if let Some(next_revision) = next_revision {
                     task.resource_revision = next_revision;
                 }
+                task.mutation_epoch = mutation_epoch;
                 task.is_stale = true;
                 let has_retained = task_has_retained_components(task);
                 task.status = if has_retained {
@@ -1667,8 +1694,11 @@ impl SceneObjectComponentsState {
                     retained_snapshot_kind(has_retained),
                     error_message,
                 );
+                invalidated.push(task.clone());
             }
         }
+
+        invalidated
     }
 
     pub fn reset(&self) {

@@ -81,6 +81,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -165,6 +166,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -204,6 +206,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -255,6 +258,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -296,6 +300,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -337,6 +342,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -378,6 +384,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -442,6 +449,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -528,6 +536,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -569,6 +578,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -673,6 +683,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -717,6 +728,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: Some(enabled),
             hierarchy_path,
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -786,6 +798,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -847,6 +860,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         })
     }
 
@@ -884,6 +898,7 @@ impl<'a> SceneQueryKernel<'a> {
             behaviour_enabled: None,
             hierarchy_path: Vec::new(),
             transform: None,
+            affected_resources: Vec::new(),
         };
 
         let scene_count = self.invoke_int(&get_scene_count, None, &[])?;

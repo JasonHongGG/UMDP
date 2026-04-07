@@ -6,7 +6,6 @@ import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
 import { MainLayout } from '@/app/shell/MainLayout';
 import { TopBar } from '@/app/shell/TopBar';
 import { StatusBar } from './app/shell/StatusBar';
-import { SceneWorkspaceProvider } from '@/features/scene/page/SceneWorkspaceContext';
 import './styles.css';
 
 const StudioPage = lazy(async () => ({
@@ -52,17 +51,15 @@ function AppContent() {
         onPageChange={setActivePage}
       />
 
-      <SceneWorkspaceProvider>
-        <Suspense fallback={<WorkspacePageFallback activePage={activePage} />}>
-          {activePage === 'inspector' ? (
-            <InspectorPage />
-          ) : activePage === 'scene' ? (
-            <ScenePage />
-          ) : (
-            <StudioPage />
-          )}
-        </Suspense>
-      </SceneWorkspaceProvider>
+      <Suspense fallback={<WorkspacePageFallback activePage={activePage} />}>
+        {activePage === 'inspector' ? (
+          <InspectorPage />
+        ) : activePage === 'scene' ? (
+          <ScenePage />
+        ) : (
+          <StudioPage />
+        )}
+      </Suspense>
 
       <StatusBar presentation={workspacePresentation} />
     </MainLayout>

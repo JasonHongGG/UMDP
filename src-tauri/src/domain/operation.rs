@@ -16,6 +16,7 @@ pub enum OperationErrorCode {
     InstanceRequired,
     ArgumentMismatch,
     InvalidAddress,
+    ResourceUnavailable,
     RuntimeSessionUnavailable,
     RuntimeApiUnavailable,
     CapabilityUnavailable,
@@ -175,7 +176,7 @@ impl OperationError {
     }
 
     pub fn resource_fault(message: impl Into<String>) -> Self {
-        Self::new(OperationErrorCode::RuntimeFault, message)
+        Self::new(OperationErrorCode::ResourceUnavailable, message)
     }
 
     pub fn scene_component_resource_fault(message: impl Into<String>) -> Self {
@@ -197,7 +198,8 @@ impl OperationError {
             OperationErrorCode::ArgumentMismatch
             | OperationErrorCode::InvalidAddress
             | OperationErrorCode::InstanceRequired => OperationDisplayHint::Inline,
-            OperationErrorCode::RuntimeFault
+            OperationErrorCode::ResourceUnavailable
+            | OperationErrorCode::RuntimeFault
             | OperationErrorCode::RuntimeApiUnavailable
             | OperationErrorCode::RuntimeSessionUnavailable => OperationDisplayHint::Banner,
             _ => OperationDisplayHint::Banner,
@@ -329,7 +331,7 @@ mod tests {
             "Scene object component load was incomplete: loaded 1 of 3 components.".to_string(),
         );
 
-        assert_eq!(error.code, OperationErrorCode::RuntimeFault);
+        assert_eq!(error.code, OperationErrorCode::ResourceUnavailable);
         assert_eq!(error.effect, OperationFailureEffect::None);
     }
 

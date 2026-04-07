@@ -7,11 +7,11 @@ const SceneWorkspaceContext = createContext<SceneWorkspaceStateResult | null>(nu
 
 export function SceneWorkspaceProvider({ children }: { children: React.ReactNode }) {
   const repository = useSceneGateway();
-  const { workspaceLifecycle, activePage, setWorkspaceTasks } = useWorkspaceShellState();
+  const { workspaceLifecycle, setWorkspaceTasks } = useWorkspaceShellState();
   const state = useSceneWorkspaceState({
     repository,
     workspaceLifecycle,
-    active: activePage === 'scene',
+    active: true,
   });
 
   useEffect(() => {

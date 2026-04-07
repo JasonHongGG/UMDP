@@ -29,9 +29,9 @@ function containsImport(contents: string, specifier: string): boolean {
 }
 
 function importsStudioContextDirectly(contents: string): boolean {
-  return containsImport(contents, '@/features/studio/core/StudioContext')
-    || contents.includes('/features/studio/core/StudioContext\'')
-    || contents.includes('/features/studio/core/StudioContext"');
+  return containsImport(contents, '@/features/studio/application/StudioServicesContext')
+    || contents.includes('/features/studio/application/StudioServicesContext\'')
+    || contents.includes('/features/studio/application/StudioServicesContext"');
 }
 
 function importsStudioRuntimeDataDirectly(contents: string): boolean {
@@ -217,6 +217,14 @@ describe('frontend architecture boundaries', () => {
     expect(contents.includes('@/infrastructure/tauri/TauriSceneEvents')).toBe(false);
   });
 
+  it('keeps the scene workspace provider scoped to the scene page', () => {
+    const appContents = readFileSync(join(SRC_ROOT, 'App.tsx'), 'utf8');
+    const scenePageContents = readFileSync(join(SRC_ROOT, 'features', 'scene', 'page', 'ScenePage.tsx'), 'utf8');
+
+    expect(appContents.includes('SceneWorkspaceProvider')).toBe(false);
+    expect(scenePageContents.includes('SceneWorkspaceProvider')).toBe(true);
+  });
+
   it('keeps scene mouse picker state owned by the scene workspace store', () => {
     const pickerContents = readFileSync(join(SRC_ROOT, 'features', 'scene', 'page', 'useSceneMousePickerState.ts'), 'utf8');
 
@@ -233,8 +241,12 @@ describe('frontend architecture boundaries', () => {
       'domain/analysis/hooks/useWorkspaceLifecycleAutoRefresh.ts',
       'domain/analysis/hooks/useWorkspaceLifecycleState.ts',
       'domain/inspector/InspectorWorkspaceContext.tsx',
+      'domain/inspector/InspectorWorkspaceValue.ts',
+      'domain/inspector/useInspectorWorkspaceValue.ts',
       'domain/workspace/WorkspaceShellContext.tsx',
       'domain/workspace/useWorkspaceShellModel.ts',
+      'features/studio/core/StudioContext.tsx',
+      'features/studio/application/StudioComposition.ts',
     ].filter((relativePath) => existsSync(join(SRC_ROOT, relativePath)));
 
     expect(legacyFiles).toEqual([]);
@@ -246,6 +258,7 @@ describe('frontend architecture boundaries', () => {
 
     expect(providerContents.includes('@/features/')).toBe(false);
     expect(providerContents.includes('@/domain/analysis/view-models')).toBe(false);
+    expect(storeContents.includes('createSlice(')).toBe(false);
     expect(storeContents.includes("window.addEventListener('focus'")).toBe(false);
     expect(storeContents.includes("document.addEventListener('visibilitychange'")).toBe(false);
   });

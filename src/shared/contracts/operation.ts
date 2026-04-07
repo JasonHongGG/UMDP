@@ -9,6 +9,7 @@ export type OperationErrorCode =
   | 'instance-required'
   | 'argument-mismatch'
   | 'invalid-address'
+  | 'resource-unavailable'
   | 'runtime-session-unavailable'
   | 'runtime-api-unavailable'
   | 'capability-unavailable'

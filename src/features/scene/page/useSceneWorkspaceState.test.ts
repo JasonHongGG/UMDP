@@ -108,6 +108,7 @@ function createSceneMutationResult(
     behaviourEnabled: null,
     hierarchyPath: [],
     transform: null,
+    affectedResources: [],
     ...overrides,
   };
 }

@@ -1,4 +1,4 @@
-import { useStudioServices } from '@/features/studio/core/StudioContext';
+import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
 
 export function useStudioCanvasState() {
   const { graph, ui } = useStudioServices();

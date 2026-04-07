@@ -195,9 +195,9 @@ pub enum RuntimeInvokeFailureKind {
     MethodNotFound,
     InstanceRequired,
     ArgumentMismatch,
-    BridgeLaunchFailed,
-    BridgeFailed,
-    BridgeParseFailed,
+    InvalidAddress,
+    CapabilityUnavailable,
+    RuntimeUnavailable,
     RuntimeException,
     Unknown,
 }
@@ -262,12 +262,12 @@ pub enum RuntimeFieldSetFailureKind {
     ClassNotFound,
     FieldNotFound,
     InstanceRequired,
+    InvalidAddress,
     AddressMismatch,
+    CapabilityUnavailable,
+    RuntimeUnavailable,
     UnsupportedType,
     InvalidValue,
-    BridgeLaunchFailed,
-    BridgeFailed,
-    BridgeParseFailed,
     WriteFailed,
     Unknown,
 }
@@ -665,6 +665,13 @@ pub struct RuntimeSceneSelectionHint {
     pub ancestor_object_addresses: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSceneAffectedResource {
+    pub resource_kind: RuntimeSceneResourceKind,
+    pub object_address: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSceneMutationResult {
@@ -683,6 +690,7 @@ pub struct RuntimeSceneMutationResult {
     pub behaviour_enabled: Option<bool>,
     pub hierarchy_path: Vec<RuntimeSceneHierarchyPathEntry>,
     pub transform: Option<RuntimeSceneTransformSnapshot>,
+    pub affected_resources: Vec<RuntimeSceneAffectedResource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

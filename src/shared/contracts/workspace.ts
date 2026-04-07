@@ -2,6 +2,17 @@ import type { ProcessSession, RuntimeFlavor } from './analysis';
 
 export type WorkspacePage = 'inspector' | 'studio' | 'scene';
 
+export type WorkspacePageSystemState =
+  | 'session-required'
+  | 'session-unavailable'
+  | 'catalog-loading'
+  | 'catalog-error'
+  | 'capability-unavailable'
+  | 'runtime-loading'
+  | 'runtime-degraded'
+  | 'runtime-error'
+  | 'ready';
+
 export type RuntimeSessionStatus =
   | 'idle'
   | 'starting'

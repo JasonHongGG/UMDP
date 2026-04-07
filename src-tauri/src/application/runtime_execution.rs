@@ -187,6 +187,11 @@ fn map_invoke_failure_kind(code: OperationErrorCode) -> RuntimeInvokeFailureKind
         OperationErrorCode::MethodNotFound => RuntimeInvokeFailureKind::MethodNotFound,
         OperationErrorCode::InstanceRequired => RuntimeInvokeFailureKind::InstanceRequired,
         OperationErrorCode::ArgumentMismatch => RuntimeInvokeFailureKind::ArgumentMismatch,
+        OperationErrorCode::InvalidAddress => RuntimeInvokeFailureKind::InvalidAddress,
+        OperationErrorCode::CapabilityUnavailable => RuntimeInvokeFailureKind::CapabilityUnavailable,
+        OperationErrorCode::RuntimeSessionUnavailable | OperationErrorCode::RuntimeApiUnavailable => {
+            RuntimeInvokeFailureKind::RuntimeUnavailable
+        }
         _ => RuntimeInvokeFailureKind::Unknown,
     }
 }
@@ -231,6 +236,11 @@ fn map_field_set_failure_kind(code: OperationErrorCode) -> RuntimeFieldSetFailur
         OperationErrorCode::ClassNotFound => RuntimeFieldSetFailureKind::ClassNotFound,
         OperationErrorCode::FieldNotFound => RuntimeFieldSetFailureKind::FieldNotFound,
         OperationErrorCode::InstanceRequired => RuntimeFieldSetFailureKind::InstanceRequired,
+        OperationErrorCode::InvalidAddress => RuntimeFieldSetFailureKind::InvalidAddress,
+        OperationErrorCode::CapabilityUnavailable => RuntimeFieldSetFailureKind::CapabilityUnavailable,
+        OperationErrorCode::RuntimeSessionUnavailable | OperationErrorCode::RuntimeApiUnavailable => {
+            RuntimeFieldSetFailureKind::RuntimeUnavailable
+        }
         _ => RuntimeFieldSetFailureKind::Unknown,
     }
 }

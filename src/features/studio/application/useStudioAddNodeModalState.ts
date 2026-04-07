@@ -1,5 +1,5 @@
 import { getRegisteredStudioNodeCatalog } from '@/features/studio/core/catalog/studioNodeCatalogRuntime';
-import { useStudioServices } from '@/features/studio/core/StudioContext';
+import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
 import { useStudioRuntimeDataState } from './useStudioRuntimeDataState';
 
 export function useStudioAddNodeModalState() {

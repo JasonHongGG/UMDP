@@ -3,7 +3,6 @@ mod commands;
 mod domain;
 mod infrastructure;
 mod kernel;
-mod services;
 mod state;
 
 use commands::get_handlers;

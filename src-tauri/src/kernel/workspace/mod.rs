@@ -1,4 +1,5 @@
 pub mod access;
+pub mod session;
 
 use crate::domain::analysis_models::{AnalysisSnapshot, ProcessSession};
 use crate::domain::operation::{OperationError, OperationFailureEffect, OperationResult};

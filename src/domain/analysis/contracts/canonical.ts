@@ -134,9 +134,9 @@ export type RuntimeInvokeFailureKind =
   | 'method-not-found'
   | 'instance-required'
   | 'argument-mismatch'
-  | 'bridge-launch-failed'
-  | 'bridge-failed'
-  | 'bridge-parse-failed'
+  | 'invalid-address'
+  | 'capability-unavailable'
+  | 'runtime-unavailable'
   | 'runtime-exception'
   | 'unknown';
 
@@ -182,12 +182,12 @@ export type RuntimeFieldSetFailureKind =
   | 'class-not-found'
   | 'field-not-found'
   | 'instance-required'
+  | 'invalid-address'
   | 'address-mismatch'
+  | 'capability-unavailable'
+  | 'runtime-unavailable'
   | 'unsupported-type'
   | 'invalid-value'
-  | 'bridge-launch-failed'
-  | 'bridge-failed'
-  | 'bridge-parse-failed'
   | 'write-failed'
   | 'unknown';
 
@@ -467,6 +467,11 @@ export interface RuntimeSceneSelectionHint {
   ancestorObjectAddresses: string[];
 }
 
+export interface RuntimeSceneAffectedResource {
+  resourceKind: RuntimeSceneResourceKind;
+  objectAddress: string | null;
+}
+
 export interface RuntimeSceneMutationResult {
   operation: RuntimeSceneMutationOperation;
   sceneHandle: number | null;
@@ -483,6 +488,7 @@ export interface RuntimeSceneMutationResult {
   behaviourEnabled: boolean | null;
   hierarchyPath: RuntimeSceneHierarchyPathEntry[];
   transform: RuntimeSceneTransformSnapshot | null;
+  affectedResources: RuntimeSceneAffectedResource[];
 }
 
 export type RuntimeSceneMousePickerStatus =

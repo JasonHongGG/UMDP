@@ -1,9 +1,10 @@
-import type { WorkspaceLifecycleState, WorkspacePage } from '@/shared/contracts';
+import type { WorkspaceLifecycleState, WorkspacePage, WorkspacePageSystemState } from '@/shared/contracts';
 
 export type WorkspaceSignalTone = 'ready' | 'loading' | 'warning' | 'error' | 'idle';
 
 export interface WorkspacePageReadiness {
   page: WorkspacePage;
+  systemState: WorkspacePageSystemState;
   sessionReady: boolean;
   catalogReady: boolean;
   capabilityAvailable: boolean;
@@ -18,6 +19,19 @@ export interface WorkspaceResetNotice {
   tone: WorkspaceSignalTone;
   title: string;
   message: string;
+}
+
+interface WorkspacePageCopy {
+  readyTitle: string;
+  readyDescription: string;
+  capabilityTitle: string;
+  capabilityDescription: string;
+  runtimeLoadingTitle: string;
+  runtimeLoadingDescription: string;
+  runtimeDegradedTitle: string;
+  runtimeDegradedDescription: string;
+  runtimeErrorTitle: string;
+  runtimeErrorDescription: string;
 }
 
 function hasExecutionCapability(workspace: WorkspaceLifecycleState) {
@@ -35,11 +49,57 @@ function hasInteractiveRuntime(workspace: WorkspaceLifecycleState) {
     && (workspace.runtimeSession.status === 'ready' || workspace.runtimeSession.status === 'degraded');
 }
 
+function getPageCopy(page: WorkspacePage): WorkspacePageCopy {
+  switch (page) {
+    case 'scene':
+      return {
+        readyTitle: 'Scene Ready',
+        readyDescription: 'Scene hierarchy, selection, and mutations are available.',
+        capabilityTitle: 'Scene Capability Unavailable',
+        capabilityDescription: 'The attached runtime does not expose the scene catalog and object inspection capabilities required for this workspace.',
+        runtimeLoadingTitle: 'Scene Runtime Preparing',
+        runtimeLoadingDescription: 'Scene hierarchy, selection, and mutations stay gated until the runtime session is healthy.',
+        runtimeDegradedTitle: 'Scene Runtime Degraded',
+        runtimeDegradedDescription: 'Scene hierarchy and selection remain available, but runtime-backed mutations may be limited until the session recovers.',
+        runtimeErrorTitle: 'Scene Runtime Unavailable',
+        runtimeErrorDescription: 'Scene hierarchy, selection, and mutations remain unavailable until the runtime session is healthy.',
+      };
+    case 'studio':
+      return {
+        readyTitle: 'Studio Ready',
+        readyDescription: 'Studio document editing and runtime execution are available.',
+        capabilityTitle: 'Runtime Capability Unavailable',
+        capabilityDescription: 'The attached runtime does not expose workflow execution capabilities for this workspace.',
+        runtimeLoadingTitle: 'Studio Runtime Preparing',
+        runtimeLoadingDescription: 'Studio document editing and runtime execution stay gated until the runtime session is healthy.',
+        runtimeDegradedTitle: 'Studio Runtime Degraded',
+        runtimeDegradedDescription: 'Studio editing remains available, but runtime execution may be limited until the session recovers.',
+        runtimeErrorTitle: 'Studio Runtime Unavailable',
+        runtimeErrorDescription: 'Studio document editing and runtime execution remain unavailable until the runtime session is healthy.',
+      };
+    case 'inspector':
+    default:
+      return {
+        readyTitle: 'Inspector Ready',
+        readyDescription: 'Inspector metadata is available.',
+        capabilityTitle: 'Inspector Capability Unavailable',
+        capabilityDescription: 'Inspector metadata is unavailable for the attached runtime session.',
+        runtimeLoadingTitle: 'Inspector Preparing',
+        runtimeLoadingDescription: 'Inspector metadata is still loading for the attached process.',
+        runtimeDegradedTitle: 'Inspector Degraded',
+        runtimeDegradedDescription: 'Inspector metadata remains available, but runtime-backed details may be limited.',
+        runtimeErrorTitle: 'Inspector Unavailable',
+        runtimeErrorDescription: 'Inspector metadata remains unavailable until the workspace snapshot is restored.',
+      };
+  }
+}
+
 function buildSessionBlockedState(page: WorkspacePage, workspace: WorkspaceLifecycleState): WorkspacePageReadiness {
   const errorMessage = workspace.errorMessage ?? workspace.runtimeSession.lastError;
   if (errorMessage) {
     return {
       page,
+      systemState: 'session-unavailable',
       sessionReady: false,
       catalogReady: false,
       capabilityAvailable: page === 'inspector',
@@ -52,6 +112,7 @@ function buildSessionBlockedState(page: WorkspacePage, workspace: WorkspaceLifec
 
   return {
     page,
+    systemState: 'session-required',
     sessionReady: false,
     catalogReady: false,
     capabilityAvailable: page === 'inspector',
@@ -66,6 +127,7 @@ export function getWorkspacePageReadiness(
   page: WorkspacePage,
   workspace: WorkspaceLifecycleState,
 ): WorkspacePageReadiness {
+  const pageCopy = getPageCopy(page);
   const sessionReady = workspace.processSession != null;
   if (!sessionReady) {
     return buildSessionBlockedState(page, workspace);
@@ -77,6 +139,7 @@ export function getWorkspacePageReadiness(
     if (errorMessage) {
       return {
         page,
+        systemState: 'catalog-error',
         sessionReady: true,
         catalogReady: false,
         capabilityAvailable: page === 'inspector' ? true : page === 'scene' ? hasSceneCapability(workspace) : hasExecutionCapability(workspace),
@@ -89,6 +152,7 @@ export function getWorkspacePageReadiness(
 
     return {
       page,
+      systemState: 'catalog-loading',
       sessionReady: true,
       catalogReady: false,
       capabilityAvailable: page === 'inspector' ? true : page === 'scene' ? hasSceneCapability(workspace) : hasExecutionCapability(workspace),
@@ -102,13 +166,14 @@ export function getWorkspacePageReadiness(
   if (page === 'inspector') {
     return {
       page,
+      systemState: 'ready',
       sessionReady: true,
       catalogReady: true,
       capabilityAvailable: true,
       selectionReady: true,
       tone: 'ready',
-      title: 'Inspector Ready',
-      description: 'Inspector metadata is available.',
+      title: pageCopy.readyTitle,
+      description: pageCopy.readyDescription,
     };
   }
 
@@ -119,47 +184,61 @@ export function getWorkspacePageReadiness(
   if (!capabilityAvailable) {
     return {
       page,
+      systemState: 'capability-unavailable',
       sessionReady: true,
       catalogReady: true,
       capabilityAvailable: false,
       selectionReady: false,
       tone: 'warning',
-      title: page === 'scene' ? 'Scene Capability Missing' : 'Runtime Capability Missing',
-      description: page === 'scene'
-        ? 'The attached runtime does not expose the scene catalog and object inspection capabilities required for this workspace.'
-        : 'The attached runtime does not expose workflow execution capabilities for this workspace.',
+      title: pageCopy.capabilityTitle,
+      description: pageCopy.capabilityDescription,
     };
   }
 
   const selectionReady = workspace.status === 'ready' && hasInteractiveRuntime(workspace);
   if (!selectionReady) {
+    const runtimeUnavailable = workspace.status === 'runtime-error' || workspace.runtimeSession.status === 'error';
     return {
       page,
+      systemState: runtimeUnavailable ? 'runtime-error' : 'runtime-loading',
       sessionReady: true,
       catalogReady: true,
       capabilityAvailable: true,
       selectionReady: false,
-      tone: workspace.status === 'runtime-error' ? 'error' : 'loading',
-      title: page === 'scene' ? 'Scene Runtime Locked' : 'Studio Runtime Locked',
+      tone: runtimeUnavailable ? 'error' : 'loading',
+      title: runtimeUnavailable ? pageCopy.runtimeErrorTitle : pageCopy.runtimeLoadingTitle,
+      description: runtimeUnavailable
+        ? (workspace.runtimeSession.lastError ?? workspace.errorMessage ?? pageCopy.runtimeErrorDescription)
+        : pageCopy.runtimeLoadingDescription,
+    };
+  }
+
+  if (workspace.runtimeSession.status === 'degraded') {
+    return {
+      page,
+      systemState: 'runtime-degraded',
+      sessionReady: true,
+      catalogReady: true,
+      capabilityAvailable: true,
+      selectionReady: true,
+      tone: 'warning',
+      title: pageCopy.runtimeDegradedTitle,
       description: workspace.runtimeSession.lastError
-        ?? workspace.errorMessage
-        ?? (page === 'scene'
-          ? 'Scene hierarchy, selection, and mutations stay gated until the runtime session is healthy.'
-          : 'Studio document editing and runtime execution stay gated until the runtime session is healthy.'),
+        ? `${pageCopy.runtimeDegradedDescription} ${workspace.runtimeSession.lastError}`
+        : pageCopy.runtimeDegradedDescription,
     };
   }
 
   return {
     page,
+    systemState: 'ready',
     sessionReady: true,
     catalogReady: true,
     capabilityAvailable: true,
     selectionReady: true,
     tone: 'ready',
-    title: page === 'scene' ? 'Scene Ready' : 'Studio Ready',
-    description: page === 'scene'
-      ? 'Scene hierarchy, selection, and mutations are available.'
-      : 'Studio document editing and runtime execution are available.',
+    title: pageCopy.readyTitle,
+    description: pageCopy.readyDescription,
   };
 }
 

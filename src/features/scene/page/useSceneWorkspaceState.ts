@@ -204,13 +204,6 @@ export function useSceneWorkspaceState({
     setSelectedObjectAddress,
     refreshSceneWorkspace,
     loadSceneObjectResources,
-    setChildTaskByParent,
-    setHeaderTaskByAddress,
-    setHeaderErrorByAddress,
-    setHeaderLoadingByAddress,
-    setComponentsTaskByAddress,
-    setComponentsErrorByAddress,
-    setComponentsLoadingByAddress,
     setSceneMutationState,
     sceneMutationTaskCounterRef,
   });

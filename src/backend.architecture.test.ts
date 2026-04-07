@@ -94,6 +94,22 @@ describe('backend architecture boundaries', () => {
     expect(stateMod.includes('analysis(')).toBe(false);
   });
 
+  it('removes the legacy services layer and rehomes workspace concerns into kernel or infrastructure modules', () => {
+    const libContents = readRustFile('lib.rs');
+    const workspaceApplication = readRustFile('application', 'workspace.rs');
+    const metadataMod = readRustFile('kernel', 'metadata', 'mod.rs');
+    const workspaceMod = readRustFile('kernel', 'workspace', 'mod.rs');
+
+    expect(libContents.includes('mod services;')).toBe(false);
+    expect(workspaceApplication.includes('crate::services::')).toBe(false);
+    expect(existsSync(join(RUST_SRC_ROOT, 'services'))).toBe(false);
+    expect(existsSync(join(RUST_SRC_ROOT, 'infrastructure', 'process_catalog.rs'))).toBe(true);
+    expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'metadata', 'query.rs'))).toBe(true);
+    expect(existsSync(join(RUST_SRC_ROOT, 'kernel', 'workspace', 'session.rs'))).toBe(true);
+    expect(metadataMod).toContain('pub mod query;');
+    expect(workspaceMod).toContain('pub mod session;');
+  });
+
   it('keeps runtime invoke, field-set, and overlay orchestration out of analysis services', () => {
     const removedServiceFiles = [
       'services/analysis/invocation_service.rs',

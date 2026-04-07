@@ -3,15 +3,16 @@ use crate::domain::operation::OperationResult;
 use crate::domain::workspace::{
     current_contract_versions, SystemContractVersions, WorkspaceLifecycleState,
 };
+use crate::infrastructure::process_catalog;
 use crate::infrastructure::logging;
+use crate::kernel::metadata::query as metadata_query;
 use crate::kernel::runtime::access as runtime_access;
-use crate::kernel::workspace as workspace_kernel;
-use crate::services::analysis::{metadata_query_service, process_catalog_service, session_service};
+use crate::kernel::workspace::{self as workspace_kernel, session as workspace_session};
 use crate::state::AppState;
 use tauri::AppHandle;
 
 pub fn fetch_system_processes() -> Vec<ProcessInfo> {
-    process_catalog_service::fetch_system_processes()
+    process_catalog::fetch_system_processes()
 }
 
 pub fn get_contract_versions() -> SystemContractVersions {
@@ -26,7 +27,7 @@ pub fn attach_to_process(
 ) -> OperationResult<ProcessSession> {
     workspace_kernel::begin_attach(state);
 
-    match session_service::attach_to_process(state, pid, name) {
+    match workspace_session::attach_to_process(state, pid, name) {
         Ok(session) => {
             let runtime_result = workspace_kernel::complete_attach_with_runtime_refresh(
                 state,
@@ -58,7 +59,7 @@ pub fn attach_to_process(
 
 pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<AnalysisSnapshot> {
     workspace_kernel::run_snapshot_load(state, |state| {
-        metadata_query_service::load_all_metadata(app, state)
+        metadata_query::load_all_metadata(app, state)
     })
 }
 

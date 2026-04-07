@@ -31,7 +31,7 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<A
             cached.process = Some(attached.clone());
             logging::debug(
                 "metadata",
-                "metadata_query_service",
+                "metadata_query",
                 "load_all_metadata cache hit.",
                 vec![
                     ("pid", attached.pid.to_string()),
@@ -58,7 +58,7 @@ pub fn load_all_metadata(app: &AppHandle, state: &AppState) -> OperationResult<A
 
     logging::debug(
         "metadata",
-        "metadata_query_service",
+        "metadata_query",
         "load_all_metadata completed.",
         vec![
             ("durationMs", started_at.elapsed().as_millis().to_string()),

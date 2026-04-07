@@ -37,7 +37,7 @@ export function TopNavigation({ activePage, onPageChange, pages }: TopNavigation
           const Icon = item.icon;
           const active = item.key === activePage;
           const detail = pages[item.key];
-          const disabled = item.key !== 'inspector' && detail.sessionReady && detail.catalogReady && !detail.capabilityAvailable;
+          const disabled = detail.systemState === 'capability-unavailable';
 
           return (
             <div key={item.key} className={index > 0 ? 'ml-1' : ''}>
@@ -47,7 +47,7 @@ export function TopNavigation({ activePage, onPageChange, pages }: TopNavigation
                   <TooltipPanel
                     label={item.label}
                     description={detail.description}
-                    detail={disabled ? 'Current runtime session does not expose this capability.' : active ? 'Current workspace page.' : 'Switch workspace page.'}
+                    detail={disabled ? 'Current runtime session does not expose this capability.' : active ? `Current workspace page. ${detail.badge}.` : `Switch workspace page. ${detail.badge}.`}
                     tone={disabled ? 'warning' : active ? 'accent' : 'default'}
                   />
                 )}

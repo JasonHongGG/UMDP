@@ -249,6 +249,7 @@ mod tests {
             .current("0x10", Some("session-1"))
             .expect("expected current header task");
         assert_eq!(current.task_id, started.state.task_id);
+        assert_eq!(current.mutation_epoch, 1);
         assert!(current.is_stale);
         assert_eq!(current.status, RuntimeSceneObjectHeaderTaskStatus::Cancelled);
     }
@@ -302,6 +303,7 @@ mod tests {
             .current("0x10", Some("session-1"))
             .expect("expected current components task");
         assert_eq!(current.task_id, started.state.task_id);
+        assert_eq!(current.mutation_epoch, 1);
         assert!(current.is_stale);
         assert_eq!(current.status, RuntimeSceneObjectComponentsTaskStatus::Cancelled);
     }
@@ -350,6 +352,7 @@ mod tests {
             .current("0x10", Some("session-1"))
             .expect("expected current children task");
         assert_eq!(current.task_id, started.state.task_id);
+        assert_eq!(current.mutation_epoch, 1);
         assert!(current.is_stale);
         assert_eq!(current.status, RuntimeSceneChildrenTaskStatus::Cancelled);
     }

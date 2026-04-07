@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphDocument } from '@/domain/studio/contracts';
 import { createDiagnosticsLogger } from '@/shared/diagnostics';
+import { getWorkspacePageReadiness } from '@/domain/workspace/pageReadiness';
 import { executeStudioFlow } from './executeStudioFlow';
 import { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import type { NodeExecutionSnapshot, NodeExecutionState, StudioEdge, StudioNode } from '@/features/studio/core/types';
@@ -16,6 +17,7 @@ const studioRuntimeDiagnostics = createDiagnosticsLogger({
 interface StudioExecutionWorkspaceDiagnostics {
   status: WorkspaceLifecycleState['status'];
   hasSnapshot: boolean;
+  systemState: ReturnType<typeof getWorkspacePageReadiness>['systemState'];
   runtime: WorkspaceLifecycleState['runtime'];
   errorMessage: string | null;
   runtimeSession: {
@@ -29,6 +31,8 @@ interface StudioExecutionWorkspaceDiagnostics {
 interface StudioExecutionWorkspaceReadiness {
   canExecute: boolean;
   blockedReason: string | null;
+  blockedTitle: string | null;
+  blockedTone: 'info' | 'warning';
   diagnostics: StudioExecutionWorkspaceDiagnostics;
 }
 
@@ -43,9 +47,11 @@ export interface StudioRuntimeState {
 }
 
 function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleState): StudioExecutionWorkspaceReadiness {
+  const pageReadiness = getWorkspacePageReadiness('studio', workspaceLifecycle);
   const diagnostics: StudioExecutionWorkspaceDiagnostics = {
     status: workspaceLifecycle.status,
     hasSnapshot: workspaceLifecycle.hasSnapshot,
+    systemState: pageReadiness.systemState,
     runtime: workspaceLifecycle.runtime,
     errorMessage: workspaceLifecycle.errorMessage,
     runtimeSession: {
@@ -56,34 +62,12 @@ function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleSt
     },
   };
 
-  if (!workspaceLifecycle.hasSnapshot) {
+  if (!pageReadiness.selectionReady) {
     return {
       canExecute: false,
-      blockedReason: 'Workspace snapshot is unavailable.',
-      diagnostics,
-    };
-  }
-
-  if (workspaceLifecycle.status !== 'ready') {
-    return {
-      canExecute: false,
-      blockedReason: `Workspace is not ready (${workspaceLifecycle.status}).`,
-      diagnostics,
-    };
-  }
-
-  if (!workspaceLifecycle.runtimeSession.connected) {
-    return {
-      canExecute: false,
-      blockedReason: 'Runtime session is disconnected.',
-      diagnostics,
-    };
-  }
-
-  if (workspaceLifecycle.runtimeSession.status !== 'ready' && workspaceLifecycle.runtimeSession.status !== 'degraded') {
-    return {
-      canExecute: false,
-      blockedReason: `Runtime session is not ready (${workspaceLifecycle.runtimeSession.status}).`,
+      blockedReason: pageReadiness.description,
+      blockedTitle: pageReadiness.title,
+      blockedTone: pageReadiness.tone === 'loading' || pageReadiness.tone === 'idle' ? 'info' : 'warning',
       diagnostics,
     };
   }
@@ -91,6 +75,8 @@ function getWorkspaceExecutionReadiness(workspaceLifecycle: WorkspaceLifecycleSt
   return {
     canExecute: true,
     blockedReason: null,
+    blockedTitle: null,
+    blockedTone: 'info',
     diagnostics,
   };
 }
@@ -169,8 +155,8 @@ export function useStudioRuntimeState(
     setNodeStates({});
     setNodeSnapshots({});
     reportDocumentFeedback({
-      tone: workspaceLifecycle.status === 'runtime-error' ? 'warning' : 'info',
-      title: 'Studio Runtime Locked',
+      tone: workspaceExecutionReadiness.blockedTone,
+      title: workspaceExecutionReadiness.blockedTitle ?? 'Studio Runtime Unavailable',
       description: workspaceExecutionReadiness.blockedReason ?? 'Studio runtime execution is currently unavailable.',
     });
   }, [clearDocumentFeedback, reportDocumentFeedback, reportRuntimeFeedback, workspaceExecutionReadiness, workspaceLifecycle]);

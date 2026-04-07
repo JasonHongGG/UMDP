@@ -37,6 +37,7 @@ export type {
   RuntimeSceneObjectHeaderTaskStatus,
   RuntimeSceneMutationOperation,
   RuntimeSceneMutationResult,
+  RuntimeSceneAffectedResource,
   RuntimeSceneMousePickerSnapshot,
   RuntimeSceneMousePickerStatus,
   RuntimeSceneMouseTargetHit,

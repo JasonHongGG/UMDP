@@ -2,10 +2,7 @@ import {
   configureStore,
   createAsyncThunk,
   createSelector,
-  createSlice,
-  type PayloadAction,
 } from '@reduxjs/toolkit';
-import type { AnalysisRepository } from '@/domain/analysis/repository/AnalysisRepository';
 import type { StableId } from '@/domain/contracts/shared-identity';
 import type {
   AnalysisSnapshot,
@@ -27,13 +24,18 @@ import {
 } from '@/domain/workspace/presentation';
 import type {
   OperationErrorEnvelope,
-  OperationFeedbackEnvelope,
   SystemContractVersions,
   WorkspaceLifecycleState,
-  WorkspaceTaskSnapshot,
 } from '@/shared/contracts';
 import { coerceOperationErrorEnvelope } from '@/shared/contracts';
 import { formatHexAddress } from '@/core/addressFormat';
+import { createAnalysisSlice } from './analysisSlice';
+import type {
+  AppServices,
+  AppStateShape,
+  ThunkConfig,
+} from './types';
+import { createWorkspaceSlice } from './workspaceSlice';
 
 const ATTACHED_SCENE_RUNTIME_CAPABILITIES: WorkspaceLifecycleState['runtimeSession']['capabilities'] = [
   'metadata',
@@ -42,43 +44,6 @@ const ATTACHED_SCENE_RUNTIME_CAPABILITIES: WorkspaceLifecycleState['runtimeSessi
   'scene-object-header-read',
   'scene-object-children-read',
 ];
-
-export interface AppServices {
-  analysisRepository: AnalysisRepository;
-}
-
-export interface WorkspaceSliceState {
-  activePage: ActivePage;
-  contractVersions: SystemContractVersions | null;
-  lifecycle: WorkspaceLifecycleState;
-  previousLifecycle: WorkspaceLifecycleState | null;
-  tasksBySource: Record<string, WorkspaceTaskSnapshot[]>;
-  feedback: OperationFeedbackEnvelope | null;
-}
-
-export interface AnalysisSliceState {
-  attachError: OperationErrorEnvelope | null;
-  analysisSnapshot: AnalysisSnapshot | null;
-  loadingSnapshot: boolean;
-  runtimeOverlays: Record<string, RuntimeClassOverlayDescriptor>;
-  runtimeInstanceFieldSnapshots: Record<string, RuntimeInstanceFieldSnapshot>;
-  runtimeFieldErrorByKey: Record<string, OperationErrorEnvelope | null>;
-  loadingRuntimeByKey: Record<string, boolean>;
-  runtimeInstanceFieldErrorByKey: Record<string, OperationErrorEnvelope | null>;
-  loadingRuntimeInstanceByKey: Record<string, boolean>;
-  pendingClassNode: PendingClassNodeRequest | null;
-}
-
-export interface AppStateShape {
-  workspace: WorkspaceSliceState;
-  analysis: AnalysisSliceState;
-}
-
-interface ThunkConfig {
-  state: AppStateShape;
-  extra: AppServices;
-  rejectValue: OperationErrorEnvelope;
-}
 
 const SERIALIZABLE_CHECK_IGNORED_PATHS = [
   'analysis.analysisSnapshot',
@@ -96,108 +61,6 @@ function makeRuntimeSessionKey(processSession: ProcessSession) {
       : 'Mono';
   return `${processSession.pid}:${processSession.processName}:${runtime}`;
 }
-
-function makeFallbackLifecycle(
-  fallback: Partial<WorkspaceLifecycleState>,
-  previous: WorkspaceLifecycleState,
-): WorkspaceLifecycleState {
-  return {
-    ...previous,
-    ...fallback,
-    runtimeSession: fallback.runtimeSession
-      ? {
-          ...previous.runtimeSession,
-          ...fallback.runtimeSession,
-        }
-      : previous.runtimeSession,
-  };
-}
-
-function shouldClearRuntimeState(lifecycle: WorkspaceLifecycleState) {
-  return !lifecycle.processSession
-    || !lifecycle.hasSnapshot
-    || lifecycle.status === 'runtime-error'
-    || !lifecycle.runtimeSession.connected
-    || lifecycle.runtimeSession.status === 'error';
-}
-
-function clearRuntimeCaches(state: AnalysisSliceState) {
-  state.runtimeOverlays = {};
-  state.runtimeInstanceFieldSnapshots = {};
-  state.runtimeFieldErrorByKey = {};
-  state.loadingRuntimeByKey = {};
-  state.runtimeInstanceFieldErrorByKey = {};
-  state.loadingRuntimeInstanceByKey = {};
-}
-
-function areTaskProgressEqual(left: WorkspaceTaskSnapshot['progress'], right: WorkspaceTaskSnapshot['progress']) {
-  if (left === right) {
-    return true;
-  }
-
-  if (left == null || right == null) {
-    return left == null && right == null;
-  }
-
-  return left.completed === right.completed
-    && left.total === right.total
-    && left.message === right.message;
-}
-
-function areWorkspaceTasksEqual(left: WorkspaceTaskSnapshot[] | undefined, right: WorkspaceTaskSnapshot[]) {
-  if (!left) {
-    return right.length === 0;
-  }
-
-  if (left === right) {
-    return true;
-  }
-
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  for (let index = 0; index < left.length; index += 1) {
-    const current = left[index];
-    const next = right[index];
-    if (current.taskId !== next.taskId
-      || current.resourceKind !== next.resourceKind
-      || current.operationKey !== next.operationKey
-      || current.scope !== next.scope
-      || current.status !== next.status
-      || current.targetId !== next.targetId
-      || current.startedAt !== next.startedAt
-      || current.updatedAt !== next.updatedAt
-      || current.errorMessage !== next.errorMessage
-      || !areTaskProgressEqual(current.progress, next.progress)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-const initialWorkspaceState: WorkspaceSliceState = {
-  activePage: 'inspector',
-  contractVersions: null,
-  lifecycle: EMPTY_WORKSPACE_LIFECYCLE,
-  previousLifecycle: null,
-  tasksBySource: {},
-  feedback: null,
-};
-
-const initialAnalysisState: AnalysisSliceState = {
-  attachError: null,
-  analysisSnapshot: null,
-  loadingSnapshot: false,
-  runtimeOverlays: {},
-  runtimeInstanceFieldSnapshots: {},
-  runtimeFieldErrorByKey: {},
-  loadingRuntimeByKey: {},
-  runtimeInstanceFieldErrorByKey: {},
-  loadingRuntimeInstanceByKey: {},
-  pendingClassNode: null,
-};
 
 export const refreshWorkspaceLifecycle = createAsyncThunk<WorkspaceLifecycleState, string | undefined, ThunkConfig>(
   'workspace/refreshLifecycle',
@@ -234,80 +97,6 @@ export const loadAnalysisSnapshot = createAsyncThunk<AnalysisSnapshot, ProcessSe
       return rejectWithValue(coerceOperationErrorEnvelope(error, 'metadata.load-all'));
     } finally {
       await dispatch(refreshWorkspaceLifecycle('workspace.after-metadata-load'));
-    }
-  },
-);
-
-export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, ThunkConfig>(
-  'workspace/attachToProcess',
-  async (process, { dispatch, extra, rejectWithValue }) => {
-    dispatch(workspaceActions.applyLifecycleFallback({
-      status: 'attaching',
-      processSession: null,
-      runtime: 'unknown',
-      hasSnapshot: false,
-      errorMessage: null,
-      runtimeSession: {
-        status: 'starting',
-        runtime: 'unknown',
-        capabilities: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.capabilities,
-        sceneObjectComponents: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
-        connected: false,
-        sessionKey: null,
-        lastError: null,
-        lastHeartbeatAt: null,
-      },
-    }));
-    dispatch(workspaceActions.clearWorkspaceTasks());
-    dispatch(analysisActions.resetForSession());
-
-    try {
-      const session = await extra.analysisRepository.attachToProcess({
-        pid: process.pid,
-        name: process.name,
-      });
-
-      dispatch(workspaceActions.applyLifecycleFallback({
-        status: 'attached-without-snapshot',
-        processSession: session,
-        runtime: session.runtime,
-        hasSnapshot: false,
-        errorMessage: null,
-        runtimeSession: {
-          status: 'starting',
-          runtime: session.runtime,
-          capabilities: ATTACHED_SCENE_RUNTIME_CAPABILITIES,
-          sceneObjectComponents: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
-          connected: false,
-          sessionKey: makeRuntimeSessionKey(session),
-          lastError: null,
-          lastHeartbeatAt: null,
-        },
-      }));
-
-      await dispatch(refreshWorkspaceLifecycle('workspace.after-attach')).unwrap();
-      await dispatch(loadAnalysisSnapshot(session)).unwrap();
-      return session;
-    } catch (error) {
-      const envelope = coerceOperationErrorEnvelope(error, 'workspace.attach-to-process');
-      dispatch(workspaceActions.applyLifecycleFallback({
-        status: 'runtime-error',
-        processSession: null,
-        runtime: 'unknown',
-        hasSnapshot: false,
-        errorMessage: envelope.message,
-        runtimeSession: {
-          status: 'error',
-          runtime: 'unknown',
-          capabilities: [],
-          sceneObjectComponents: EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
-          connected: false,
-          sessionKey: null,
-          lastError: envelope.message,
-          lastHeartbeatAt: null,
-        },
-      }));
-      return rejectWithValue(envelope);
     }
   },
 );
@@ -362,166 +151,100 @@ export const ensureRuntimeInstanceFieldsLoaded = createAsyncThunk<RuntimeInstanc
   },
 );
 
-const workspaceSlice = createSlice({
-  name: 'workspace',
-  initialState: initialWorkspaceState,
-  reducers: {
-    setActivePage(state, action: PayloadAction<ActivePage>) {
-      state.activePage = action.payload;
-    },
-    setWorkspaceTasks(state, action: PayloadAction<{ sourceKey: string; tasks: WorkspaceTaskSnapshot[] }>) {
-      const { sourceKey, tasks } = action.payload;
-      if (tasks.length === 0) {
-        if (!(sourceKey in state.tasksBySource)) {
-          return;
-        }
-        delete state.tasksBySource[sourceKey];
-        return;
-      }
-
-      if (areWorkspaceTasksEqual(state.tasksBySource[sourceKey], tasks)) {
-        return;
-      }
-
-      state.tasksBySource[sourceKey] = tasks;
-    },
-    clearWorkspaceTasks(state) {
-      state.tasksBySource = {};
-    },
-    applyLifecycleFallback(state, action: PayloadAction<Partial<WorkspaceLifecycleState>>) {
-      state.previousLifecycle = state.lifecycle;
-      state.lifecycle = makeFallbackLifecycle(action.payload, state.lifecycle);
-    },
-    setFeedback(state, action: PayloadAction<OperationFeedbackEnvelope | null>) {
-      state.feedback = action.payload;
-    },
-    clearFeedback(state) {
-      state.feedback = null;
-    },
-  },
-  extraReducers: (builder) => {
-    builder
-      .addCase(loadContractVersions.fulfilled, (state, action) => {
-        state.contractVersions = action.payload;
-      })
-      .addCase(refreshWorkspaceLifecycle.fulfilled, (state, action) => {
-        state.previousLifecycle = state.lifecycle;
-        state.lifecycle = action.payload;
-      })
-      .addCase(attachToProcess.rejected, (state, action) => {
-        if (action.payload) {
-          state.feedback = {
-            operationKey: 'workspace.attach-to-process',
-            tone: 'error',
-            title: 'Attach Failed',
-            description: action.payload.message,
-            targetId: null,
-            timestamp: new Date().toISOString(),
-          };
-        }
-      });
-  },
+const workspaceSlice = createWorkspaceSlice({
+  loadContractVersions,
+  refreshWorkspaceLifecycle,
 });
 
-const analysisSlice = createSlice({
-  name: 'analysis',
-  initialState: initialAnalysisState,
-  reducers: {
-    queuePendingClassNode(state, action: PayloadAction<PendingClassNodeRequest>) {
-      state.pendingClassNode = action.payload;
-    },
-    clearPendingClassNode(state) {
-      state.pendingClassNode = null;
-    },
-    resetForSession(state) {
-      state.attachError = null;
-      state.analysisSnapshot = null;
-      state.loadingSnapshot = false;
-      state.pendingClassNode = null;
-      clearRuntimeCaches(state);
-    },
-  },
-  extraReducers: (builder) => {
-    builder
-      .addCase(loadAnalysisSnapshot.pending, (state) => {
-        state.loadingSnapshot = true;
-        state.attachError = null;
-        state.analysisSnapshot = null;
-      })
-      .addCase(loadAnalysisSnapshot.fulfilled, (state, action) => {
-        state.loadingSnapshot = false;
-        state.analysisSnapshot = action.payload;
-      })
-      .addCase(loadAnalysisSnapshot.rejected, (state, action) => {
-        state.loadingSnapshot = false;
-        state.attachError = action.payload ?? null;
-      })
-      .addCase(attachToProcess.rejected, (state, action) => {
-        state.attachError = action.payload ?? null;
-        state.analysisSnapshot = null;
-        state.pendingClassNode = null;
-        clearRuntimeCaches(state);
-      })
-      .addCase(refreshWorkspaceLifecycle.fulfilled, (state, action) => {
-        if (!action.payload.processSession) {
-          state.analysisSnapshot = null;
-          state.pendingClassNode = null;
-        }
-
-        if (shouldClearRuntimeState(action.payload)) {
-          clearRuntimeCaches(state);
-        }
-      })
-      .addCase(ensureRuntimeOverlayLoaded.pending, (state, action) => {
-        state.loadingRuntimeByKey[action.meta.arg] = true;
-        state.runtimeFieldErrorByKey[action.meta.arg] = null;
-      })
-      .addCase(ensureRuntimeOverlayLoaded.fulfilled, (state, action) => {
-        state.runtimeOverlays[action.payload.classStableId] = action.payload;
-        state.loadingRuntimeByKey[action.payload.classStableId] = false;
-        state.runtimeFieldErrorByKey[action.payload.classStableId] = null;
-      })
-      .addCase(ensureRuntimeOverlayLoaded.rejected, (state, action) => {
-        state.loadingRuntimeByKey[action.meta.arg] = false;
-        if (action.payload) {
-          state.runtimeFieldErrorByKey[action.meta.arg] = action.payload;
-        }
-      })
-      .addCase(ensureRuntimeInstanceFieldsLoaded.pending, (state, action) => {
-        const normalizedAddress = formatHexAddress(action.meta.arg.instanceAddress);
-        if (!normalizedAddress) {
-          return;
-        }
-        const requestKey = `${action.meta.arg.classStableId}::${normalizedAddress}`;
-        state.loadingRuntimeInstanceByKey[requestKey] = true;
-        state.runtimeInstanceFieldErrorByKey[requestKey] = null;
-      })
-      .addCase(ensureRuntimeInstanceFieldsLoaded.fulfilled, (state, action) => {
-        const normalizedAddress = formatHexAddress(action.payload.instanceAddress);
-        if (!normalizedAddress) {
-          return;
-        }
-        const requestKey = `${action.payload.classStableId}::${normalizedAddress}`;
-        state.runtimeInstanceFieldSnapshots[requestKey] = action.payload;
-        state.loadingRuntimeInstanceByKey[requestKey] = false;
-        state.runtimeInstanceFieldErrorByKey[requestKey] = null;
-      })
-      .addCase(ensureRuntimeInstanceFieldsLoaded.rejected, (state, action) => {
-        const normalizedAddress = formatHexAddress(action.meta.arg.instanceAddress);
-        if (!normalizedAddress) {
-          return;
-        }
-        const requestKey = `${action.meta.arg.classStableId}::${normalizedAddress}`;
-        state.loadingRuntimeInstanceByKey[requestKey] = false;
-        if (action.payload) {
-          state.runtimeInstanceFieldErrorByKey[requestKey] = action.payload;
-        }
-      });
-  },
+const analysisSlice = createAnalysisSlice({
+  loadAnalysisSnapshot,
+  refreshWorkspaceLifecycle,
+  ensureRuntimeOverlayLoaded,
+  ensureRuntimeInstanceFieldsLoaded,
 });
 
 export const workspaceActions = workspaceSlice.actions;
 export const analysisActions = analysisSlice.actions;
+
+export const attachToProcess = createAsyncThunk<ProcessSession, ProcessInfo, ThunkConfig>(
+  'workspace/attachToProcess',
+  async (process, { dispatch, extra, rejectWithValue }) => {
+    dispatch(workspaceActions.applyLifecycleFallback({
+      status: 'attaching',
+      processSession: null,
+      runtime: 'unknown',
+      hasSnapshot: false,
+      errorMessage: null,
+      runtimeSession: {
+        status: 'starting',
+        runtime: 'unknown',
+        capabilities: [...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.capabilities],
+        sceneObjectComponents: {
+          ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
+        },
+        connected: false,
+        sessionKey: null,
+        lastError: null,
+        lastHeartbeatAt: null,
+      },
+    }));
+    dispatch(workspaceActions.clearWorkspaceTasks());
+    dispatch(analysisActions.resetForSession());
+
+    try {
+      const session = await extra.analysisRepository.attachToProcess({
+        pid: process.pid,
+        name: process.name,
+      });
+
+      dispatch(workspaceActions.applyLifecycleFallback({
+        status: 'attached-without-snapshot',
+        processSession: session,
+        runtime: session.runtime,
+        hasSnapshot: false,
+        errorMessage: null,
+        runtimeSession: {
+          status: 'starting',
+          runtime: session.runtime,
+          capabilities: ATTACHED_SCENE_RUNTIME_CAPABILITIES,
+          sceneObjectComponents: {
+            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
+          },
+          connected: false,
+          sessionKey: makeRuntimeSessionKey(session),
+          lastError: null,
+          lastHeartbeatAt: null,
+        },
+      }));
+
+      await dispatch(refreshWorkspaceLifecycle('workspace.after-attach')).unwrap();
+      await dispatch(loadAnalysisSnapshot(session)).unwrap();
+      return session;
+    } catch (error) {
+      const envelope = coerceOperationErrorEnvelope(error, 'workspace.attach-to-process');
+      dispatch(workspaceActions.applyLifecycleFallback({
+        status: 'runtime-error',
+        processSession: null,
+        runtime: 'unknown',
+        hasSnapshot: false,
+        errorMessage: envelope.message,
+        runtimeSession: {
+          status: 'error',
+          runtime: 'unknown',
+          capabilities: [],
+          sceneObjectComponents: {
+            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession.sceneObjectComponents,
+          },
+          connected: false,
+          sessionKey: null,
+          lastError: envelope.message,
+          lastHeartbeatAt: null,
+        },
+      }));
+      return rejectWithValue(envelope);
+    }
+  },
+);
 
 export function createAppStore(services: AppServices) {
   const serializableCheckIgnoredActions = [

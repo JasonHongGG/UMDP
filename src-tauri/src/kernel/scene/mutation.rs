@@ -1,7 +1,12 @@
 use super::common::{current_scene_session_key, log_scene_duration};
-use super::events::emit_scene_workspace_state;
+use super::events::{
+    emit_scene_children_task_state, emit_scene_object_components_task_state,
+    emit_scene_object_header_task_state, emit_scene_workspace_state,
+};
 use crate::domain::analysis_models::{
-    RuntimeSceneMutationOperation, RuntimeSceneMutationResult, RuntimeSceneTransformUpdate,
+    RuntimeSceneAffectedResource, RuntimeSceneMutationOperation, RuntimeSceneMutationResult,
+    RuntimeSceneObjectChildrenTaskState, RuntimeSceneObjectComponentsTaskState,
+    RuntimeSceneObjectHeaderTaskState, RuntimeSceneResourceKind, RuntimeSceneTransformUpdate,
 };
 use crate::domain::operation::OperationResult;
 use crate::kernel::runtime::access::{ensure_runtime_session_ready, execute_runtime_operation};
@@ -12,6 +17,12 @@ use crate::state::AppState;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::AppHandle;
+
+struct SceneMutationInvalidation {
+    children_tasks: Vec<RuntimeSceneObjectChildrenTaskState>,
+    header_tasks: Vec<RuntimeSceneObjectHeaderTaskState>,
+    components_tasks: Vec<RuntimeSceneObjectComponentsTaskState>,
+}
 
 pub fn create_scene_child(
     app: &AppHandle,
@@ -262,59 +273,80 @@ where
 
     let runtime_session = ensure_runtime_session_ready(state)?;
     let mutation_result: OperationResult<_> = state.workspace().lifecycle().with_scene_mutation_lock(|| {
-        let snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
-        invalidate_scene_inspector_after_mutation(state, &snapshot);
-        invalidate_scene_children_after_mutation(state, &snapshot);
+        let mut snapshot = execute_runtime_operation(state, || loader(&runtime_session))?;
+        let session_key = current_scene_session_key(state);
+        let impacted_addresses = collect_impacted_object_addresses(&snapshot);
+        let invalidation = invalidate_scene_after_mutation(
+            state,
+            &snapshot,
+            &impacted_addresses,
+            session_key.as_deref(),
+        );
         let session_key = current_scene_session_key(state);
         let workspace = state
             .scene()
             .workspace()
             .bump_mutation_epoch(session_key.as_deref());
-        Ok((snapshot, workspace))
+        snapshot.affected_resources = build_affected_resources(&snapshot, &impacted_addresses);
+        Ok((snapshot, workspace, invalidation))
     });
-    let (snapshot, workspace) = mutation_result?;
+    let (snapshot, workspace, invalidation) = mutation_result?;
     emit_scene_workspace_state(app, &workspace);
+    for task_state in invalidation.children_tasks {
+        emit_scene_children_task_state(app, &task_state);
+    }
+    for task_state in invalidation.header_tasks {
+        emit_scene_object_header_task_state(app, &task_state);
+    }
+    for task_state in invalidation.components_tasks {
+        emit_scene_object_components_task_state(app, &task_state);
+    }
     log_scene_duration(label, started_at, &details);
     Ok(snapshot)
 }
 
-fn invalidate_scene_inspector_after_mutation(
+fn invalidate_scene_after_mutation(
     state: &AppState,
     result: &RuntimeSceneMutationResult,
-) {
-    let impacted = collect_impacted_object_addresses(result);
-    let session_key = current_scene_session_key(state);
-    state
+    impacted_addresses: &[String],
+    session_key: Option<&str>,
+) -> SceneMutationInvalidation {
+    let header_tasks = state
         .scene()
         .header()
-        .invalidate_related(&impacted, session_key.as_deref());
-    state
+        .invalidate_related(impacted_addresses, session_key);
+    let components_tasks = state
         .scene()
         .components()
-        .invalidate_related(&impacted, session_key.as_deref());
+        .invalidate_related(impacted_addresses, session_key);
+    let children_tasks = invalidate_scene_children_after_mutation(
+        state,
+        result,
+        impacted_addresses,
+        session_key,
+    );
+
+    SceneMutationInvalidation {
+        children_tasks,
+        header_tasks,
+        components_tasks,
+    }
 }
 
-fn invalidate_scene_children_after_mutation(state: &AppState, result: &RuntimeSceneMutationResult) {
-    if matches!(
-        result.operation,
-        RuntimeSceneMutationOperation::SetActive
-            | RuntimeSceneMutationOperation::SetTransform
-            | RuntimeSceneMutationOperation::SetTag
-            | RuntimeSceneMutationOperation::SetLayer
-            | RuntimeSceneMutationOperation::SetHideFlags
-            | RuntimeSceneMutationOperation::SetBehaviourEnabled
-            | RuntimeSceneMutationOperation::AddComponent
-            | RuntimeSceneMutationOperation::RemoveComponent
-    ) {
-        return;
+fn invalidate_scene_children_after_mutation(
+    state: &AppState,
+    result: &RuntimeSceneMutationResult,
+    impacted_addresses: &[String],
+    session_key: Option<&str>,
+) -> Vec<RuntimeSceneObjectChildrenTaskState> {
+    if mutation_impacts_children(result) {
+        return state
+            .scene()
+            .children()
+            .invalidate_related(impacted_addresses, session_key);
     }
 
-    let impacted = collect_impacted_object_addresses(result);
-    let session_key = current_scene_session_key(state);
-    state
-        .scene()
-        .children()
-        .invalidate_related(&impacted, session_key.as_deref());
+    Vec::new()
 }
 
 fn collect_impacted_object_addresses(result: &RuntimeSceneMutationResult) -> Vec<String> {
@@ -353,6 +385,85 @@ fn collect_impacted_object_addresses(result: &RuntimeSceneMutationResult) -> Vec
     impacted.sort();
     impacted.dedup();
     impacted
+}
+
+fn mutation_impacts_children(result: &RuntimeSceneMutationResult) -> bool {
+    !matches!(
+        result.operation,
+        RuntimeSceneMutationOperation::SetActive
+            | RuntimeSceneMutationOperation::SetTransform
+            | RuntimeSceneMutationOperation::SetTag
+            | RuntimeSceneMutationOperation::SetLayer
+            | RuntimeSceneMutationOperation::SetHideFlags
+            | RuntimeSceneMutationOperation::SetBehaviourEnabled
+            | RuntimeSceneMutationOperation::AddComponent
+            | RuntimeSceneMutationOperation::RemoveComponent
+    )
+}
+
+fn build_affected_resources(
+    result: &RuntimeSceneMutationResult,
+    impacted_addresses: &[String],
+) -> Vec<RuntimeSceneAffectedResource> {
+    let mut resources = Vec::new();
+    push_affected_resource(&mut resources, RuntimeSceneResourceKind::Catalog, None);
+
+    if impacted_addresses.is_empty() {
+        push_affected_resource(
+            &mut resources,
+            RuntimeSceneResourceKind::SceneObjectHeader,
+            None,
+        );
+        push_affected_resource(
+            &mut resources,
+            RuntimeSceneResourceKind::SceneObjectComponents,
+            None,
+        );
+        if mutation_impacts_children(result) {
+            push_affected_resource(&mut resources, RuntimeSceneResourceKind::Children, None);
+        }
+        return resources;
+    }
+
+    for object_address in impacted_addresses {
+        push_affected_resource(
+            &mut resources,
+            RuntimeSceneResourceKind::SceneObjectHeader,
+            Some(object_address.as_str()),
+        );
+        push_affected_resource(
+            &mut resources,
+            RuntimeSceneResourceKind::SceneObjectComponents,
+            Some(object_address.as_str()),
+        );
+        if mutation_impacts_children(result) {
+            push_affected_resource(
+                &mut resources,
+                RuntimeSceneResourceKind::Children,
+                Some(object_address.as_str()),
+            );
+        }
+    }
+
+    resources
+}
+
+fn push_affected_resource(
+    resources: &mut Vec<RuntimeSceneAffectedResource>,
+    resource_kind: RuntimeSceneResourceKind,
+    object_address: Option<&str>,
+) {
+    if resources.iter().any(|resource| {
+        resource.resource_kind == resource_kind
+            && resource.object_address.as_deref() == object_address
+    }) {
+        return;
+    }
+
+    resources.push(RuntimeSceneAffectedResource {
+        resource_kind,
+        object_address: object_address.map(str::to_owned),
+    });
 }
 
 fn stateful_scene_root_scope(result: &RuntimeSceneMutationResult, impacted: &mut Vec<String>) {

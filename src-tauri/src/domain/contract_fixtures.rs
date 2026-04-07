@@ -123,7 +123,7 @@ mod tests {
         ))
         .expect("workspace versions fixture should deserialize");
 
-        assert_eq!(fixture.tauri_command_version, 4);
+        assert_eq!(fixture.tauri_command_version, 5);
         assert_eq!(fixture.analysis_schema_version, 5);
         assert_eq!(fixture.workflow_schema_version, 1);
     }

@@ -11,9 +11,9 @@ import type {
   AnalysisImageInfo,
 } from '@/domain/analysis/view-models';
 import type { ActivePage, InspectorTab } from '@/domain/analysis/workspace-types';
-import type { InspectorWorkspaceValue } from './InspectorWorkspaceValue';
+import type { InspectorPageState } from './InspectorPageState';
 
-interface UseInspectorWorkspaceValueOptions {
+interface UseInspectorModuleStateOptions {
   attachError: string | null;
   analysisSnapshot: AnalysisSnapshot | null;
   images: AnalysisImageInfo[];
@@ -29,15 +29,15 @@ interface UseInspectorWorkspaceValueOptions {
   workspaceResetRevision: string | number;
 }
 
-interface UseInspectorWorkspaceValueResult {
-  value: InspectorWorkspaceValue;
+interface UseInspectorModuleStateResult {
+  value: InspectorPageState;
   classInfoCatalogByStableId: Record<string, ClassInfoCatalog>;
   studioClassCatalogEntries: StudioClassCatalogEntry[];
   staticFieldAddressByClassAndMember: Record<string, Record<string, string | null>>;
   handleOpenInspectorForBinding: (binding: ClassBinding) => void;
 }
 
-export function useInspectorWorkspaceValue({
+export function useInspectorModuleState({
   attachError,
   analysisSnapshot,
   images,
@@ -51,7 +51,7 @@ export function useInspectorWorkspaceValue({
   setActivePage,
   queuePendingClassNode,
   workspaceResetRevision,
-}: UseInspectorWorkspaceValueOptions): UseInspectorWorkspaceValueResult {
+}: UseInspectorModuleStateOptions): UseInspectorModuleStateResult {
   const [selectedImageStableId, setSelectedImageStableId] = useState<StableId | null>(null);
   const [tabs, setTabs] = useState<InspectorTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
@@ -208,7 +208,7 @@ export function useInspectorWorkspaceValue({
     resetInspectorWorkspaceState();
   }, [resetInspectorWorkspaceState, workspaceResetRevision]);
 
-  const value = useMemo<InspectorWorkspaceValue>(() => ({
+  const value = useMemo<InspectorPageState>(() => ({
     attachError,
     images,
     classLookupMap,

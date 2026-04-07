@@ -1,7 +1,7 @@
 import { getNodePortsByDirection } from '@/features/studio/core/NodeRegistry';
 import { getRegisteredStudioNodeCatalog } from '@/features/studio/core/catalog/studioNodeCatalogRuntime';
 import { getStudioNodePresentationDefinition } from '@/features/studio/core/types';
-import { useStudioServices } from '@/features/studio/core/StudioContext';
+import { useStudioServices } from '@/features/studio/application/StudioServicesContext';
 
 export function useStudioNodeLayerState() {
   const { graph, runtime } = useStudioServices();

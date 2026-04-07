@@ -82,7 +82,7 @@ export function createWorkspacePresentation(view: WorkspaceViewState): Workspace
     lifecycleLabel: getWorkspaceLifecycleLabel(workspaceLifecycle),
     lifecycleTone,
     runtimeLabel: formatRuntimeSessionLabel(workspaceLifecycle),
-    runtimeTone: workspaceLifecycle.runtimeSession.connected ? 'ready' : view.pageReadiness[view.activePage].tone,
+    runtimeTone: getRuntimeSessionTone(workspaceLifecycle),
     runtimeFlavorLabel: workspaceLifecycle.processSession ? `${workspaceLifecycle.runtime} Runtime` : null,
     processLabel: workspaceLifecycle.processSession
       ? `${workspaceLifecycle.processSession.processName} (${workspaceLifecycle.processSession.pid})`
@@ -102,23 +102,27 @@ function describePageDetail(page: ActivePage, readiness: WorkspacePageReadiness)
 }
 
 function describePageBadge(page: ActivePage, readiness: WorkspacePageReadiness) {
-  if (!readiness.sessionReady) {
-    return 'session required';
+  switch (readiness.systemState) {
+    case 'session-required':
+      return 'session required';
+    case 'session-unavailable':
+      return 'session unavailable';
+    case 'catalog-loading':
+      return 'catalog loading';
+    case 'catalog-error':
+      return 'catalog error';
+    case 'capability-unavailable':
+      return 'capability unavailable';
+    case 'runtime-loading':
+      return 'runtime loading';
+    case 'runtime-degraded':
+      return 'runtime degraded';
+    case 'runtime-error':
+      return 'runtime error';
+    case 'ready':
+    default:
+      return page === 'inspector' ? 'ready' : 'ready';
   }
-
-  if (!readiness.catalogReady) {
-    return readiness.tone === 'error' ? 'catalog error' : 'catalog pending';
-  }
-
-  if (page !== 'inspector' && !readiness.capabilityAvailable) {
-    return 'capability unavailable';
-  }
-
-  if (page !== 'inspector' && !readiness.selectionReady) {
-    return readiness.tone === 'error' ? 'runtime locked' : 'runtime pending';
-  }
-
-  return 'ready';
 }
 
 function resolveWorkspaceDetailMessage(view: WorkspaceViewState) {
@@ -130,6 +134,11 @@ function resolveWorkspaceDetailMessage(view: WorkspaceViewState) {
 
   if (view.workspaceResetNotice?.message) {
     return view.workspaceResetNotice.message;
+  }
+
+  const activePage = view.pageReadiness[view.activePage];
+  if (activePage.systemState !== 'ready') {
+    return activePage.description;
   }
 
   if (view.workspaceLifecycle.runtimeSession.lastError) {
@@ -199,6 +208,22 @@ function formatRuntimeSessionLabel(workspace: WorkspaceLifecycleState) {
     case 'idle':
     default:
       return 'Runtime Idle';
+  }
+}
+
+function getRuntimeSessionTone(workspace: WorkspaceLifecycleState): WorkspaceSignalTone {
+  switch (workspace.runtimeSession.status) {
+    case 'ready':
+      return workspace.runtimeSession.connected ? 'ready' : 'warning';
+    case 'degraded':
+      return 'warning';
+    case 'starting':
+      return 'loading';
+    case 'error':
+      return 'error';
+    case 'idle':
+    default:
+      return 'idle';
   }
 }
 

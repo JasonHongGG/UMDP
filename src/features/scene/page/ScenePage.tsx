@@ -5,7 +5,7 @@ import { SceneHierarchyPanel } from './components/SceneHierarchyPanel';
 import { SceneInspectorView } from './components/SceneInspectorView';
 import { SceneMousePickerSidebar } from './components/SceneMousePickerSidebar';
 import { SceneSidebarTools } from './components/SceneSidebarTools';
-import { useSceneMousePickerState } from './SceneWorkspaceContext';
+import { SceneWorkspaceProvider, useSceneMousePickerState } from './SceneWorkspaceContext';
 
 export function ScenePage() {
   const { workspacePresentation } = useWorkspaceShellState();
@@ -15,7 +15,11 @@ export function ScenePage() {
     return <WorkspaceGate detail={detail} />;
   }
 
-  return <SceneWorkspaceShell />;
+  return (
+    <SceneWorkspaceProvider>
+      <SceneWorkspaceShell />
+    </SceneWorkspaceProvider>
+  );
 }
 
 function SceneWorkspaceShell() {

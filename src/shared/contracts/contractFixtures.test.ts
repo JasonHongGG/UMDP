@@ -29,7 +29,7 @@ describe('shared contract fixtures', () => {
     const fixture = readFixture<SystemContractVersions>('workspace-contract-versions.json');
 
     expect(fixture).toEqual({
-      tauriCommandVersion: 4,
+      tauriCommandVersion: 5,
       analysisSchemaVersion: 5,
       workflowSchemaVersion: 1,
     });

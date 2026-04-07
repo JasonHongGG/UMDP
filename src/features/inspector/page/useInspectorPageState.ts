@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { useAnalysisWorkspace } from '@/app/state/useAnalysisWorkspace';
 import { useWorkspaceShellState } from '@/app/state/useWorkspaceShellState';
-import { useInspectorWorkspaceValue } from '@/domain/inspector/useInspectorWorkspaceValue';
+import { useInspectorModuleState } from '@/features/inspector/application/useInspectorModuleState';
 
 export function useInspectorPageState() {
   const {
@@ -26,7 +26,7 @@ export function useInspectorPageState() {
     resetRevisionRef.current += 1;
   }
 
-  return useInspectorWorkspaceValue({
+  return useInspectorModuleState({
     attachError,
     analysisSnapshot,
     images,

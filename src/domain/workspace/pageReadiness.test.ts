@@ -42,6 +42,7 @@ describe('workspace page readiness', () => {
     expect(attached.scene.sessionReady).toBe(true);
     expect(attached.scene.catalogReady).toBe(false);
     expect(attached.scene.selectionReady).toBe(false);
+    expect(attached.scene.systemState).toBe('catalog-loading');
 
     const catalogLoaded = createWorkspacePageReadinessMap({
       ...base,
@@ -56,6 +57,7 @@ describe('workspace page readiness', () => {
     expect(catalogLoaded.inspector.selectionReady).toBe(true);
     expect(catalogLoaded.scene.catalogReady).toBe(true);
     expect(catalogLoaded.scene.selectionReady).toBe(false);
+    expect(catalogLoaded.scene.systemState).toBe('runtime-loading');
 
     const fullyReady = createWorkspacePageReadinessMap({
       ...base,
@@ -69,6 +71,7 @@ describe('workspace page readiness', () => {
     });
     expect(fullyReady.scene.selectionReady).toBe(true);
     expect(fullyReady.studio.selectionReady).toBe(true);
+    expect(fullyReady.scene.systemState).toBe('ready');
   });
 
   it('keeps scene selection ready when components are unsupported for the session', () => {
@@ -102,6 +105,37 @@ describe('workspace page readiness', () => {
 
     expect(readyWithoutComponents.scene.selectionReady).toBe(true);
     expect(readyWithoutComponents.scene.capabilityAvailable).toBe(true);
+  });
+
+  it('keeps scene and studio usable while the runtime is degraded', () => {
+    const degraded = createWorkspacePageReadinessMap({
+      ...EMPTY_WORKSPACE_LIFECYCLE,
+      status: 'ready',
+      hasSnapshot: true,
+      processSession: {
+        pid: 1337,
+        processName: 'Unity.exe',
+        exePath: 'C:/Unity.exe',
+        dataDir: null,
+        managedDir: null,
+        runtime: 'mono' as const,
+      },
+      runtime: 'mono' as const,
+      runtimeSession: {
+        ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+        status: 'degraded',
+        runtime: 'mono' as const,
+        connected: true,
+        lastError: 'heartbeat jitter detected',
+        capabilities: SCENE_PAGE_CAPABILITIES,
+      },
+    });
+
+    expect(degraded.scene.selectionReady).toBe(true);
+    expect(degraded.scene.systemState).toBe('runtime-degraded');
+    expect(degraded.studio.selectionReady).toBe(true);
+    expect(degraded.studio.systemState).toBe('runtime-degraded');
+    expect(degraded.inspector.systemState).toBe('ready');
   });
 
   it('detects session change and runtime error reset notices', () => {

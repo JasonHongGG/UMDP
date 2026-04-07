@@ -8,7 +8,7 @@ import { useStudioNodeLifecycle } from './lifecycle/StudioNodeLifecycle';
 import { useStudioQueryState } from './query/useStudioQueryState';
 import { useStudioRuntimeState } from './runtime/useStudioRuntimeState';
 
-export function useStudioComposition(runtimeData: StudioRuntimeDataState, workspaceLifecycle: WorkspaceLifecycleState) {
+export function useStudioModuleState(runtimeData: StudioRuntimeDataState, workspaceLifecycle: WorkspaceLifecycleState) {
   const catalog = getRegisteredStudioNodeCatalog();
   const graph = useStudioGraphStore(catalog);
   const engine = useStudioEngineState();

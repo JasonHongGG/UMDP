@@ -8,6 +8,7 @@ import type { GraphDocument } from '@/domain/studio/contracts';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
 import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
+import type { RuntimeCapability, WorkspaceLifecycleState } from '@/shared/contracts';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,15 +45,30 @@ afterEach(() => {
   executeStudioFlowMock.mockReset();
 });
 
-function createReadyLifecycle() {
+const ATTACHED_PROCESS = {
+  pid: 1337,
+  processName: 'Unity.exe',
+  exePath: 'C:/Unity.exe',
+  dataDir: null,
+  managedDir: null,
+  runtime: 'mono' as const,
+};
+
+const STUDIO_CAPABILITIES: RuntimeCapability[] = ['metadata', 'execution'];
+
+function createReadyLifecycle(): WorkspaceLifecycleState {
   return {
     ...EMPTY_WORKSPACE_LIFECYCLE,
     status: 'ready' as const,
     hasSnapshot: true,
+    processSession: ATTACHED_PROCESS,
+    runtime: 'mono' as const,
     runtimeSession: {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
       status: 'ready' as const,
+      runtime: 'mono' as const,
       connected: true,
+      capabilities: STUDIO_CAPABILITIES,
     },
   };
 }
@@ -130,7 +146,20 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'runtime-error', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'error', connected: false } },
+        lifecycle: {
+          ...EMPTY_WORKSPACE_LIFECYCLE,
+          status: 'runtime-error',
+          hasSnapshot: true,
+          processSession: ATTACHED_PROCESS,
+          runtime: 'mono' as const,
+          runtimeSession: {
+            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+            status: 'error',
+            runtime: 'mono' as const,
+            connected: false,
+            capabilities: STUDIO_CAPABILITIES,
+          },
+        },
       }));
     });
 
@@ -160,7 +189,20 @@ describe('useStudioRuntimeState', () => {
 
     act(() => {
       root.render(createElement(HookHarness, {
-        lifecycle: { ...EMPTY_WORKSPACE_LIFECYCLE, status: 'runtime-error', hasSnapshot: true, runtimeSession: { ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession, status: 'error', connected: false } },
+        lifecycle: {
+          ...EMPTY_WORKSPACE_LIFECYCLE,
+          status: 'runtime-error',
+          hasSnapshot: true,
+          processSession: ATTACHED_PROCESS,
+          runtime: 'mono' as const,
+          runtimeSession: {
+            ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
+            status: 'error',
+            runtime: 'mono' as const,
+            connected: false,
+            capabilities: STUDIO_CAPABILITIES,
+          },
+        },
       }));
     });
 
@@ -174,6 +216,7 @@ describe('useStudioRuntimeState', () => {
           ...EMPTY_WORKSPACE_LIFECYCLE,
           status: 'runtime-error',
           hasSnapshot: true,
+          processSession: ATTACHED_PROCESS,
           errorMessage: 'runtime session disconnected',
           runtime: 'mono',
           runtimeSession: {
@@ -183,6 +226,7 @@ describe('useStudioRuntimeState', () => {
             connected: false,
             lastError: 'runtime session disconnected',
             sessionKey: 'session-1',
+            capabilities: STUDIO_CAPABILITIES,
           },
         },
       }));
@@ -194,7 +238,7 @@ describe('useStudioRuntimeState', () => {
 
     expect(executeStudioFlowMock).not.toHaveBeenCalled();
     expect(latestState?.state.canExecuteFlow).toBe(false);
-    expect(latestState?.state.executionBlockedReason).toBe('Workspace is not ready (runtime-error).');
+    expect(latestState?.state.executionBlockedReason).toBe('runtime session disconnected');
     expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
       expect.objectContaining({
         level: 'error',
@@ -203,10 +247,11 @@ describe('useStudioRuntimeState', () => {
         message: 'Studio execution blocked.',
         context: expect.objectContaining({
           reason: 'blocked',
-          message: 'Workspace is not ready (runtime-error).',
+          message: 'runtime session disconnected',
           workspace: expect.objectContaining({
             status: 'runtime-error',
             hasSnapshot: true,
+            systemState: 'runtime-error',
             errorMessage: 'runtime session disconnected',
             runtimeSession: expect.objectContaining({
               status: 'error',

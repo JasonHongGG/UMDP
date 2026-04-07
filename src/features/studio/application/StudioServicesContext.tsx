@@ -1,12 +1,12 @@
 import React, { createContext, useContext } from 'react';
 import type { WorkspaceLifecycleState } from '@/shared/contracts';
-import { ExpressionDragProvider } from './drag/ExpressionDragContext';
-import { StudioGraphStore } from './graphStore';
-import { StudioRuntimeDataProvider, type StudioRuntimeDataState } from './runtimeData';
-import { useStudioComposition } from '@/features/studio/application/StudioComposition';
-import { type StudioQueryState } from '@/features/studio/application/query/useStudioQueryState';
-import { type StudioRuntimeState } from '@/features/studio/application/runtime/useStudioRuntimeState';
-import { type StudioUiState } from './studioUiState';
+import { ExpressionDragProvider } from '@/features/studio/core/drag/ExpressionDragContext';
+import { StudioGraphStore } from '@/features/studio/core/graphStore';
+import { StudioRuntimeDataProvider, type StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
+import { useStudioModuleState } from './useStudioModuleState';
+import { type StudioQueryState } from './query/useStudioQueryState';
+import { type StudioRuntimeState } from './runtime/useStudioRuntimeState';
+import { type StudioUiState } from '@/features/studio/core/studioUiState';
 
 export interface StudioServices {
   graph: StudioGraphStore;
@@ -52,7 +52,7 @@ export function useStudio() {
 }
 
 export function StudioProvider({ children, runtimeData, workspaceLifecycle }: { children: React.ReactNode; runtimeData: StudioRuntimeDataState; workspaceLifecycle: WorkspaceLifecycleState }) {
-  const { graph, ui, runtime, query } = useStudioComposition(runtimeData, workspaceLifecycle);
+  const { graph, ui, runtime, query } = useStudioModuleState(runtimeData, workspaceLifecycle);
   const services: StudioServices = {
     graph,
     ui,

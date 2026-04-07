@@ -1,4 +1,4 @@
-import { useStudioGraph } from '@/features/studio/core/StudioContext';
+import { useStudioGraph } from '@/features/studio/application/StudioServicesContext';
 
 export function useStudioToolbarState() {
   const graph = useStudioGraph();

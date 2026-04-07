@@ -2,9 +2,6 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import type {
   RuntimeSceneMutationOperation,
   RuntimeSceneMutationResult,
-  RuntimeSceneObjectChildrenTaskState,
-  RuntimeSceneObjectComponentsTaskState,
-  RuntimeSceneObjectHeaderTaskState,
   RuntimeSceneTransformUpdate,
 } from '@/domain/analysis/contracts';
 import type { SceneGateway } from '@/domain/scene/gateway';
@@ -166,76 +163,12 @@ function normalizeMutationResultObject(result: RuntimeSceneMutationResult) {
   };
 }
 
-function markChildrenTaskStale(task: RuntimeSceneObjectChildrenTaskState): RuntimeSceneObjectChildrenTaskState {
-  const hasRetainedSnapshot = task.children.length > 0;
-  const resourceRevision = task.resourceRevision + 1;
-  return {
-    ...task,
-    resourceRevision,
-    status: hasRetainedSnapshot ? 'ready' : 'cancelled',
-    isStale: true,
-    updatedAt: new Date().toISOString(),
-    resourceState: {
-      ...task.resourceState,
-      resourceRevision,
-      freshness: hasRetainedSnapshot ? 'stale' : 'empty',
-      isRetainingSnapshot: hasRetainedSnapshot,
-      snapshotKind: hasRetainedSnapshot ? 'retained' : 'empty',
-    },
-  };
-}
-
-function markHeaderTaskStale(task: RuntimeSceneObjectHeaderTaskState): RuntimeSceneObjectHeaderTaskState {
-  const hasRetainedSnapshot = task.header != null;
-  const resourceRevision = task.resourceRevision + 1;
-  return {
-    ...task,
-    resourceRevision,
-    status: hasRetainedSnapshot ? 'ready' : 'cancelled',
-    isStale: true,
-    updatedAt: new Date().toISOString(),
-    resourceState: {
-      ...task.resourceState,
-      resourceRevision,
-      freshness: hasRetainedSnapshot ? 'stale' : 'empty',
-      isRetainingSnapshot: hasRetainedSnapshot,
-      snapshotKind: hasRetainedSnapshot ? 'retained' : 'empty',
-    },
-  };
-}
-
-function markComponentsTaskStale(task: RuntimeSceneObjectComponentsTaskState): RuntimeSceneObjectComponentsTaskState {
-  const hasRetainedSnapshot = task.components.length > 0 || task.totalCount === 0;
-  const resourceRevision = task.resourceRevision + 1;
-  return {
-    ...task,
-    resourceRevision,
-    status: hasRetainedSnapshot ? 'ready' : 'cancelled',
-    isStale: true,
-    updatedAt: new Date().toISOString(),
-    resourceState: {
-      ...task.resourceState,
-      resourceRevision,
-      freshness: hasRetainedSnapshot ? 'stale' : 'empty',
-      isRetainingSnapshot: hasRetainedSnapshot,
-      snapshotKind: hasRetainedSnapshot ? 'retained' : 'empty',
-    },
-  };
-}
-
 interface UseSceneMutationActionsOptions {
   repository: SceneGateway;
   selectedObjectAddress: string | null;
   setSelectedObjectAddress: (value: string | null) => void;
   refreshSceneWorkspace: () => Promise<void>;
   loadSceneObjectResources: (objectAddress: string, force?: boolean) => Promise<void>;
-  setChildTaskByParent: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectChildrenTaskState>>>;
-  setHeaderTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectHeaderTaskState>>>;
-  setHeaderErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
-  setHeaderLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
-  setComponentsTaskByAddress: Dispatch<SetStateAction<Record<string, RuntimeSceneObjectComponentsTaskState>>>;
-  setComponentsErrorByAddress: Dispatch<SetStateAction<Record<string, string | null>>>;
-  setComponentsLoadingByAddress: Dispatch<SetStateAction<Record<string, boolean>>>;
   setSceneMutationState: Dispatch<SetStateAction<SceneMutationState>>;
   sceneMutationTaskCounterRef: MutableRefObject<number>;
 }
@@ -246,13 +179,6 @@ export function useSceneMutationActions({
   setSelectedObjectAddress,
   refreshSceneWorkspace,
   loadSceneObjectResources,
-  setChildTaskByParent,
-  setHeaderTaskByAddress,
-  setHeaderErrorByAddress,
-  setHeaderLoadingByAddress,
-  setComponentsTaskByAddress,
-  setComponentsErrorByAddress,
-  setComponentsLoadingByAddress,
   setSceneMutationState,
   sceneMutationTaskCounterRef,
 }: UseSceneMutationActionsOptions) {
@@ -262,118 +188,6 @@ export function useSceneMutationActions({
 
   const applySceneMutation = useCallback((result: RuntimeSceneMutationResult) => {
     const normalizedObject = normalizeMutationResultObject(result);
-    const impacted = Array.from(new Set([
-      result.targetObjectAddress,
-      result.parentObjectAddress,
-      result.deletedObjectAddress,
-      normalizedObject?.objectAddress ?? null,
-    ].filter((value): value is string => Boolean(value))));
-    const hierarchyMutation = result.operation === 'create-child'
-      || result.operation === 'create-root'
-      || result.operation === 'duplicate'
-      || result.operation === 'delete'
-      || result.operation === 'reparent'
-      || result.operation === 'load-scene';
-
-    if (hierarchyMutation) {
-      setChildTaskByParent(() => ({}));
-    } else if (impacted.length > 0) {
-      setChildTaskByParent((previous) => {
-        let touched = false;
-        const next = { ...previous };
-        impacted.forEach((address) => {
-          const task = next[address];
-          if (task) {
-            next[address] = markChildrenTaskStale(task);
-            touched = true;
-          }
-        });
-        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
-          delete next[result.deletedObjectAddress];
-          touched = true;
-        }
-        return touched ? next : previous;
-      });
-    }
-
-    if (hierarchyMutation && result.operation === 'load-scene') {
-      setHeaderTaskByAddress(() => ({}));
-      setComponentsTaskByAddress(() => ({}));
-    } else if (impacted.length > 0) {
-      setHeaderTaskByAddress((previous) => {
-        let touched = false;
-        const next = { ...previous };
-        impacted.forEach((address) => {
-          const task = next[address];
-          if (task) {
-            next[address] = markHeaderTaskStale(task);
-            touched = true;
-          }
-        });
-        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
-          delete next[result.deletedObjectAddress];
-          touched = true;
-        }
-        return touched ? next : previous;
-      });
-
-      setComponentsTaskByAddress((previous) => {
-        let touched = false;
-        const next = { ...previous };
-        impacted.forEach((address) => {
-          const task = next[address];
-          if (task) {
-            next[address] = markComponentsTaskStale(task);
-            touched = true;
-          }
-        });
-        if (result.deletedObjectAddress && Object.prototype.hasOwnProperty.call(next, result.deletedObjectAddress)) {
-          delete next[result.deletedObjectAddress];
-          touched = true;
-        }
-        return touched ? next : previous;
-      });
-    }
-
-    if (result.deletedObjectAddress) {
-      setHeaderErrorByAddress((previous) => {
-        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
-          return previous;
-        }
-
-        const next = { ...previous };
-        delete next[result.deletedObjectAddress!];
-        return next;
-      });
-      setHeaderLoadingByAddress((previous) => {
-        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
-          return previous;
-        }
-
-        const next = { ...previous };
-        delete next[result.deletedObjectAddress!];
-        return next;
-      });
-      setComponentsErrorByAddress((previous) => {
-        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
-          return previous;
-        }
-
-        const next = { ...previous };
-        delete next[result.deletedObjectAddress!];
-        return next;
-      });
-      setComponentsLoadingByAddress((previous) => {
-        if (!Object.prototype.hasOwnProperty.call(previous, result.deletedObjectAddress!)) {
-          return previous;
-        }
-
-        const next = { ...previous };
-        delete next[result.deletedObjectAddress!];
-        return next;
-      });
-    }
-
     if (result.operation === 'load-scene') {
       setSceneMutationState((previous) => ({
         ...previous,
@@ -405,7 +219,7 @@ export function useSceneMutationActions({
     if (result.preferredSelectionAddress !== undefined) {
       setSelectedObjectAddress(result.preferredSelectionAddress);
     }
-  }, [setChildTaskByParent, setComponentsErrorByAddress, setComponentsLoadingByAddress, setComponentsTaskByAddress, setHeaderErrorByAddress, setHeaderLoadingByAddress, setHeaderTaskByAddress, setSelectedObjectAddress]);
+  }, [setSceneMutationState, setSelectedObjectAddress]);
 
   const processMutationQueue = useCallback(async () => {
     if (processingMutationQueueRef.current) {

@@ -8,7 +8,7 @@ import { EMPTY_WORKSPACE_LIFECYCLE } from '@/app/shell/workspaceLifecycle';
 import { studioNodeCatalog } from '@/features/studio/nodes';
 import { initializeStudioNodeRegistry } from '@/features/studio/core/NodeRegistry';
 import type { StudioRuntimeDataState } from '@/features/studio/core/runtimeData';
-import { useStudioRuntime } from '@/features/studio/core/StudioContext';
+import { useStudioRuntime } from '@/features/studio/application/StudioServicesContext';
 import { configureDiagnostics, getDiagnosticsBuffer, resetDiagnosticsStateForTests } from '@/shared/diagnostics';
 import { StudioProviders } from './StudioProviders';
 import { useStudioFeedback, type StudioFeedbackMessage } from './feedback/StudioFeedbackContext';
@@ -46,11 +46,21 @@ interface StudioProviderSnapshot {
 let latestState: StudioProviderSnapshot | null = null;
 let executeFlow: ((startNodeId: string) => void) | null = null;
 
+const ATTACHED_PROCESS = {
+  pid: 1337,
+  processName: 'Unity.exe',
+  exePath: 'C:/Unity.exe',
+  dataDir: null,
+  managedDir: null,
+  runtime: 'mono' as const,
+};
+
 function createReadyLifecycle(): WorkspaceLifecycleState {
   return {
     ...EMPTY_WORKSPACE_LIFECYCLE,
     status: 'ready',
     hasSnapshot: true,
+    processSession: ATTACHED_PROCESS,
     runtime: 'mono',
     runtimeSession: {
       ...EMPTY_WORKSPACE_LIFECYCLE.runtimeSession,
@@ -68,6 +78,7 @@ function createRuntimeDroppedLifecycle(): WorkspaceLifecycleState {
     ...EMPTY_WORKSPACE_LIFECYCLE,
     status: 'runtime-error',
     hasSnapshot: true,
+    processSession: ATTACHED_PROCESS,
     runtime: 'mono',
     errorMessage: 'runtime session disconnected',
     runtimeSession: {
@@ -87,6 +98,7 @@ function createRuntimeErrorLifecycle(): WorkspaceLifecycleState {
     ...EMPTY_WORKSPACE_LIFECYCLE,
     status: 'runtime-error',
     hasSnapshot: true,
+    processSession: ATTACHED_PROCESS,
     runtime: 'mono',
     errorMessage: 'runtime session failed to initialize',
     runtimeSession: {
@@ -201,17 +213,17 @@ describe('StudioProviders release gates', () => {
     expect(cleanupSpy).toHaveBeenCalledWith('workspace-reset');
     expect(latestState).toMatchObject({
       canExecuteFlow: false,
-      executionBlockedReason: 'Workspace is not ready (runtime-error).',
+      executionBlockedReason: 'runtime session disconnected',
     });
     expect(latestState?.documentFeedback).toMatchObject({
       tone: 'warning',
-      title: 'Studio Runtime Locked',
-      description: 'Workspace is not ready (runtime-error).',
+      title: 'Studio Runtime Unavailable',
+      description: 'runtime session disconnected',
     });
     expect(latestState?.runtimeFeedback).toMatchObject({
       tone: 'warning',
       title: 'Execution Reset',
-      description: 'Workspace is not ready (runtime-error).',
+      description: 'runtime session disconnected',
     });
   });
 
@@ -227,12 +239,12 @@ describe('StudioProviders release gates', () => {
 
     expect(latestState).toMatchObject({
       canExecuteFlow: false,
-      executionBlockedReason: 'Workspace is not ready (runtime-error).',
+      executionBlockedReason: 'runtime session failed to initialize',
     });
     expect(latestState?.documentFeedback).toMatchObject({
       tone: 'warning',
-      title: 'Studio Runtime Locked',
-      description: 'Workspace is not ready (runtime-error).',
+      title: 'Studio Runtime Unavailable',
+      description: 'runtime session failed to initialize',
     });
     expect(latestState?.runtimeFeedback).toBeNull();
 
@@ -245,7 +257,7 @@ describe('StudioProviders release gates', () => {
     expect(latestState?.runtimeFeedback).toMatchObject({
       tone: 'error',
       title: 'Execution Blocked',
-      description: 'Workspace is not ready (runtime-error).',
+      description: 'runtime session failed to initialize',
     });
     expect(getDiagnosticsBuffer()).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -255,9 +267,10 @@ describe('StudioProviders release gates', () => {
         message: 'Studio execution blocked.',
         context: expect.objectContaining({
           reason: 'blocked',
-          message: 'Workspace is not ready (runtime-error).',
+          message: 'runtime session failed to initialize',
           workspace: expect.objectContaining({
             status: 'runtime-error',
+            systemState: 'runtime-error',
             errorMessage: 'runtime session failed to initialize',
             runtimeSession: expect.objectContaining({
               status: 'error',

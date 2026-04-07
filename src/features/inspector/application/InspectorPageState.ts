@@ -12,7 +12,7 @@ import type {
 } from '@/domain/analysis/view-models';
 import type { ClassLookupEntry, GlobalSearchMode, InspectorTab, ReferenceMode } from '@/domain/analysis/workspace-types';
 
-export interface InspectorWorkspaceValue {
+export interface InspectorPageState {
   attachError: string | null;
   images: AnalysisImageInfo[];
   classLookupMap: Map<string, ClassLookupEntry>;
